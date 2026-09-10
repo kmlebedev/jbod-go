@@ -11,7 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -198,13 +198,53 @@ func (c *Client) Disks(ctx context.Context, enclosures []Enclosure, details bool
 			}
 		}
 	}
-	sort.Slice(result, func(i, j int) bool {
-		if result[i].Enclosure != result[j].Enclosure {
-			return result[i].Enclosure < result[j].Enclosure
+	slices.SortStableFunc(result, func(a, b Disk) int {
+		if n := natCompare(a.Enclosure, b.Enclosure); n != 0 {
+			return n
 		}
-		return result[i].Slot < result[j].Slot
+		return natCompare(a.Slot, b.Slot)
 	})
 	return result, nil
+}
+
+func isDigit(b byte) bool { return b >= '0' && b <= '9' }
+
+// natCompare orders strings so that embedded decimal runs compare by value:
+// "Slot 2" sorts before "Slot 10", and "1:0:0:0" before "10:0:0:0".
+// Strings that differ only in leading zeros fall back to byte order so the
+// result stays a strict weak ordering.
+func natCompare(a, b string) int {
+	x, y := a, b
+	for x != "" && y != "" {
+		xd, yd := isDigit(x[0]), isDigit(y[0])
+		if xd != yd {
+			return strings.Compare(x, y)
+		}
+		i, j := 0, 0
+		for i < len(x) && isDigit(x[i]) == xd {
+			i++
+		}
+		for j < len(y) && isDigit(y[j]) == yd {
+			j++
+		}
+		if xd {
+			xn := strings.TrimLeft(x[:i], "0")
+			yn := strings.TrimLeft(y[:j], "0")
+			if len(xn) != len(yn) {
+				return len(xn) - len(yn)
+			}
+			if c := strings.Compare(xn, yn); c != 0 {
+				return c
+			}
+		} else if c := strings.Compare(x[:i], y[:j]); c != 0 {
+			return c
+		}
+		x, y = x[i:], y[j:]
+	}
+	if c := strings.Compare(x, y); c != 0 {
+		return c
+	}
+	return strings.Compare(a, b)
 }
 
 var fanLine = regexp.MustCompile(`(.*?)\[(-?\d+,-?\d+)\].*Cooling`)
@@ -264,7 +304,9 @@ func SetLED(disks []Disk, device, kind string, on bool) error {
 		return fmt.Errorf("unknown LED kind %q", kind)
 	}
 	for _, d := range disks {
-		if d.Device != device && (d.Map == "NONE" || d.Map != device) {
+		// device is validated as a /dev/ path by the caller, so it can never
+		// equal the "NONE" sentinel and a plain comparison is enough.
+		if d.Device != device && d.Map != device {
 			continue
 		}
 		path := d.Locate
