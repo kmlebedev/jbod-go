@@ -1,0 +1,4 @@
+SLOT      DEVICE    VENDOR  MODEL     REVISION  SERIAL
+1:0:0:0   /dev/sg0  ACME    Shelf 24  1.03      ENC00001
+SLOT      DEVICE    VENDOR  MODEL     REVISION  SERIAL
+10:0:0:0  /dev/sg9  NONE    NONE      NONE      NONE

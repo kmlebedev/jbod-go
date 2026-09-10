@@ -24,6 +24,7 @@ type fake struct {
 	disks      []jbod.Disk
 	fans       []jbod.Fan
 	err        error
+	preflight  error
 	leds       []ledCall
 }
 
@@ -32,6 +33,8 @@ type ledCall struct {
 	kind   jbod.LEDKind
 	on     bool
 }
+
+func (f *fake) Preflight() error { return f.preflight }
 
 func (f *fake) Enclosures(context.Context) ([]jbod.Enclosure, error) {
 	return f.enclosures, f.err

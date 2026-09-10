@@ -34,6 +34,9 @@ see "jbod prometheus --help" for the tuning flags.
 // the interface rather than *jbod.Client so their tests can exercise the
 // rendering without going through lsscsi output (C5).
 type Inventory interface {
+	// Preflight reports everything that is missing before any collection
+	// is attempted.
+	Preflight() error
 	Enclosures(ctx context.Context) ([]jbod.Enclosure, error)
 	Disks(ctx context.Context, enclosures []jbod.Enclosure, opts jbod.DiskOptions) ([]jbod.Disk, error)
 	Fans(ctx context.Context, enclosures []jbod.Enclosure) ([]jbod.Fan, error)

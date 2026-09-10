@@ -27,6 +27,11 @@ func cmdList(ctx context.Context, args []string, out io.Writer, inv Inventory) e
 	if !*enc && !*disks && !*fans {
 		return errors.New("list requires --enclosure, --disks or --fan")
 	}
+	// One clear message about missing tools or an unusable sysfs tree,
+	// before a single command runs (A4).
+	if err := inv.Preflight(); err != nil {
+		return err
+	}
 	enclosures, err := inv.Enclosures(ctx)
 	if err != nil {
 		return err

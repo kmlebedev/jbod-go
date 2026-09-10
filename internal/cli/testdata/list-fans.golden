@@ -1,0 +1,4 @@
+SLOT      IDENT  DESCRIPTION    STATUS     RPM
+1:0:0:0   2,0    Fan A          low speed  1200
+1:0:0:0   2,1    Fan B                     3000
+10:0:0:0  2,0    Cooling fan 1  normal     4800

@@ -5,8 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -20,11 +18,8 @@ const (
 
 func listClient(t *testing.T) *jbod.Client {
 	t.Helper()
-	root := t.TempDir()
 	// An enclosure directory with no slots keeps Disks cheap but valid.
-	if err := os.MkdirAll(filepath.Join(root, "1:0:0:0"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	root := sysfsRoot(t)
 	return jbod.New(jbod.WithSysfs(root), jbod.WithRunner(func(_ context.Context, name string, args ...string) (string, error) {
 		switch name {
 		case "lsscsi":
