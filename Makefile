@@ -1,10 +1,14 @@
 .PHONY: build test install deb clean
 PREFIX ?= /usr
 DESTDIR ?=
+# The version is stamped into the binaries instead of being kept in sync by
+# hand; without a stamp they fall back to what the build recorded (F).
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS := -s -w -X github.com/kmlebedev/jbod-go/internal/cli.version=$(VERSION)
 build:
 	mkdir -p bin
-	go build -trimpath -o bin/jbod ./cmd/jbod
-	go build -trimpath -o bin/prometheus-jbod-exporter ./cmd/prometheus-jbod-exporter
+	go build -trimpath -ldflags "$(LDFLAGS)" -o bin/jbod ./cmd/jbod
+	go build -trimpath -ldflags "$(LDFLAGS)" -o bin/prometheus-jbod-exporter ./cmd/prometheus-jbod-exporter
 test:
 	go test -race ./...
 	go vet ./...

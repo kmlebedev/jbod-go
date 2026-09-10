@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: BSD-2-Clause
+
 package jbod
 
 import (
@@ -16,7 +17,7 @@ import (
 
 // field returns the value of a "Key: value" line, if the output has one.
 func field(out, key string) (string, bool) {
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.Lines(out) {
 		if v, ok := strings.CutPrefix(strings.TrimSpace(line), key); ok {
 			return strings.TrimSpace(v), true
 		}
@@ -37,7 +38,7 @@ type enclosureRef struct {
 func parseLsscsi(out string) ([]enclosureRef, []error) {
 	var refs []enclosureRef
 	var errs []error
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.Lines(out) {
 		f := strings.Fields(line)
 		if len(f) < 2 || !strings.HasPrefix(f[1], "enclosu") {
 			continue
@@ -68,7 +69,7 @@ func parseLsscsi(out string) ([]enclosureRef, []error) {
 // parseSgMap maps a generic device to its block device, from "sg_map" output.
 func parseSgMap(out string) map[string]string {
 	mapping := map[string]string{}
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.Lines(out) {
 		if f := strings.Fields(line); len(f) > 1 {
 			mapping[f[0]] = f[1]
 		}
@@ -81,7 +82,7 @@ var number = regexp.MustCompile(`-?\d+`)
 // parseTemperature extracts the current temperature in degrees Celsius from
 // scsi_temperature output.
 func parseTemperature(out string) (int64, bool) {
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.Lines(out) {
 		lower := strings.ToLower(line)
 		if !strings.Contains(lower, "current") || !strings.Contains(lower, "temperature") {
 			continue
@@ -127,7 +128,7 @@ type fanRef struct {
 // parseFanElements picks the cooling elements out of "sg_ses -j -ff" output.
 func parseFanElements(out string) []fanRef {
 	var refs []fanRef
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.Lines(out) {
 		m := fanLine.FindStringSubmatch(line)
 		if m == nil {
 			continue
@@ -151,7 +152,7 @@ func parseFanSpeed(out string) (int64, Optional[string], bool) {
 		return 0, None[string](), false
 	}
 	condition := None[string]()
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.Lines(out) {
 		if !rpm.MatchString(line) {
 			continue
 		}

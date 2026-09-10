@@ -1,9 +1,11 @@
 package exporter
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -76,7 +78,7 @@ func get(t *testing.T, h http.Handler, method, path string) *httptest.ResponseRe
 
 func TestHandlerRoutes(t *testing.T) {
 	t.Parallel()
-	e := New(&collector{snapshot: partialSnapshot()}, 0, 0)
+	e := New(&collector{snapshot: partialSnapshot()})
 	h := e.Handler()
 
 	r := get(t, h, "GET", "/metrics")
@@ -111,7 +113,7 @@ func TestHandlerRoutes(t *testing.T) {
 func TestTotalFailureIs503(t *testing.T) {
 	t.Parallel()
 	c := &collector{err: errors.New(`lsscsi: executable file not found in $PATH`)}
-	h := New(c, 0, 0).Handler()
+	h := New(c).Handler()
 	r := get(t, h, "GET", "/metrics")
 	if r.Code != http.StatusServiceUnavailable {
 		t.Fatalf("%d: %s", r.Code, r.Body.String())
@@ -120,7 +122,7 @@ func TestTotalFailureIs503(t *testing.T) {
 		t.Errorf("the error is not reported: %s", r.Body.String())
 	}
 	// A failed pass is not cached: the next scrape retries the hardware.
-	e := New(c, 0, time.Minute)
+	e := New(c, WithCacheTTL(time.Minute))
 	fh := e.Handler()
 	get(t, fh, "GET", "/metrics")
 	get(t, fh, "GET", "/metrics")
@@ -133,7 +135,7 @@ func TestTotalFailureIs503(t *testing.T) {
 // health metrics, and the error series is a counter.
 func TestHealthMetrics(t *testing.T) {
 	t.Parallel()
-	e := New(&collector{snapshot: partialSnapshot()}, 0, 0)
+	e := New(&collector{snapshot: partialSnapshot()})
 	h := e.Handler()
 	body := get(t, h, "GET", "/metrics").Body.String()
 	for _, want := range []string{
@@ -158,12 +160,12 @@ func TestHealthMetrics(t *testing.T) {
 func TestConcurrentScrapesShareOnePass(t *testing.T) {
 	t.Parallel()
 	c := &collector{snapshot: partialSnapshot(), block: make(chan struct{}), started: make(chan struct{})}
-	e := New(c, 0, 0)
+	e := New(c)
 	h := e.Handler()
 	const requests = 4
 	bodies := make([]string, requests)
 	var wg sync.WaitGroup
-	for i := 0; i < requests; i++ {
+	for i := range requests {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -202,7 +204,7 @@ func TestConcurrentScrapesShareOnePass(t *testing.T) {
 func TestCacheTTLServesRecentResult(t *testing.T) {
 	t.Parallel()
 	c := &collector{snapshot: partialSnapshot()}
-	e := New(c, 0, time.Minute)
+	e := New(c, WithCacheTTL(time.Minute))
 	h := e.Handler()
 	first := get(t, h, "GET", "/metrics").Body.String()
 	second := get(t, h, "GET", "/metrics").Body.String()
@@ -213,7 +215,7 @@ func TestCacheTTLServesRecentResult(t *testing.T) {
 		t.Fatal("cached response differs from the collected one")
 	}
 	// A zero TTL keeps the previous behaviour: every scrape is fresh.
-	fresh := New(c, 0, 0)
+	fresh := New(c)
 	fh := fresh.Handler()
 	get(t, fh, "GET", "/metrics")
 	get(t, fh, "GET", "/metrics")
@@ -227,7 +229,7 @@ func TestCacheTTLServesRecentResult(t *testing.T) {
 func TestScrapeTimeoutBoundsThePass(t *testing.T) {
 	t.Parallel()
 	deadlines := make(chan time.Duration, 1)
-	e := New(deadlineCollector{deadlines}, 250*time.Millisecond, 0)
+	e := New(deadlineCollector{deadlines}, WithScrapeTimeout(250*time.Millisecond))
 	if r := get(t, e.Handler(), "GET", "/metrics"); r.Code != http.StatusOK {
 		t.Fatalf("%d: %s", r.Code, r.Body.String())
 	}
@@ -279,7 +281,7 @@ func TestEndToEndWithAClient(t *testing.T) {
 		}
 		return "", fmt.Errorf("unexpected command %s", name)
 	}))
-	r := get(t, New(client, 0, 0).Handler(), "GET", "/metrics")
+	r := get(t, New(client).Handler(), "GET", "/metrics")
 	if r.Code != http.StatusOK {
 		t.Fatalf("%d: %s", r.Code, r.Body.String())
 	}
@@ -297,7 +299,33 @@ func TestEndToEndWithAClient(t *testing.T) {
 	broken := jbod.New(jbod.WithSysfs(root), jbod.WithRunner(func(context.Context, string, ...string) (string, error) {
 		return "", errors.New("not found")
 	}))
-	if r := get(t, New(broken, 0, 0).Handler(), "GET", "/metrics"); r.Code != http.StatusServiceUnavailable {
+	if r := get(t, New(broken).Handler(), "GET", "/metrics"); r.Code != http.StatusServiceUnavailable {
 		t.Fatalf("%d, want 503", r.Code)
+	}
+}
+
+// TestExporterLogging covers what the daemon writes about its own scrapes
+// (F): a total failure is an error record, and the cheap paths say why they
+// were cheap.
+func TestExporterLogging(t *testing.T) {
+	t.Parallel()
+	buf := &bytes.Buffer{}
+	logger := slog.New(slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	failing := New(&collector{err: errors.New("lsscsi is missing")}, WithLogger(logger))
+	if r := get(t, failing.Handler(), "GET", "/metrics"); r.Code != http.StatusServiceUnavailable {
+		t.Fatalf("%d", r.Code)
+	}
+	if got := buf.String(); !strings.Contains(got, `"level":"ERROR"`) || !strings.Contains(got, `"msg":"scrape failed"`) {
+		t.Errorf("a total failure was not logged:\n%s", got)
+	}
+
+	buf.Reset()
+	cached := New(&collector{snapshot: partialSnapshot()}, WithCacheTTL(time.Minute), WithLogger(logger))
+	h := cached.Handler()
+	get(t, h, "GET", "/metrics")
+	get(t, h, "GET", "/metrics")
+	if got := buf.String(); !strings.Contains(got, `"msg":"scrape served from cache"`) {
+		t.Errorf("the cache hit was not logged:\n%s", got)
 	}
 }
