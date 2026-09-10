@@ -49,6 +49,16 @@ Prometheus scrape_interval if the shelf is polled from several places.
 // with debian/control until the build injects it via -ldflags.
 const Version = "1.0.0"
 
+// Inventory is the hardware access the list and led commands need. They take
+// the interface rather than *jbod.Client so their tests can exercise the
+// rendering without going through lsscsi output (C5).
+type Inventory interface {
+	Enclosures(ctx context.Context) ([]jbod.Enclosure, error)
+	Disks(ctx context.Context, enclosures []jbod.Enclosure, opts jbod.DiskOptions) ([]jbod.Disk, error)
+	Fans(ctx context.Context, enclosures []jbod.Enclosure) ([]jbod.Fan, error)
+	SetLED(ctx context.Context, device string, kind jbod.LEDKind, on bool) error
+}
+
 func flags(name string, w io.Writer) *flag.FlagSet {
 	f := flag.NewFlagSet(name, flag.ContinueOnError)
 	f.SetOutput(w)
@@ -59,6 +69,9 @@ func boolean(f *flag.FlagSet, p *bool, short, long string) {
 	f.BoolVar(p, long, false, long)
 }
 
+// Run dispatches the jbod subcommands. It takes the concrete client because
+// the exporter derives its own budgets from it; the commands themselves work
+// against Inventory.
 func Run(ctx context.Context, args []string, out io.Writer, c *jbod.Client) error {
 	if len(args) == 0 {
 		fmt.Fprint(out, Help)
@@ -72,98 +85,9 @@ func Run(ctx context.Context, args []string, out io.Writer, c *jbod.Client) erro
 		fmt.Fprintln(out, "jbod-go "+Version)
 		return nil
 	case "list":
-		f := flags("list", out)
-		var enc, disks, fans bool
-		boolean(f, &enc, "e", "enclosure")
-		boolean(f, &disks, "d", "disks")
-		boolean(f, &fans, "f", "fan")
-		// clap-compatible combined short flags, e.g. -ed.
-		var expanded []string
-		for _, a := range args[1:] {
-			if strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") && len(a) > 2 && strings.Trim(a[1:], "edf") == "" {
-				for _, ch := range a[1:] {
-					expanded = append(expanded, "-"+string(ch))
-				}
-			} else {
-				expanded = append(expanded, a)
-			}
-		}
-		if err := f.Parse(expanded); err != nil {
-			return err
-		}
-		if f.NArg() != 0 || (!enc && !disks && !fans) {
-			return errors.New("list requires --enclosure, --disks or --fan")
-		}
-		enclosures, err := c.Enclosures(ctx)
-		if err != nil {
-			return err
-		}
-		// Each flag selects an independent section: -e -f must print both.
-		// Sections are flushed separately so tabwriter does not align the
-		// enclosure columns against the fan columns.
-		printed := false
-		if enc || disks {
-			var ds []jbod.Disk
-			if disks {
-				ds, err = c.Disks(ctx, enclosures, true)
-				if err != nil {
-					return err
-				}
-			}
-			if err := printEnclosures(out, enclosures, ds); err != nil {
-				return err
-			}
-			printed = true
-		}
-		if fans {
-			fs, err := c.Fans(ctx, enclosures)
-			if err != nil {
-				return err
-			}
-			if printed {
-				fmt.Fprintln(out)
-			}
-			if err := printFans(out, fs); err != nil {
-				return err
-			}
-		}
-		return nil
+		return cmdList(ctx, args[1:], out, c)
 	case "led":
-		f := flags("led", out)
-		var locate, fault devices
-		var on, off bool
-		f.Var(&locate, "l", "locate device")
-		f.Var(&locate, "locate", "locate device")
-		f.Var(&fault, "f", "fault device")
-		f.Var(&fault, "fault", "fault device")
-		f.BoolVar(&on, "on", false, "turn on")
-		f.BoolVar(&off, "off", false, "turn off")
-		if err := f.Parse(args[1:]); err != nil {
-			return err
-		}
-		if f.NArg() != 0 || on == off || len(locate)+len(fault) == 0 {
-			return errors.New("led requires device(s) and exactly one of --on or --off")
-		}
-		enc, err := c.Enclosures(ctx)
-		if err != nil {
-			return err
-		}
-		ds, err := c.Disks(ctx, enc, false)
-		if err != nil {
-			return err
-		}
-		for _, group := range []struct {
-			kind    string
-			targets devices
-		}{{"locate", locate}, {"fault", fault}} {
-			for _, device := range group.targets {
-				if err := jbod.SetLED(ds, device, group.kind, on); err != nil {
-					return err
-				}
-				fmt.Fprintf(out, "%s %s: %t\n", device, group.kind, on)
-			}
-		}
-		return nil
+		return cmdLED(ctx, args[1:], out, c)
 	case "prometheus":
 		return Exporter(ctx, args[1:], out, c)
 	default:
@@ -171,25 +95,143 @@ func Run(ctx context.Context, args []string, out io.Writer, c *jbod.Client) erro
 	}
 }
 
+func cmdList(ctx context.Context, args []string, out io.Writer, inv Inventory) error {
+	f := flags("list", out)
+	var enc, disks, fans bool
+	boolean(f, &enc, "e", "enclosure")
+	boolean(f, &disks, "d", "disks")
+	boolean(f, &fans, "f", "fan")
+	// clap-compatible combined short flags, e.g. -ed.
+	var expanded []string
+	for _, a := range args {
+		if strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") && len(a) > 2 && strings.Trim(a[1:], "edf") == "" {
+			for _, ch := range a[1:] {
+				expanded = append(expanded, "-"+string(ch))
+			}
+		} else {
+			expanded = append(expanded, a)
+		}
+	}
+	if err := f.Parse(expanded); err != nil {
+		return err
+	}
+	if f.NArg() != 0 || (!enc && !disks && !fans) {
+		return errors.New("list requires --enclosure, --disks or --fan")
+	}
+	enclosures, err := inv.Enclosures(ctx)
+	if err != nil {
+		return err
+	}
+	// Each flag selects an independent section: -e -f must print both.
+	// Sections are flushed separately so tabwriter does not align the
+	// enclosure columns against the fan columns.
+	printed := false
+	if enc || disks {
+		var ds []jbod.Disk
+		if disks {
+			ds, err = inv.Disks(ctx, enclosures, jbod.DiskOptions{WithTelemetry: true})
+			if err != nil {
+				return err
+			}
+		}
+		if err := printEnclosures(out, enclosures, ds); err != nil {
+			return err
+		}
+		printed = true
+	}
+	if fans {
+		fs, err := inv.Fans(ctx, enclosures)
+		if err != nil {
+			return err
+		}
+		if printed {
+			fmt.Fprintln(out)
+		}
+		if err := printFans(out, fs); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func cmdLED(ctx context.Context, args []string, out io.Writer, inv Inventory) error {
+	f := flags("led", out)
+	var locate, fault devices
+	var on, off bool
+	f.Var(&locate, "l", "locate device")
+	f.Var(&locate, "locate", "locate device")
+	f.Var(&fault, "f", "fault device")
+	f.Var(&fault, "fault", "fault device")
+	f.BoolVar(&on, "on", false, "turn on")
+	f.BoolVar(&off, "off", false, "turn off")
+	if err := f.Parse(args); err != nil {
+		return err
+	}
+	if f.NArg() != 0 || on == off || len(locate)+len(fault) == 0 {
+		return errors.New("led requires device(s) and exactly one of --on or --off")
+	}
+	// The client resolves the sysfs attribute itself, so the CLI no longer
+	// carries LED paths around in a disk listing (C3).
+	for _, group := range []struct {
+		kind    jbod.LEDKind
+		targets devices
+	}{{jbod.LEDLocate, locate}, {jbod.LEDFault, fault}} {
+		for _, device := range group.targets {
+			if err := inv.SetLED(ctx, device, group.kind, on); err != nil {
+				return err
+			}
+			fmt.Fprintf(out, "%s %s: %t\n", device, group.kind, on)
+		}
+	}
+	return nil
+}
+
+// Sentinels for readings the hardware did not report. Rendering absence is
+// the output layer's job; the collectors leave the value absent (C1).
+const (
+	// unknownValue is what the Rust original prints for a missing text
+	// field, noTemperature for a temperature that could not be read,
+	// noMapping for a slot without a block device and noIdentity for a
+	// shelf that did not answer sg_inq.
+	unknownValue   = "N/A"
+	noTemperature  = "ERR"
+	noMapping      = "NONE"
+	noIdentity     = "NONE"
+	noFanCondition = ""
+)
+
 func printEnclosures(out io.Writer, enclosures []jbod.Enclosure, ds []jbod.Disk) error {
 	w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
 	for _, e := range enclosures {
 		fmt.Fprintln(w, "SLOT\tDEVICE\tVENDOR\tMODEL\tREVISION\tSERIAL")
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", e.Slot, e.Device, e.Vendor, e.Model, e.Revision, e.Serial)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", e.Slot, e.Device,
+			e.Vendor.Or(noIdentity), e.Model.Or(noIdentity), e.Revision.Or(noIdentity), e.Serial.Or(noIdentity))
 		for _, d := range ds {
-			if d.Enclosure == e.Slot {
-				fmt.Fprintf(w, "  Disk: %s\tMap: %s\tSlot: %s\tVendor: %s\tModel: %s\tSerial: %s\tTemp: %s\tFw: %s\n", d.Device, d.Map, d.Slot, d.Vendor, d.Model, d.Serial, d.Temperature, d.Firmware)
+			if d.Enclosure != e.Slot {
+				continue
 			}
+			fmt.Fprintf(w, "  Disk: %s\tMap: %s\tSlot: %s\tVendor: %s\tModel: %s\tSerial: %s\tTemp: %s\tFw: %s\n",
+				d.Device, d.Map.Or(noMapping), d.Slot, d.Vendor.Or(unknownValue), d.Model.Or(unknownValue),
+				d.Serial.Or(unknownValue), temperature(d), d.Firmware.Or(unknownValue))
 		}
 	}
 	return w.Flush()
+}
+
+// temperature renders a disk temperature in degrees Celsius.
+func temperature(d jbod.Disk) string {
+	n, ok := d.Temperature.Get()
+	if !ok {
+		return noTemperature
+	}
+	return strconv.FormatInt(n, 10)
 }
 
 func printFans(out io.Writer, fans []jbod.Fan) error {
 	w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(w, "SLOT\tIDENT\tDESCRIPTION\tSTATUS\tRPM")
 	for _, fan := range fans {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\n", fan.Slot, fan.Index, fan.Description, fan.Comment, fan.Speed)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\n", fan.Slot, fan.Index, fan.Description, fan.Comment.Or(noFanCondition), fan.Speed)
 	}
 	return w.Flush()
 }
@@ -254,13 +296,7 @@ func Exporter(ctx context.Context, args []string, out io.Writer, c *jbod.Client)
 	// 12-slot shelf is not what fits a 60-slot one, and a README advising
 	// "raise scrape_timeout" needs a matching flag on this side (B4).
 	commandTimeout := jbod.DefaultCommandTimeout
-	if c.CommandTimeout > 0 {
-		commandTimeout = c.CommandTimeout
-	}
 	concurrency := jbod.DefaultConcurrency
-	if c.Concurrency > 0 {
-		concurrency = c.Concurrency
-	}
 	scrapeTimeout := jbod.DefaultScrapeTimeout
 	var cacheTTL time.Duration
 	f.DurationVar(&commandTimeout, "command-timeout", commandTimeout, "timeout of one external command")
@@ -297,8 +333,9 @@ func Exporter(ctx context.Context, args []string, out io.Writer, c *jbod.Client)
 	if concurrency < 1 {
 		return fmt.Errorf("invalid concurrency %d", concurrency)
 	}
-	c.CommandTimeout = commandTimeout
-	c.Concurrency = concurrency
+	// A derived client, so the caller's stays untouched and nothing is
+	// written to a client other goroutines are already reading (C6).
+	collector := c.With(jbod.WithCommandTimeout(commandTimeout), jbod.WithConcurrency(concurrency))
 	listener, err := net.Listen("tcp", net.JoinHostPort(ip, port))
 	if err != nil {
 		return err
@@ -307,7 +344,7 @@ func Exporter(ctx context.Context, args []string, out io.Writer, c *jbod.Client)
 		fmt.Fprintln(out, warning)
 	}
 	server := &http.Server{
-		Handler:           jbod.NewExporter(c, scrapeTimeout, cacheTTL).Handler(),
+		Handler:           jbod.NewExporter(collector, scrapeTimeout, cacheTTL).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 		WriteTimeout:      scrapeTimeout + writeGrace,

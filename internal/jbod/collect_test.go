@@ -75,7 +75,7 @@ func TestTelemetryRunsInParallel(t *testing.T) {
 	t.Parallel()
 	const limit = 8
 	g := newGauge(limit, 2*time.Second)
-	c := &Client{Sysfs: shelf(t, 16), Concurrency: limit, Run: func(_ context.Context, name string, _ ...string) (string, error) {
+	c := New(WithSysfs(shelf(t, 16)), WithConcurrency(limit), WithRunner(func(_ context.Context, name string, _ ...string) (string, error) {
 		switch name {
 		case "lsscsi":
 			return "[1:0:0:0] enclosu ACME Shelf 1 - /dev/sg0\n", nil
@@ -91,13 +91,13 @@ func TestTelemetryRunsInParallel(t *testing.T) {
 			return "Revision level: FW1\n", nil
 		}
 		return "", fmt.Errorf("unexpected command %s", name)
-	}}
+	}))
 	ctx := context.Background()
 	es, err := c.Enclosures(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ds, err := c.Disks(ctx, es, true)
+	ds, err := c.Disks(ctx, es, DiskOptions{WithTelemetry: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestConcurrencyLimitIsHonoured(t *testing.T) {
 	// never reached, so every command overlaps with its neighbours for the
 	// whole hold and a leaked limit would show up as a higher peak.
 	g := newGauge(limit+1, 20*time.Millisecond)
-	c := &Client{Sysfs: shelf(t, 12), Concurrency: limit, Run: func(_ context.Context, name string, _ ...string) (string, error) {
+	c := New(WithSysfs(shelf(t, 12)), WithConcurrency(limit), WithRunner(func(_ context.Context, name string, _ ...string) (string, error) {
 		switch name {
 		case "lsscsi":
 			return "[1:0:0:0] enclosu ACME Shelf 1 - /dev/sg0\n", nil
@@ -135,12 +135,12 @@ func TestConcurrencyLimitIsHonoured(t *testing.T) {
 		}
 		g.hold()
 		return "Current temperature: 30 C\nRevision level: FW1\n", nil
-	}}
+	}))
 	es, err := c.Enclosures(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.Disks(context.Background(), es, true); err != nil {
+	if _, err := c.Disks(context.Background(), es, DiskOptions{WithTelemetry: true}); err != nil {
 		t.Fatal(err)
 	}
 	if peak := g.peak(); peak > limit {
@@ -152,10 +152,10 @@ func TestConcurrencyLimitIsHonoured(t *testing.T) {
 // injected runner too, not only to the exec.Cmd inside run.
 func TestCommandTimeout(t *testing.T) {
 	t.Parallel()
-	c := &Client{Sysfs: t.TempDir(), CommandTimeout: 20 * time.Millisecond, Run: func(ctx context.Context, _ string, _ ...string) (string, error) {
+	c := New(WithSysfs(t.TempDir()), WithCommandTimeout(20*time.Millisecond), WithRunner(func(ctx context.Context, _ string, _ ...string) (string, error) {
 		<-ctx.Done()
 		return "", ctx.Err()
-	}}
+	}))
 	start := time.Now()
 	if _, err := c.Enclosures(context.Background()); err == nil {
 		t.Fatal("expected the command timeout to fail lsscsi")
@@ -174,7 +174,7 @@ func partial(t *testing.T) *Client {
 	if err := os.MkdirAll(filepath.Join(base, "device", "scsi_generic", "sg1"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	return &Client{Sysfs: root, Run: func(_ context.Context, name string, args ...string) (string, error) {
+	return New(WithSysfs(root), WithRunner(func(_ context.Context, name string, args ...string) (string, error) {
 		switch name {
 		case "lsscsi":
 			return "[1:0:0:0] enclosu ACME Shelf 1 - /dev/sg0\n[9:0:0:0] enclosu ACME Shelf 1 - /dev/sg9\n", nil
@@ -198,7 +198,7 @@ func partial(t *testing.T) *Client {
 			return "speed code: 2, Actual speed: 1200 rpm, low speed\n", nil
 		}
 		return "", fmt.Errorf("unexpected command %s", name)
-	}}
+	}))
 }
 
 func TestPartialCollectionKeepsData(t *testing.T) {
@@ -211,11 +211,11 @@ func TestPartialCollectionKeepsData(t *testing.T) {
 	}
 	// The strict API still reports the unreadable shelf, but returns the
 	// disks it did find.
-	ds, err := c.Disks(ctx, es, true)
+	ds, err := c.Disks(ctx, es, DiskOptions{WithTelemetry: true})
 	if err == nil {
 		t.Fatal("expected an error for the enclosure without a sysfs tree")
 	}
-	if len(ds) != 1 || ds[0].Temperature != "37" {
+	if len(ds) != 1 || ds[0].Temperature.Or(0) != 37 {
 		t.Fatalf("lost the readable disk: %+v", ds)
 	}
 	// A fan without an RPM reading is skipped, not fatal.
@@ -286,13 +286,13 @@ func TestConcurrentScrapesShareOnePass(t *testing.T) {
 	release := make(chan struct{})
 	var calls int
 	var mu sync.Mutex
-	c := &Client{Sysfs: t.TempDir(), Run: func(_ context.Context, name string, _ ...string) (string, error) {
+	c := New(WithSysfs(t.TempDir()), WithRunner(func(_ context.Context, name string, _ ...string) (string, error) {
 		mu.Lock()
 		calls++
 		mu.Unlock()
 		<-release
 		return "", nil
-	}}
+	}))
 	e := NewExporter(c, 0, 0)
 	h := e.Handler()
 	const requests = 4
@@ -364,11 +364,11 @@ func TestScrapeCancellationStopsCommands(t *testing.T) {
 	t.Parallel()
 	started := make(chan struct{})
 	var once sync.Once
-	c := &Client{Sysfs: t.TempDir(), Run: func(ctx context.Context, _ string, _ ...string) (string, error) {
+	c := New(WithSysfs(t.TempDir()), WithRunner(func(ctx context.Context, _ string, _ ...string) (string, error) {
 		once.Do(func() { close(started) })
 		<-ctx.Done()
 		return "", ctx.Err()
-	}}
+	}))
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
