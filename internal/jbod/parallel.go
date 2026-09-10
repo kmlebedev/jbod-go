@@ -48,12 +48,17 @@ func forEach(ctx context.Context, limit, n int, fn func(i int)) {
 	wg.Wait()
 }
 
-// Collector names used in jbod_scrape_errors_total.
+// Collector names that appear as keys in Snapshot.Errors, and the order in
+// which the metrics encoder renders them.
 const (
-	collectorEnclosures = "enclosures"
-	collectorDisks      = "disks"
-	collectorFans       = "fans"
+	CollectorEnclosures = "enclosures"
+	CollectorDisks      = "disks"
+	CollectorFans       = "fans"
 )
+
+// Collectors lists every collector, so the error series exist from the first
+// scrape even when nothing failed.
+var Collectors = []string{CollectorEnclosures, CollectorDisks, CollectorFans}
 
 // problems accumulates the failures of a single collection pass.
 //

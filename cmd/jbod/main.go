@@ -1,22 +1,10 @@
+// SPDX-License-Identifier: BSD-2-Clause
 package main
 
 import (
-	"context"
-	"errors"
-	"flag"
-	"fmt"
-	"jbod-go/internal/cli"
-	"jbod-go/internal/jbod"
 	"os"
-	"os/signal"
-	"syscall"
+
+	"github.com/kmlebedev/jbod-go/internal/cli"
 )
 
-func main() {
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
-	if err := cli.Run(ctx, os.Args[1:], os.Stdout, jbod.New()); err != nil && !errors.Is(err, flag.ErrHelp) {
-		fmt.Fprintln(os.Stderr, "jbod:", err)
-		os.Exit(1)
-	}
-}
+func main() { os.Exit(cli.Main("jbod", cli.Run)) }

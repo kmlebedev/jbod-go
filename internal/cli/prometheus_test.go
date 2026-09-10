@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"jbod-go/internal/jbod"
+	"github.com/kmlebedev/jbod-go/internal/jbod"
 )
 
 // syncBuffer is written by the exporter goroutine and read by the test.
@@ -49,7 +49,7 @@ func TestWildcardWarning(t *testing.T) {
 	}
 }
 
-func TestExporterRejectsBadTuning(t *testing.T) {
+func TestPrometheusRejectsBadTuning(t *testing.T) {
 	t.Parallel()
 	c := jbod.New(jbod.WithRunner(func(context.Context, string, ...string) (string, error) {
 		t.Error("unexpected hardware access")
@@ -64,7 +64,7 @@ func TestExporterRejectsBadTuning(t *testing.T) {
 		{"--concurrency", "0"},
 		{"--concurrency", "-4"},
 	} {
-		if err := Exporter(context.Background(), args, &bytes.Buffer{}, c); err == nil {
+		if err := Prometheus(context.Background(), args, &bytes.Buffer{}, c); err == nil {
 			t.Errorf("accepted %v", args)
 		}
 	}
@@ -124,7 +124,7 @@ func TestShutdownCancelsScrape(t *testing.T) {
 	go func() {
 		// A long command timeout: only the context cancellation can end the
 		// scrape in time.
-		served <- Exporter(ctx, []string{"-i", "127.0.0.1", "-p", port, "--command-timeout", "60s"}, out, c)
+		served <- Prometheus(ctx, []string{"-i", "127.0.0.1", "-p", port, "--command-timeout", "60s"}, out, c)
 	}()
 	waitFor(t, "the exporter to start", func() bool { return strings.Contains(out.String(), "==> Started on") })
 	if strings.Contains(out.String(), "Warning") {
@@ -160,10 +160,10 @@ func TestShutdownCancelsScrape(t *testing.T) {
 	}
 }
 
-// TestExporterTuningReachesTheCommands checks that --command-timeout ends up
+// TestPrometheusTuningReachesTheCommands checks that --command-timeout ends up
 // on the client the handler collects with. The client is immutable, so the
 // flag is observable where it matters: in the deadline the command is given.
-func TestExporterTuningReachesTheCommands(t *testing.T) {
+func TestPrometheusTuningReachesTheCommands(t *testing.T) {
 	t.Parallel()
 	budgets := make(chan time.Duration, 8)
 	c := jbod.New(jbod.WithSysfs(t.TempDir()), jbod.WithRunner(func(ctx context.Context, _ string, _ ...string) (string, error) {
@@ -181,7 +181,7 @@ func TestExporterTuningReachesTheCommands(t *testing.T) {
 	defer cancel()
 	served := make(chan error, 1)
 	go func() {
-		served <- Exporter(ctx, []string{
+		served <- Prometheus(ctx, []string{
 			"--ip-address", "127.0.0.1", "--port", port,
 			"--command-timeout", "3s", "--scrape-timeout", "9s",
 			"--concurrency", "4", "--cache-ttl", "30s",

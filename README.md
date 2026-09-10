@@ -13,6 +13,14 @@ lsscsi, sg_inq, sg_map, sg_ses, sginfo, scsi_temperature.
 Доступ к устройствам /dev/sg* и запись LED требуют соответствующих прав
 (обычно root). Справка и тесты работают без оборудования, в том числе на macOS.
 
+Модуль называется `github.com/kmlebedev/jbod-go`, поэтому бинарники можно
+поставить и без клонирования:
+
+```sh
+go install github.com/kmlebedev/jbod-go/cmd/jbod@latest
+go install github.com/kmlebedev/jbod-go/cmd/prometheus-jbod-exporter@latest
+```
+
 ```sh
 make build
 ./bin/jbod help
@@ -152,13 +160,24 @@ GOOS=linux GOARCH=arm64 go build ./...
 Отдельно проверяются параллельный сбор и соблюдение лимита конкурентности,
 объединение одновременных scrape в один проход, кеш по TTL, частичный сбор
 с метриками состояния и отмена выполняющегося scrape при остановке демона.
+Парсеры вывода утилит покрыты табличными тестами и фаззингом:
+
+```sh
+go test -run xxx -fuzz FuzzParseVPD80 -fuzztime 30s ./internal/jbod/
+```
 
 На реальном JBOD проверки не выполнялись. Перед эксплуатацией проверьте
 вывод list и метрики на своём оборудовании; тестовые ответы не заменяют
 проверку разных версий sg3-utils и моделей корпусов.
 
 Структура:
-- cmd/jbod — CLI.
-- cmd/prometheus-jbod-exporter — отдельный entry point экспортёра.
-- internal/jbod — получение данных, sysfs, LED, HTTP и метрики.
-- internal/cli — аргументы команд и вывод.
+- cmd/jbod, cmd/prometheus-jbod-exporter — entry points, по одной строке каждый:
+  общее тело обоих бинарников в `internal/cli.Main`.
+- internal/jbod — доменные типы, сбор через sysfs и sg3-utils, LED;
+  `parse.go` — чистые парсеры вывода утилит (табличные тесты и фаззинг),
+  `order.go` — натуральная сортировка слотов.
+- internal/metrics — кодирование снимка в Prometheus text format 0.0.4.
+- internal/exporter — HTTP-обработчик, таймаут scrape, объединение
+  одновременных scrape и кеш по TTL.
+- internal/cli — разбор аргументов: `list.go`, `led.go`, `prometheus.go`,
+  вывод таблиц в `output.go`.
