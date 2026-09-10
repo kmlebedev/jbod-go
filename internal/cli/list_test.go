@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -63,7 +64,7 @@ func TestListSectionsAreIndependent(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			var out bytes.Buffer
-			if err := Run(context.Background(), c.args, &out, listClient(t)); err != nil {
+			if err := Run(context.Background(), c.args, &out, io.Discard, listClient(t)); err != nil {
 				t.Fatalf("%v: %v", c.args, err)
 			}
 			got := out.String()
@@ -95,12 +96,12 @@ func TestPrometheusHelpAndVersion(t *testing.T) {
 		{[]string{"--help"}, "prometheus-jbod-exporter"},
 		{[]string{"-h"}, "prometheus-jbod-exporter"},
 		{[]string{"help"}, "prometheus-jbod-exporter"},
-		{[]string{"--version"}, "jbod-go " + Version},
-		{[]string{"-V"}, "jbod-go " + Version},
+		{[]string{"--version"}, "jbod-go " + Version()},
+		{[]string{"-V"}, "jbod-go " + Version()},
 	}
 	for _, tc := range cases {
 		var out bytes.Buffer
-		if err := Prometheus(context.Background(), tc.args, &out, c); err != nil {
+		if err := Prometheus(context.Background(), tc.args, &out, io.Discard, c); err != nil {
 			t.Fatalf("prometheus %v: %v", tc.args, err)
 		}
 		if !strings.Contains(out.String(), tc.want) {
@@ -109,17 +110,17 @@ func TestPrometheusHelpAndVersion(t *testing.T) {
 	}
 	// Reachable through the subcommand too, and both report one version.
 	var out bytes.Buffer
-	if err := Run(context.Background(), []string{"prometheus", "--version"}, &out, c); err != nil {
+	if err := Run(context.Background(), []string{"prometheus", "--version"}, &out, io.Discard, c); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "jbod-go "+Version) {
+	if !strings.Contains(out.String(), "jbod-go "+Version()) {
 		t.Fatalf("jbod prometheus --version: %q", out.String())
 	}
 	out.Reset()
-	if err := Run(context.Background(), []string{"--version"}, &out, c); err != nil {
+	if err := Run(context.Background(), []string{"--version"}, &out, io.Discard, c); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "jbod-go "+Version) {
+	if !strings.Contains(out.String(), "jbod-go "+Version()) {
 		t.Fatalf("jbod --version: %q", out.String())
 	}
 }

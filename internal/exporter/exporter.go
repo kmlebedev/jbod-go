@@ -9,6 +9,7 @@ package exporter
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -35,6 +36,7 @@ type Exporter struct {
 	collector     Collector
 	scrapeTimeout time.Duration
 	cacheTTL      time.Duration
+	logger        *slog.Logger
 
 	mu       sync.Mutex
 	totals   map[string]int
@@ -53,17 +55,52 @@ type pass struct {
 	err  error
 }
 
-// New returns an exporter for c. A zero scrapeTimeout means
-// DefaultScrapeTimeout; a zero cacheTTL disables reuse of the previous
-// result, leaving only the deduplication of concurrent scrapes.
-func New(c Collector, scrapeTimeout, cacheTTL time.Duration) *Exporter {
-	if scrapeTimeout <= 0 {
-		scrapeTimeout = DefaultScrapeTimeout
+// Option configures an Exporter. Values that make no sense are ignored, so
+// New always returns a usable exporter.
+type Option func(*Exporter)
+
+// WithScrapeTimeout bounds one collection pass. The default is
+// DefaultScrapeTimeout.
+func WithScrapeTimeout(d time.Duration) Option {
+	return func(e *Exporter) {
+		if d > 0 {
+			e.scrapeTimeout = d
+		}
 	}
-	if cacheTTL < 0 {
-		cacheTTL = 0
+}
+
+// WithCacheTTL serves the previous result for d after it was collected.
+// Without it every scrape is fresh and only concurrent scrapes are shared.
+func WithCacheTTL(d time.Duration) Option {
+	return func(e *Exporter) {
+		if d > 0 {
+			e.cacheTTL = d
+		}
 	}
-	return &Exporter{collector: c, scrapeTimeout: scrapeTimeout, cacheTTL: cacheTTL, totals: map[string]int{}}
+}
+
+// WithLogger sets where the exporter reports scrapes and failures. Without
+// it the exporter stays silent.
+func WithLogger(l *slog.Logger) Option {
+	return func(e *Exporter) {
+		if l != nil {
+			e.logger = l
+		}
+	}
+}
+
+// New returns an exporter for c with opts applied.
+func New(c Collector, opts ...Option) *Exporter {
+	e := &Exporter{
+		collector:     c,
+		scrapeTimeout: DefaultScrapeTimeout,
+		logger:        slog.New(slog.DiscardHandler),
+		totals:        map[string]int{},
+	}
+	for _, opt := range opts {
+		opt(e)
+	}
+	return e
 }
 
 // Handler serves GET/HEAD on / and /metrics.
@@ -87,6 +124,7 @@ func (e *Exporter) Handler() http.Handler {
 		if err != nil {
 			// Only a total failure gets an HTTP error; partial results are
 			// reported through jbod_up and jbod_scrape_errors_total.
+			e.logger.ErrorContext(ctx, "scrape failed", "remote", r.RemoteAddr, "err", err)
 			http.Error(w, "collection failed: "+err.Error(), http.StatusServiceUnavailable)
 			return
 		}
@@ -102,12 +140,14 @@ func (e *Exporter) Handler() http.Handler {
 func (e *Exporter) body(ctx context.Context) (string, error) {
 	e.mu.Lock()
 	if e.cacheTTL > 0 && e.cached != nil && time.Since(e.cachedAt) < e.cacheTTL {
-		cached := e.cached
+		cached, age := e.cached, time.Since(e.cachedAt)
 		e.mu.Unlock()
+		e.logger.DebugContext(ctx, "scrape served from cache", "age", age, "ttl", e.cacheTTL)
 		return cached.body, cached.err
 	}
 	if running := e.inflight; running != nil {
 		e.mu.Unlock()
+		e.logger.DebugContext(ctx, "scrape joined a running collection")
 		// Wait for the pass that is already talking to the hardware. Its
 		// deadline governs, so a request that joins late can be answered
 		// with the leader's error; that is the price of not doubling the

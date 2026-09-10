@@ -14,6 +14,7 @@ package jbod
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,6 +50,7 @@ type Client struct {
 	sysfs          string
 	commandTimeout time.Duration
 	concurrency    int
+	logger         *slog.Logger
 }
 
 // Option configures a Client. Values that make no sense (an empty sysfs
@@ -92,6 +94,16 @@ func WithConcurrency(n int) Option {
 	}
 }
 
+// WithLogger sets where the client reports failed commands and finished
+// collections. Without it the client stays silent, as a library should.
+func WithLogger(l *slog.Logger) Option {
+	return func(c *Client) {
+		if l != nil {
+			c.logger = l
+		}
+	}
+}
+
 // New returns a client for the local hardware, with opts applied. It is the
 // only way to build one.
 func New(opts ...Option) *Client {
@@ -100,6 +112,7 @@ func New(opts ...Option) *Client {
 		sysfs:          DefaultSysfs,
 		commandTimeout: DefaultCommandTimeout,
 		concurrency:    DefaultConcurrency,
+		logger:         slog.New(slog.DiscardHandler),
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -184,8 +197,10 @@ type DiskOptions struct {
 type LEDKind string
 
 const (
+	// LEDLocate is the identify LED an operator uses to find a slot.
 	LEDLocate LEDKind = "locate"
-	LEDFault  LEDKind = "fault"
+	// LEDFault is the fault LED.
+	LEDFault LEDKind = "fault"
 )
 
 func (k LEDKind) valid() bool { return k == LEDLocate || k == LEDFault }
@@ -193,7 +208,7 @@ func (k LEDKind) valid() bool { return k == LEDLocate || k == LEDFault }
 // Enclosures lists the enclosures. Failures on individual enclosures are
 // reported as an error, but the enclosures that were read stay in the result.
 func (c *Client) Enclosures(ctx context.Context) ([]Enclosure, error) {
-	p := newProblems()
+	p := newProblems(c.logger)
 	result, err := c.enclosures(ctx, p)
 	if err != nil {
 		return nil, err
@@ -255,7 +270,7 @@ func vpdSerial(path string) (string, bool) {
 // cannot be read are reported as an error; the disks that were found stay in
 // the result.
 func (c *Client) Disks(ctx context.Context, enclosures []Enclosure, opts DiskOptions) ([]Disk, error) {
-	p := newProblems()
+	p := newProblems(c.logger)
 	ds := c.disks(ctx, enclosures, opts, p)
 	if err := p.err(); err != nil {
 		return ds, err
@@ -346,7 +361,7 @@ func (c *Client) telemetry(ctx context.Context, d *Disk, p *problems) {
 // A fan whose speed cannot be read is skipped rather than failing the whole
 // listing; a shelf whose element listing fails is reported as an error.
 func (c *Client) Fans(ctx context.Context, enclosures []Enclosure) ([]Fan, error) {
-	p := newProblems()
+	p := newProblems(c.logger)
 	fs := c.fans(ctx, enclosures, p)
 	if err := p.err(); err != nil {
 		return fs, err

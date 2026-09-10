@@ -2,18 +2,24 @@
 
 // Package cli parses the command line of both binaries and dispatches to the
 // subcommands. Each command lives in its own file (list.go, led.go,
-// prometheus.go) and the table rendering in output.go.
+// prometheus.go), the table rendering in output.go and the shared process
+// entry point in main.go.
+//
+// Options follow POSIX through spf13/pflag: short flags group (-ed), long
+// flags take --flag=value, and -- ends the flags.
 package cli
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"io"
+
+	"github.com/spf13/pflag"
 
 	"github.com/kmlebedev/jbod-go/internal/jbod"
 )
 
+// Help is the top-level usage of the jbod binary.
 const Help = `jbod - Generic storage enclosure tool (Go)
 Usage:
   jbod list [-e|--enclosure] [-d|--disks] [-f|--fan]
@@ -23,10 +29,6 @@ Usage:
 The exporter runs in the foreground (default 127.0.0.1:9945);
 see "jbod prometheus --help" for the tuning flags.
 `
-
-// Version is the single source of truth for both binaries. Keep it in sync
-// with debian/control until the build injects it via -ldflags.
-const Version = "1.0.0"
 
 // Inventory is the hardware access the list and led commands need. They take
 // the interface rather than *jbod.Client so their tests can exercise the
@@ -38,21 +40,18 @@ type Inventory interface {
 	SetLED(ctx context.Context, device string, kind jbod.LEDKind, on bool) error
 }
 
-func flags(name string, w io.Writer) *flag.FlagSet {
-	f := flag.NewFlagSet(name, flag.ContinueOnError)
+// flags returns a POSIX flag set that reports errors to the caller instead of
+// exiting, and prints its usage where the command prints everything else.
+func flags(name string, w io.Writer) *pflag.FlagSet {
+	f := pflag.NewFlagSet(name, pflag.ContinueOnError)
 	f.SetOutput(w)
 	return f
 }
 
-func boolean(f *flag.FlagSet, p *bool, short, long string) {
-	f.BoolVar(p, short, false, long)
-	f.BoolVar(p, long, false, long)
-}
-
 // Run dispatches the jbod subcommands. It takes the concrete client because
-// the exporter derives its own budgets from it; the commands themselves work
-// against Inventory.
-func Run(ctx context.Context, args []string, out io.Writer, c *jbod.Client) error {
+// the exporter derives its own budgets and logger from it; the commands
+// themselves work against Inventory.
+func Run(ctx context.Context, args []string, out, errOut io.Writer, c *jbod.Client) error {
 	if len(args) == 0 {
 		fmt.Fprint(out, Help)
 		return nil
@@ -62,14 +61,14 @@ func Run(ctx context.Context, args []string, out io.Writer, c *jbod.Client) erro
 		fmt.Fprint(out, Help)
 		return nil
 	case "--version", "-V":
-		fmt.Fprintln(out, "jbod-go "+Version)
+		fmt.Fprintln(out, "jbod-go "+Version())
 		return nil
 	case "list":
 		return cmdList(ctx, args[1:], out, c)
 	case "led":
 		return cmdLED(ctx, args[1:], out, c)
 	case "prometheus":
-		return Prometheus(ctx, args[1:], out, c)
+		return Prometheus(ctx, args[1:], out, errOut, c)
 	default:
 		return fmt.Errorf("unknown command %q; use jbod help", args[0])
 	}

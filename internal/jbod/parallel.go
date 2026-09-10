@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: BSD-2-Clause
+
 package jbod
 
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"sync"
 )
 
@@ -31,7 +33,7 @@ func forEach(ctx context.Context, limit, n int, fn func(i int)) {
 	}
 	sem := make(chan struct{}, limit)
 	var wg sync.WaitGroup
-	for i := 0; i < n; i++ {
+	for i := range n {
 		select {
 		case sem <- struct{}{}:
 		case <-ctx.Done():
@@ -73,18 +75,27 @@ type problems struct {
 	mu     sync.Mutex
 	counts map[string]int
 	fatal  []error
+	log    *slog.Logger
 }
 
-func newProblems() *problems { return &problems{counts: map[string]int{}} }
+func newProblems(log *slog.Logger) *problems {
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
+	return &problems{counts: map[string]int{}, log: log}
+}
 
-// note counts a tolerated failure: the caller already substituted a sentinel.
+// note counts a tolerated failure: the caller already left the value absent.
 func (p *problems) note(collector string, err error) {
 	if err == nil {
 		return
 	}
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	p.counts[collector]++
+	p.mu.Unlock()
+	// Every counted failure is logged here, once, so a shelf that quietly
+	// degrades leaves a trail and not just a counter.
+	p.log.Warn("collection error", "collector", collector, "tolerated", true, "err", err)
 }
 
 // fail counts a failure and remembers it for callers that want strict errors.
@@ -93,9 +104,10 @@ func (p *problems) fail(collector string, err error) {
 		return
 	}
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	p.counts[collector]++
 	p.fatal = append(p.fatal, err)
+	p.mu.Unlock()
+	p.log.Warn("collection error", "collector", collector, "tolerated", false, "err", err)
 }
 
 // err joins the failures recorded with fail, or nil if there were none.
