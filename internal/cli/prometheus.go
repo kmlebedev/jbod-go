@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: BSD-2-Clause
+
 package cli
 
 import (
@@ -9,13 +10,15 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
+
+	"github.com/spf13/pflag"
 
 	"github.com/kmlebedev/jbod-go/internal/exporter"
 	"github.com/kmlebedev/jbod-go/internal/jbod"
 )
 
+// PrometheusHelp is the usage of the exporter, for both spellings of it.
 const PrometheusHelp = `prometheus-jbod-exporter - Prometheus exporter for storage enclosures (Go)
 Usage:
   prometheus-jbod-exporter [-i|--ip-address IP] [-p|--port PORT] [tuning flags]
@@ -28,10 +31,13 @@ Tuning flags:
   --scrape-timeout DUR   timeout of one full collection (default 2m0s)
   --concurrency N        external commands allowed to run at once (default 12)
   --cache-ttl DUR        reuse the previous collection for this long (default 0s)
+  --log-level LEVEL      debug, info, warn or error (default info)
+  --log-format FORMAT    json or text (default json)
 
 Concurrent scrapes always share one collection pass; --cache-ttl additionally
 serves a recent result without touching the hardware. Set it to about half the
 Prometheus scrape_interval if the shelf is polled from several places.
+Logs go to stderr.
 `
 
 // Listen defaults and derived timeouts of the exporter.
@@ -58,9 +64,19 @@ func wildcardWarning(ip string) string {
 	return fmt.Sprintf("==> Warning: %s exposes enclosure telemetry on every interface; bind %s unless that is intended", ip, DefaultListenIP)
 }
 
+// ipAliases lets --ip stand for --ip-address, the way the Rust original
+// accepts both, without registering the same option twice and letting the
+// last spelling win silently (E).
+func ipAliases(_ *pflag.FlagSet, name string) pflag.NormalizedName {
+	if name == "ip" {
+		return "ip-address"
+	}
+	return pflag.NormalizedName(name)
+}
+
 // Prometheus runs the exporter in the foreground. It is both the "jbod
 // prometheus" subcommand and the whole of prometheus-jbod-exporter.
-func Prometheus(ctx context.Context, args []string, out io.Writer, c *jbod.Client) error {
+func Prometheus(ctx context.Context, args []string, out, errOut io.Writer, c *jbod.Client) error {
 	// The standalone binary never reaches Run, so it needs its own
 	// --help/--version handling.
 	if len(args) == 1 {
@@ -69,74 +85,86 @@ func Prometheus(ctx context.Context, args []string, out io.Writer, c *jbod.Clien
 			fmt.Fprint(out, PrometheusHelp)
 			return nil
 		case "-V", "--version":
-			fmt.Fprintln(out, "jbod-go "+Version)
+			fmt.Fprintln(out, "jbod-go "+Version())
 			return nil
 		}
 	}
 	f := flags("prometheus", out)
-	ip, port := DefaultListenIP, DefaultListenPort
-	for _, key := range []string{"i", "ip", "ip-address"} {
-		f.StringVar(&ip, key, ip, "listen IP")
-	}
-	for _, key := range []string{"p", "port"} {
-		f.StringVar(&port, key, port, "listen port")
-	}
+	f.SetNormalizeFunc(ipAliases)
+	ip := f.StringP("ip-address", "i", DefaultListenIP, "listen IP")
+	port := f.StringP("port", "p", DefaultListenPort, "listen port")
 	// Timeouts and the concurrency limit are operational knobs: what fits a
 	// 12-slot shelf is not what fits a 60-slot one, and a README advising
 	// "raise scrape_timeout" needs a matching flag on this side (B4).
-	commandTimeout := jbod.DefaultCommandTimeout
-	concurrency := jbod.DefaultConcurrency
-	scrapeTimeout := exporter.DefaultScrapeTimeout
-	var cacheTTL time.Duration
-	f.DurationVar(&commandTimeout, "command-timeout", commandTimeout, "timeout of one external command")
-	f.DurationVar(&scrapeTimeout, "scrape-timeout", scrapeTimeout, "timeout of one full collection")
-	f.DurationVar(&cacheTTL, "cache-ttl", cacheTTL, "reuse the previous collection for this long")
-	f.IntVar(&concurrency, "concurrency", concurrency, "external commands allowed to run at once")
-	// Keep standalone exporter's positional IP PORT invocation.
-	if len(args) == 2 && !strings.HasPrefix(args[0], "-") {
-		ip, port = args[0], args[1]
-	} else {
-		if err := f.Parse(args); err != nil {
-			return err
-		}
-		if f.NArg() != 0 {
-			return errors.New("unexpected exporter arguments")
-		}
+	commandTimeout := f.Duration("command-timeout", jbod.DefaultCommandTimeout, "timeout of one external command")
+	scrapeTimeout := f.Duration("scrape-timeout", exporter.DefaultScrapeTimeout, "timeout of one full collection")
+	cacheTTL := f.Duration("cache-ttl", 0, "reuse the previous collection for this long")
+	concurrency := f.Int("concurrency", jbod.DefaultConcurrency, "external commands allowed to run at once")
+	logLevel := f.String("log-level", "info", "log level: debug, info, warn or error")
+	logFormat := f.String("log-format", LogFormatJSON, "log format: json or text")
+	if err := f.Parse(args); err != nil {
+		return err
 	}
-	if net.ParseIP(ip) == nil {
-		return fmt.Errorf("invalid IP address %q", ip)
+	// The standalone exporter also takes IP and PORT positionally, which
+	// pflag reports as leftover arguments; any other count is a mistake.
+	switch f.NArg() {
+	case 0:
+	case 2:
+		*ip, *port = f.Arg(0), f.Arg(1)
+	default:
+		return fmt.Errorf("expected IP and PORT, got %d arguments", f.NArg())
 	}
-	n, err := strconv.Atoi(port)
+	if net.ParseIP(*ip) == nil {
+		return fmt.Errorf("invalid IP address %q", *ip)
+	}
+	n, err := strconv.Atoi(*port)
 	if err != nil || n < 1 || n > 65535 {
-		return fmt.Errorf("invalid port %q", port)
+		return fmt.Errorf("invalid port %q", *port)
 	}
-	if commandTimeout <= 0 {
-		return fmt.Errorf("invalid command timeout %s", commandTimeout)
+	if *commandTimeout <= 0 {
+		return fmt.Errorf("invalid command timeout %s", *commandTimeout)
 	}
-	if scrapeTimeout <= 0 {
-		return fmt.Errorf("invalid scrape timeout %s", scrapeTimeout)
+	if *scrapeTimeout <= 0 {
+		return fmt.Errorf("invalid scrape timeout %s", *scrapeTimeout)
 	}
-	if cacheTTL < 0 {
-		return fmt.Errorf("invalid cache TTL %s", cacheTTL)
+	if *cacheTTL < 0 {
+		return fmt.Errorf("invalid cache TTL %s", *cacheTTL)
 	}
-	if concurrency < 1 {
-		return fmt.Errorf("invalid concurrency %d", concurrency)
+	if *concurrency < 1 {
+		return fmt.Errorf("invalid concurrency %d", *concurrency)
 	}
-	// A derived client, so the caller's stays untouched and nothing is
-	// written to a client other goroutines are already reading (C6).
-	collector := c.With(jbod.WithCommandTimeout(commandTimeout), jbod.WithConcurrency(concurrency))
-	listener, err := net.Listen("tcp", net.JoinHostPort(ip, port))
+	level, err := parseLevel(*logLevel)
 	if err != nil {
 		return err
 	}
-	if warning := wildcardWarning(ip); warning != "" {
+	logger, err := newLogger(errOut, *logFormat, level)
+	if err != nil {
+		return err
+	}
+	// A derived client, so the caller's stays untouched and nothing is
+	// written to a client other goroutines are already reading (C6).
+	collector := c.With(
+		jbod.WithCommandTimeout(*commandTimeout),
+		jbod.WithConcurrency(*concurrency),
+		jbod.WithLogger(logger),
+	)
+	listener, err := net.Listen("tcp", net.JoinHostPort(*ip, *port))
+	if err != nil {
+		return err
+	}
+	if warning := wildcardWarning(*ip); warning != "" {
 		fmt.Fprintln(out, warning)
+		logger.Warn("listening on a wildcard address", "address", *ip)
 	}
 	server := &http.Server{
-		Handler:           exporter.New(collector, scrapeTimeout, cacheTTL).Handler(),
+		Handler: exporter.New(collector,
+			exporter.WithScrapeTimeout(*scrapeTimeout),
+			exporter.WithCacheTTL(*cacheTTL),
+			exporter.WithLogger(logger),
+		).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
-		WriteTimeout:      scrapeTimeout + writeGrace,
+		WriteTimeout:      *scrapeTimeout + writeGrace,
 		// Without BaseContext a scrape in flight only sees the cancellation
 		// when the connection is closed, so SIGTERM would wait out the whole
 		// shutdown timeout with sg_ses still running (B3).
@@ -147,17 +175,24 @@ func Prometheus(ctx context.Context, args []string, out io.Writer, c *jbod.Clien
 	go func() {
 		select {
 		case <-ctx.Done():
+			logger.Info("shutting down", "timeout", shutdownTimeout)
 			shutdown, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 			defer cancel()
 			if err := server.Shutdown(shutdown); err != nil {
+				logger.Warn("graceful shutdown failed, closing", "err", err)
 				server.Close()
 			}
 		case <-done:
 		}
 	}()
 	fmt.Fprintf(out, "==> Started on %s\n", listener.Addr())
+	logger.Info("started",
+		"address", listener.Addr().String(), "version", Version(),
+		"command_timeout", *commandTimeout, "scrape_timeout", *scrapeTimeout,
+		"concurrency", *concurrency, "cache_ttl", *cacheTTL)
 	err = server.Serve(listener)
 	if errors.Is(err, http.ErrServerClosed) {
+		logger.Info("stopped")
 		return nil
 	}
 	return err
