@@ -24,7 +24,7 @@ func listClient(t *testing.T) *jbod.Client {
 	if err := os.MkdirAll(filepath.Join(root, "1:0:0:0"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	return &jbod.Client{Sysfs: root, Run: func(_ context.Context, name string, args ...string) (string, error) {
+	return jbod.New(jbod.WithSysfs(root), jbod.WithRunner(func(_ context.Context, name string, args ...string) (string, error) {
 		switch name {
 		case "lsscsi":
 			return "[1:0:0:0] enclosu ACME Shelf 1 - /dev/sg0\n", nil
@@ -39,7 +39,7 @@ func listClient(t *testing.T) *jbod.Client {
 			return "speed code: 2, Actual speed: 1200 rpm, low speed\n", nil
 		}
 		return "", fmt.Errorf("unexpected command %s", name)
-	}}
+	}))
 }
 
 // Every flag selects its own section; combining them must not drop one.
@@ -84,10 +84,10 @@ func TestListSectionsAreIndependent(t *testing.T) {
 // --help and --version.
 func TestExporterHelpAndVersion(t *testing.T) {
 	t.Parallel()
-	c := &jbod.Client{Run: func(context.Context, string, ...string) (string, error) {
-		t.Fatal("unexpected hardware access")
+	c := jbod.New(jbod.WithRunner(func(context.Context, string, ...string) (string, error) {
+		t.Error("unexpected hardware access")
 		return "", nil
-	}}
+	}))
 	cases := []struct {
 		args []string
 		want string

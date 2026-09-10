@@ -8,22 +8,61 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
-func fixture(t *testing.T) *Client {
+// runners lets a test change command behaviour between requests. The client
+// itself is immutable, so a test can no longer reassign its runner field
+// mid-flight (C6).
+type runners struct {
+	mu sync.RWMutex
+	fn Runner
+}
+
+func newRunners(fn Runner) *runners { return &runners{fn: fn} }
+
+func (r *runners) run(ctx context.Context, name string, args ...string) (string, error) {
+	r.mu.RLock()
+	fn := r.fn
+	r.mu.RUnlock()
+	return fn(ctx, name, args...)
+}
+
+func (r *runners) set(fn Runner) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.fn = fn
+}
+
+// rig is a client over a temporary sysfs tree with one enclosure and one disk.
+type rig struct {
+	client  *Client
+	runners *runners
+	root    string
+	// slot and label are how the enclosure and its single slot appear in
+	// sysfs; ledPath rebuilds what SetLED writes to.
+	slot, label string
+}
+
+func (r rig) ledPath(kind LEDKind) string {
+	return filepath.Join(r.root, r.slot, r.label, string(kind))
+}
+
+func fixture(t *testing.T) rig {
 	t.Helper()
 	root := t.TempDir()
-	base := filepath.Join(root, "1:0:0:0", "Slot 01, front")
-	if err := os.MkdirAll(filepath.Join(base, "device", "scsi_generic", "sg1"), 0755); err != nil {
+	slot, label := "1:0:0:0", "Slot 01, front"
+	base := filepath.Join(root, slot, label)
+	if err := os.MkdirAll(filepath.Join(base, "device", "scsi_generic", "sg1"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	for name, value := range map[string]string{"locate": "0", "fault": "0", "device/vendor": "ACME\n", "device/model": "Disk\n", "device/vpd_pg80": "\x00\x80\x00\x04S123"} {
-		if err := os.WriteFile(filepath.Join(base, name), []byte(value), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(base, name), []byte(value), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	return &Client{Sysfs: root, Run: func(ctx context.Context, name string, args ...string) (string, error) {
+	r := newRunners(func(_ context.Context, name string, args ...string) (string, error) {
 		switch name {
 		case "lsscsi":
 			return "[1:0:0:0] enclosu ACME Shelf 1 - /dev/sg0\n[1:0:1:0] disk ACME Disk 1 /dev/sda /dev/sg1\n", nil
@@ -42,41 +81,42 @@ func fixture(t *testing.T) *Client {
 			return "speed code: 2, Actual speed: 1200 rpm, low speed\n", nil
 		}
 		return "", fmt.Errorf("unexpected command %s", name)
-	}}
+	})
+	return rig{client: New(WithSysfs(root), WithRunner(r.run)), runners: r, root: root, slot: slot, label: label}
 }
 
 func TestInventoryAndLED(t *testing.T) {
-	c := fixture(t)
+	f := fixture(t)
+	c := f.client
 	ctx := context.Background()
 	es, err := c.Enclosures(ctx)
 	if err != nil || len(es) != 1 {
 		t.Fatalf("%v %v", es, err)
 	}
-	if es[0].Model != "Shelf" || es[0].Vendor != "ACME" {
+	if es[0].Model.Or("") != "Shelf" || es[0].Vendor.Or("") != "ACME" {
 		t.Fatal(es)
 	}
-	ds, err := c.Disks(ctx, es, true)
+	ds, err := c.Disks(ctx, es, DiskOptions{WithTelemetry: true})
 	if err != nil || len(ds) != 1 {
 		t.Fatalf("%v %v", ds, err)
 	}
 	d := ds[0]
-	if d.Temperature != "37" || d.Serial != "S123" || d.Firmware != "FW1" || d.Map != "/dev/sda" || d.Slot != "Slot 01" {
-		t.Fatal(d)
+	if temp, ok := d.Temperature.Get(); !ok || temp != 37 {
+		t.Fatalf("temperature %v (present %v)", temp, ok)
+	}
+	if d.Serial.Or("") != "S123" || d.Firmware.Or("") != "FW1" || d.Map.Or("") != "/dev/sda" || d.Slot != "Slot 01" || d.SlotLabel != f.label {
+		t.Fatalf("%+v", d)
 	}
 	fs, err := c.Fans(ctx, es)
-	if err != nil || len(fs) != 1 || fs[0].Speed != 1200 || fs[0].Comment != "low speed" {
+	if err != nil || len(fs) != 1 || fs[0].Speed != 1200 || fs[0].Comment.Or("") != "low speed" {
 		t.Fatalf("%v %v", fs, err)
 	}
-	for _, kind := range []string{"locate", "fault"} {
+	for _, kind := range []LEDKind{LEDLocate, LEDFault} {
 		for _, on := range []bool{true, false} {
-			if err := SetLED(ds, "/dev/sda", kind, on); err != nil {
+			if err := c.SetLED(ctx, "/dev/sda", kind, on); err != nil {
 				t.Fatal(err)
 			}
-			path := d.Locate
-			if kind == "fault" {
-				path = d.Fault
-			}
-			b, err := os.ReadFile(path)
+			b, err := os.ReadFile(f.ledPath(kind))
 			want := "0"
 			if on {
 				want = "1"
@@ -86,20 +126,26 @@ func TestInventoryAndLED(t *testing.T) {
 			}
 		}
 	}
-	if SetLED(ds, "/dev/missing", "locate", true) == nil {
+	if c.SetLED(ctx, "/dev/missing", LEDLocate, true) == nil {
 		t.Fatal("missing device accepted")
 	}
-	if err := os.Remove(d.Locate); err != nil {
+	if c.SetLED(ctx, "sda", LEDLocate, true) == nil {
+		t.Fatal("device without a /dev/ prefix accepted")
+	}
+	if c.SetLED(ctx, "/dev/sg1", LEDKind("blink"), true) == nil {
+		t.Fatal("unknown LED kind accepted")
+	}
+	if err := os.Remove(f.ledPath(LEDLocate)); err != nil {
 		t.Fatal(err)
 	}
-	if SetLED(ds, "/dev/sg1", "locate", true) == nil {
+	if c.SetLED(ctx, "/dev/sg1", LEDLocate, true) == nil {
 		t.Fatal("recreated missing LED")
 	}
 }
 
 func TestMetricsHTTP(t *testing.T) {
-	c := fixture(t)
-	h := c.Handler()
+	f := fixture(t)
+	h := f.client.Handler()
 	r := httptest.NewRecorder()
 	h.ServeHTTP(r, httptest.NewRequest("GET", "/metrics", nil))
 	for _, want := range []string{"number_of_enclosures 1", `jbod_slot_temperature{slot="Slot 01",enclosure="1:0:0:0"} 37`, `jbod_fan_rpm{device="Fan A",slot="2,0"} 1200`} {
@@ -110,13 +156,13 @@ func TestMetricsHTTP(t *testing.T) {
 	if r.Code != 200 || !strings.Contains(r.Header().Get("Content-Type"), "version=0.0.4") {
 		t.Fatal(r)
 	}
-	c.Run = func(context.Context, string, ...string) (string, error) { return "", nil }
+	f.runners.set(func(context.Context, string, ...string) (string, error) { return "", nil })
 	r = httptest.NewRecorder()
 	h.ServeHTTP(r, httptest.NewRequest("GET", "/metrics", nil))
 	if strings.Contains(r.Body.String(), "Slot 01") || !strings.Contains(r.Body.String(), "number_of_enclosures 0") {
 		t.Fatal(r.Body.String())
 	}
-	c.Run = func(context.Context, string, ...string) (string, error) { return "", fmt.Errorf("failed") }
+	f.runners.set(func(context.Context, string, ...string) (string, error) { return "", fmt.Errorf("failed") })
 	r = httptest.NewRecorder()
 	h.ServeHTTP(r, httptest.NewRequest("GET", "/metrics", nil))
 	if r.Code != 503 {
@@ -137,32 +183,54 @@ func TestMetricsHTTP(t *testing.T) {
 }
 
 func TestMalformedAndUnavailable(t *testing.T) {
-	for input, want := range map[string]string{"": "ERR", "short": "ERR", "Current temperature: not available": "ERR", "Current temperature: -2 C": "-2", "Current temperature: 123 C": "123"} {
-		if got := temperature(input); got != want {
-			t.Fatalf("%q: %s", input, got)
+	for _, tc := range []struct {
+		in    string
+		want  int64
+		found bool
+	}{
+		{"", 0, false},
+		{"short", 0, false},
+		{"Current temperature: not available", 0, false},
+		{"Current temperature: -2 C", -2, true},
+		{"Current temperature: 123 C", 123, true},
+	} {
+		got, ok := temperature(tc.in)
+		if ok != tc.found || got != tc.want {
+			t.Errorf("temperature(%q) = %d, %v; want %d, %v", tc.in, got, ok, tc.want, tc.found)
 		}
 	}
-	c := fixture(t)
-	old := c.Run
-	c.Run = func(ctx context.Context, name string, args ...string) (string, error) {
+	f := fixture(t)
+	old := f.runners.fn
+	f.runners.set(func(ctx context.Context, name string, args ...string) (string, error) {
 		if name == "scsi_temperature" || name == "sginfo" {
 			return "", fmt.Errorf("unavailable")
 		}
 		return old(ctx, name, args...)
+	})
+	es, _ := f.client.Enclosures(context.Background())
+	ds, err := f.client.Disks(context.Background(), es, DiskOptions{WithTelemetry: true})
+	if err != nil {
+		t.Fatal(err)
 	}
-	es, _ := c.Enclosures(context.Background())
-	ds, err := c.Disks(context.Background(), es, true)
-	if err != nil || ds[0].Temperature != "ERR" || ds[0].Firmware != "N/A" {
-		t.Fatalf("%v %v", ds, err)
+	// A dead sensor is absent, not a string that has to be parsed back.
+	if ds[0].Temperature.Present() || ds[0].Firmware.Present() {
+		t.Fatalf("unavailable telemetry reported as present: %+v", ds[0])
+	}
+	// The disk itself is still identified from sysfs.
+	if ds[0].Vendor.Or("") != "ACME" || ds[0].Serial.Or("") != "S123" {
+		t.Fatalf("%+v", ds[0])
 	}
 	path := filepath.Join(t.TempDir(), "vpd")
 	for _, data := range []string{"", "bad", "\x00\x80\x00\xffx"} {
-		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if serial(path) != "N/A" {
-			t.Fatal("invalid VPD accepted")
+		if _, ok := serial(path); ok {
+			t.Fatalf("invalid VPD accepted: %q", data)
 		}
+	}
+	if _, ok := serial(filepath.Join(t.TempDir(), "absent")); ok {
+		t.Fatal("missing VPD file accepted")
 	}
 	if got := label("a\\b\"c\nd"); got != `a\\b\"c\nd` {
 		t.Fatal(got)
@@ -170,16 +238,15 @@ func TestMalformedAndUnavailable(t *testing.T) {
 }
 
 func TestLEDSkipTelemetry(t *testing.T) {
-	c := fixture(t)
-	old := c.Run
-	c.Run = func(ctx context.Context, name string, args ...string) (string, error) {
+	f := fixture(t)
+	old := f.runners.fn
+	f.runners.set(func(ctx context.Context, name string, args ...string) (string, error) {
 		if name == "scsi_temperature" || name == "sginfo" {
-			t.Fatalf("LED inventory called %s", name)
+			t.Errorf("LED inventory called %s", name)
 		}
 		return old(ctx, name, args...)
-	}
-	es, _ := c.Enclosures(context.Background())
-	if _, err := c.Disks(context.Background(), es, false); err != nil {
+	})
+	if err := f.client.SetLED(context.Background(), "/dev/sda", LEDFault, true); err != nil {
 		t.Fatal(err)
 	}
 }
