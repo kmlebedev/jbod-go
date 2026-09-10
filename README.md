@@ -20,11 +20,16 @@ make build
 ./bin/jbod list -d
 ./bin/jbod list -ed
 ./bin/jbod list -f
+./bin/jbod list -ef
 sudo ./bin/jbod led --locate /dev/sda --on
 sudo ./bin/jbod led --locate /dev/sda --off
 sudo ./bin/jbod led --fault /dev/sg1 --on
 ./bin/jbod prometheus --ip-address 127.0.0.1 --port 9945
 ```
+
+Флаги `-e`, `-d` и `-f` независимы: каждый добавляет свою секцию вывода,
+поэтому `list -ef` печатает и корпуса, и вентиляторы. Диски упорядочены
+натурально — `Slot 2` идёт перед `Slot 10`.
 
 LED можно указывать несколько раз: `led -l /dev/sda -l /dev/sdb --on`.
 Поддерживаются пути устройств /dev/sg* и соответствующие /dev/sd*.
@@ -39,6 +44,8 @@ LED можно указывать несколько раз: `led -l /dev/sda -l
 ./bin/jbod prometheus -i 0.0.0.0 -p 9945
 ./bin/prometheus-jbod-exporter 0.0.0.0 9945
 ```
+
+Оба бинарника понимают `--help` и `--version`.
 
 По умолчанию слушает 0.0.0.0:9945. GET / возвращает пустой ответ;
 GET /metrics — Prometheus text format 0.0.4.
