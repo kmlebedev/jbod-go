@@ -1,0 +1,13 @@
+jbod-go (@VERSION@) unstable; urgency=medium
+
+  * Go port of Gandi/jbod-rs.
+  * jbod: list enclosures, disks and cooling elements; switch locate and
+    fault LEDs.
+  * prometheus-jbod-exporter: enclosure temperatures and fan speeds in
+    Prometheus text format, with jbod_up, jbod_scrape_duration_seconds,
+    jbod_scrape_errors_total and the process_* metrics.
+  * Collection runs in parallel, concurrent scrapes share one pass, and the
+    exporter listens on 127.0.0.1 by default; arguments come from
+    /etc/default/prometheus-jbod-exporter.
+
+ -- @MAINTAINER@  @DATE@

@@ -11,6 +11,27 @@ graceful shutdown). Ниже — то, что стоит доделать.
 
 ---
 
+## Состояние
+
+Все блоки выполнены; ветки `refactor_stage1`…`refactor_stage6`.
+
+| Блок | Пункты | Где |
+| --- | --- | --- |
+| A | A1–A9 | stage1 (A1–A3, A8), stage2 (A6), stage6 (A4, A5, A7, A9) |
+| B | B1–B6 | stage2 |
+| C | C1–C7 | stage3 (C5 частично: `Run` берёт конкретный клиент, потому что экспортёру нужен производный) |
+| D | D1–D4 | stage4 |
+| E | pflag | stage5 — выбран pflag, все три костыля убраны |
+| F | версия Go, идиомы, slog, ldflags, doc | stage5 |
+| G | субтесты, golden, фаззинг, конкурентность, cmd/* | stage6 |
+| H | Makefile, CI, release, systemd, deb | stage6 |
+| I | README.en.md, CHANGELOG, CONTRIBUTING | stage6 |
+
+Не проверено на живом оборудовании: ни один пункт не тестировался на реальной
+полке, а сборка `.deb` — на Linux с dpkg.
+
+---
+
 ## A. Баги
 
 ### A1. `list -e -f` молча теряет вентиляторы

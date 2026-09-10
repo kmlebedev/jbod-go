@@ -7,6 +7,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -31,6 +33,17 @@ func (b *syncBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
+}
+
+// sysfsRoot returns a sysfs root with one enclosure directory, which is what
+// Preflight requires before any command runs.
+func sysfsRoot(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "1:0:0:0"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return root
 }
 
 func TestWildcardWarning(t *testing.T) {
@@ -113,7 +126,7 @@ func TestShutdownCancelsScrape(t *testing.T) {
 	scraping := make(chan struct{})
 	cancelled := make(chan error, 1)
 	var once sync.Once
-	c := jbod.New(jbod.WithSysfs(t.TempDir()), jbod.WithRunner(func(ctx context.Context, _ string, _ ...string) (string, error) {
+	c := jbod.New(jbod.WithSysfs(sysfsRoot(t)), jbod.WithRunner(func(ctx context.Context, _ string, _ ...string) (string, error) {
 		once.Do(func() { close(scraping) })
 		<-ctx.Done()
 		select {
@@ -172,7 +185,7 @@ func TestShutdownCancelsScrape(t *testing.T) {
 func TestPrometheusTuningReachesTheCommands(t *testing.T) {
 	t.Parallel()
 	budgets := make(chan time.Duration, 8)
-	c := jbod.New(jbod.WithSysfs(t.TempDir()), jbod.WithRunner(func(ctx context.Context, _ string, _ ...string) (string, error) {
+	c := jbod.New(jbod.WithSysfs(sysfsRoot(t)), jbod.WithRunner(func(ctx context.Context, _ string, _ ...string) (string, error) {
 		if deadline, ok := ctx.Deadline(); ok {
 			select {
 			case budgets <- time.Until(deadline):
@@ -252,7 +265,7 @@ func TestPrometheusFlagSpellings(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			client := jbod.New(jbod.WithSysfs(t.TempDir()), jbod.WithRunner(func(context.Context, string, ...string) (string, error) {
+			client := jbod.New(jbod.WithSysfs(sysfsRoot(t)), jbod.WithRunner(func(context.Context, string, ...string) (string, error) {
 				return "", nil
 			}))
 			port := freePort(t)
@@ -278,7 +291,7 @@ func TestPrometheusFlagSpellings(t *testing.T) {
 // metrics.
 func TestPrometheusLogsToStderr(t *testing.T) {
 	t.Parallel()
-	client := jbod.New(jbod.WithSysfs(t.TempDir()), jbod.WithRunner(func(_ context.Context, name string, _ ...string) (string, error) {
+	client := jbod.New(jbod.WithSysfs(sysfsRoot(t)), jbod.WithRunner(func(_ context.Context, name string, _ ...string) (string, error) {
 		if name == "lsscsi" {
 			return "[1:0:0:0] enclosu ACME Shelf 1 - /dev/sg0\n", nil
 		}

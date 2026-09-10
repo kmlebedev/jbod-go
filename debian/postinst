@@ -1,0 +1,25 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+configure)
+	# deb-systemd-helper keeps the unit's enabled state across
+	# reinstalls; it is part of init-system-helpers.
+	if command -v deb-systemd-helper >/dev/null 2>&1; then
+		deb-systemd-helper unmask prometheus-jbod-exporter.service >/dev/null || true
+		if deb-systemd-helper --quiet was-enabled prometheus-jbod-exporter.service; then
+			deb-systemd-helper enable prometheus-jbod-exporter.service >/dev/null || true
+		else
+			deb-systemd-helper update-state prometheus-jbod-exporter.service >/dev/null || true
+		fi
+	fi
+	if [ -d /run/systemd/system ]; then
+		systemctl --system daemon-reload >/dev/null || true
+		if systemctl is-enabled --quiet prometheus-jbod-exporter.service 2>/dev/null; then
+			systemctl restart prometheus-jbod-exporter.service >/dev/null || true
+		fi
+	fi
+	;;
+esac
+
+exit 0

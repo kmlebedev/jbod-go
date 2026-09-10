@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -67,5 +68,43 @@ func TestExecutePassesTheArguments(t *testing.T) {
 	}
 	if out.String() != "done" {
 		t.Errorf("stdout %q", out.String())
+	}
+}
+
+// TestMainWiring covers what only the process entry point does: the
+// arguments it takes from the command line, the context it builds for the
+// signals and the client it hands over.
+func TestMainWiring(t *testing.T) {
+	// No t.Parallel: os.Args is process-wide.
+	saved := os.Args
+	t.Cleanup(func() { os.Args = saved })
+	os.Args = []string{"jbod", "list", "-ef"}
+	var seen []string
+	code := Main("jbod", func(ctx context.Context, args []string, out, errOut io.Writer, c *jbod.Client) error {
+		seen = args
+		if ctx == nil {
+			t.Error("no context")
+		}
+		if c == nil {
+			t.Error("no client")
+		}
+		if out == nil || errOut == nil {
+			t.Error("no streams")
+		}
+		return nil
+	})
+	if code != 0 {
+		t.Errorf("exit code %d", code)
+	}
+	if strings.Join(seen, " ") != "list -ef" {
+		t.Errorf("arguments %v", seen)
+	}
+	// A failing command exits non-zero; the message goes to the process
+	// stderr, which TestBinary in cmd/jbod checks end to end.
+	code = Main("jbod", func(context.Context, []string, io.Writer, io.Writer, *jbod.Client) error {
+		return errors.New("no enclosures")
+	})
+	if code != 1 {
+		t.Errorf("exit code %d for a failing command", code)
 	}
 }

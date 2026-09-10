@@ -1,0 +1,26 @@
+# Verified with golangci-lint v2.6.2. The default linter set is kept; the
+# exclusions below are the ones this codebase can justify.
+version: "2"
+
+linters:
+  default: standard
+  settings:
+    errcheck:
+      # Writes to a tabwriter, a strings.Builder or an http.ResponseWriter
+      # cannot be handled where they happen: the CLI reports write failures
+      # through the tabwriter Flush it already checks, and a handler that
+      # cannot write has nowhere to report it.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+  exclusions:
+    rules:
+      # Closing a listener or a response body in a test defer: a failure
+      # there cannot change the verdict of the test.
+      - path: _test\.go
+        linters: [errcheck]
+      # Close after a failed graceful shutdown is the last resort already.
+      - path: internal/cli/prometheus\.go
+        text: "Error return value of `server.Close` is not checked"
+        linters: [errcheck]

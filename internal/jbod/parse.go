@@ -43,15 +43,13 @@ func parseLsscsi(out string) ([]enclosureRef, []error) {
 		if len(f) < 2 || !strings.HasPrefix(f[1], "enclosu") {
 			continue
 		}
-		device := ""
-		for _, v := range f[2:] {
-			if strings.HasPrefix(v, "/dev/") {
-				device = v
-				break
-			}
-		}
-		if device == "" {
-			errs = append(errs, fmt.Errorf("enclosure has no device: %s", strings.TrimSpace(line)))
+		// The generic device is the last column of "lsscsi -g". Taking the
+		// first /dev/ token instead would pick up a block device if the
+		// enclosure ever reported one, so the column is required to look
+		// like /dev/sgN (A7).
+		device := f[len(f)-1]
+		if !strings.HasPrefix(device, "/dev/sg") {
+			errs = append(errs, fmt.Errorf("enclosure has no generic device: %s", strings.TrimSpace(line)))
 			continue
 		}
 		// The slot becomes a path element under the sysfs root, so anything

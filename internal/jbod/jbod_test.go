@@ -54,8 +54,17 @@ func fixture(t *testing.T) rig {
 	if err := os.MkdirAll(filepath.Join(base, "device", "scsi_generic", "sg1"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for name, value := range map[string]string{"locate": "0", "fault": "0", "device/vendor": "ACME\n", "device/model": "Disk\n", "device/vpd_pg80": "\x00\x80\x00\x04S123"} {
-		if err := os.WriteFile(filepath.Join(base, name), []byte(value), 0o644); err != nil {
+	// A slice, not a map: iteration order decides which failure a broken
+	// fixture reports first (G).
+	attributes := []struct{ name, value string }{
+		{"locate", "0"},
+		{"fault", "0"},
+		{"device/vendor", "ACME\n"},
+		{"device/model", "Disk\n"},
+		{"device/vpd_pg80", "\x00\x80\x00\x04S123"},
+	}
+	for _, attribute := range attributes {
+		if err := os.WriteFile(filepath.Join(base, attribute.name), []byte(attribute.value), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -83,80 +92,142 @@ func fixture(t *testing.T) rig {
 }
 
 func TestInventoryAndLED(t *testing.T) {
+	t.Parallel()
 	f := fixture(t)
 	c := f.client
 	ctx := context.Background()
 	es, err := c.Enclosures(ctx)
-	if err != nil || len(es) != 1 {
-		t.Fatalf("%v %v", es, err)
-	}
-	if es[0].Model.Or("") != "Shelf" || es[0].Vendor.Or("") != "ACME" {
-		t.Fatal(es)
-	}
-	ds, err := c.Disks(ctx, es, DiskOptions{WithTelemetry: true})
-	if err != nil || len(ds) != 1 {
-		t.Fatalf("%v %v", ds, err)
-	}
-	d := ds[0]
-	if temp, ok := d.Temperature.Get(); !ok || temp != 37 {
-		t.Fatalf("temperature %v (present %v)", temp, ok)
-	}
-	if d.Serial.Or("") != "S123" || d.Firmware.Or("") != "FW1" || d.Map.Or("") != "/dev/sda" || d.Slot != "Slot 01" || d.SlotLabel != f.label {
-		t.Fatalf("%+v", d)
-	}
-	fs, err := c.Fans(ctx, es)
-	if err != nil || len(fs) != 1 || fs[0].Speed != 1200 || fs[0].Comment.Or("") != "low speed" {
-		t.Fatalf("%v %v", fs, err)
-	}
-	for _, kind := range []LEDKind{LEDLocate, LEDFault} {
-		for _, on := range []bool{true, false} {
-			if err := c.SetLED(ctx, "/dev/sda", kind, on); err != nil {
-				t.Fatal(err)
-			}
-			b, err := os.ReadFile(f.ledPath(kind))
-			want := "0"
-			if on {
-				want = "1"
-			}
-			if err != nil || string(b) != want {
-				t.Fatalf("%s %v", b, err)
-			}
-		}
-	}
-	if c.SetLED(ctx, "/dev/missing", LEDLocate, true) == nil {
-		t.Fatal("missing device accepted")
-	}
-	if c.SetLED(ctx, "sda", LEDLocate, true) == nil {
-		t.Fatal("device without a /dev/ prefix accepted")
-	}
-	if c.SetLED(ctx, "/dev/sg1", LEDKind("blink"), true) == nil {
-		t.Fatal("unknown LED kind accepted")
-	}
-	if err := os.Remove(f.ledPath(LEDLocate)); err != nil {
+	if err != nil {
 		t.Fatal(err)
 	}
-	if c.SetLED(ctx, "/dev/sg1", LEDLocate, true) == nil {
-		t.Fatal("recreated missing LED")
+
+	t.Run("enclosures", func(t *testing.T) {
+		if len(es) != 1 {
+			t.Fatalf("got %d enclosures, want 1: %+v", len(es), es)
+		}
+		e := es[0]
+		for _, field := range []struct {
+			name string
+			got  Optional[string]
+			want string
+		}{
+			{"vendor", e.Vendor, "ACME"},
+			{"model", e.Model, "Shelf"},
+			{"revision", e.Revision, "1"},
+			{"serial", e.Serial, "ENC1"},
+		} {
+			if got := field.got.Or(""); got != field.want {
+				t.Errorf("%s: got %q, want %q", field.name, got, field.want)
+			}
+		}
+		if e.Slot != "1:0:0:0" || e.Device != "/dev/sg0" {
+			t.Errorf("slot %q, device %q", e.Slot, e.Device)
+		}
+	})
+
+	ds, err := c.Disks(ctx, es, DiskOptions{WithTelemetry: true})
+	if err != nil {
+		t.Fatal(err)
 	}
+
+	t.Run("disks", func(t *testing.T) {
+		if len(ds) != 1 {
+			t.Fatalf("got %d disks, want 1: %+v", len(ds), ds)
+		}
+		d := ds[0]
+		if temp, ok := d.Temperature.Get(); !ok || temp != 37 {
+			t.Errorf("temperature: got %d (present %v), want 37", temp, ok)
+		}
+		for _, field := range []struct {
+			name string
+			got  string
+			want string
+		}{
+			{"serial", d.Serial.Or(""), "S123"},
+			{"firmware", d.Firmware.Or(""), "FW1"},
+			{"map", d.Map.Or(""), "/dev/sda"},
+			{"vendor", d.Vendor.Or(""), "ACME"},
+			{"model", d.Model.Or(""), "Disk"},
+			{"slot", d.Slot, "Slot 01"},
+			{"slot label", d.SlotLabel, f.label},
+			{"device", d.Device, "/dev/sg1"},
+		} {
+			if field.got != field.want {
+				t.Errorf("%s: got %q, want %q", field.name, field.got, field.want)
+			}
+		}
+	})
+
+	t.Run("fans", func(t *testing.T) {
+		fs, err := c.Fans(ctx, es)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The fixture lists the same element twice: it must be reported once.
+		if len(fs) != 1 {
+			t.Fatalf("got %d fans, want 1: %+v", len(fs), fs)
+		}
+		if fs[0].Speed != 1200 {
+			t.Errorf("speed: got %d, want 1200", fs[0].Speed)
+		}
+		if got := fs[0].Comment.Or(""); got != "low speed" {
+			t.Errorf("condition: got %q, want %q", got, "low speed")
+		}
+	})
+
+	t.Run("led switches both kinds", func(t *testing.T) {
+		for _, kind := range []LEDKind{LEDLocate, LEDFault} {
+			for _, on := range []bool{true, false} {
+				if err := c.SetLED(ctx, "/dev/sda", kind, on); err != nil {
+					t.Fatalf("%s %v: %v", kind, on, err)
+				}
+				want := "0"
+				if on {
+					want = "1"
+				}
+				b, err := os.ReadFile(f.ledPath(kind))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(b) != want {
+					t.Errorf("%s %v: attribute holds %q, want %q", kind, on, b, want)
+				}
+			}
+		}
+	})
+
+	t.Run("led rejects", func(t *testing.T) {
+		cases := []struct {
+			name   string
+			device string
+			kind   LEDKind
+		}{
+			{"unknown device", "/dev/missing", LEDLocate},
+			{"device without a /dev/ prefix", "sda", LEDLocate},
+			{"unknown kind", "/dev/sg1", LEDKind("blink")},
+		}
+		for _, tc := range cases {
+			if err := c.SetLED(ctx, tc.device, tc.kind, true); err == nil {
+				t.Errorf("%s was accepted", tc.name)
+			}
+		}
+	})
+
+	t.Run("led never creates the attribute", func(t *testing.T) {
+		if err := os.Remove(f.ledPath(LEDLocate)); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.SetLED(ctx, "/dev/sg1", LEDLocate, true); err == nil {
+			t.Fatal("a missing LED attribute was recreated")
+		}
+	})
 }
 
-func TestMalformedAndUnavailable(t *testing.T) {
-	for _, tc := range []struct {
-		in    string
-		want  int64
-		found bool
-	}{
-		{"", 0, false},
-		{"short", 0, false},
-		{"Current temperature: not available", 0, false},
-		{"Current temperature: -2 C", -2, true},
-		{"Current temperature: 123 C", 123, true},
-	} {
-		got, ok := parseTemperature(tc.in)
-		if ok != tc.found || got != tc.want {
-			t.Errorf("parseTemperature(%q) = %d, %v; want %d, %v", tc.in, got, ok, tc.want, tc.found)
-		}
-	}
+// TestUnavailableTelemetry covers a disk whose sensors do not answer: it is
+// still listed, with the readings absent. The parsers themselves are covered
+// in parse_test.go.
+func TestUnavailableTelemetry(t *testing.T) {
+	t.Parallel()
 	f := fixture(t)
 	old := f.runners.fn
 	f.runners.set(func(ctx context.Context, name string, args ...string) (string, error) {

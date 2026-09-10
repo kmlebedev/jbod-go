@@ -32,7 +32,10 @@ func TestParseLsscsi(t *testing.T) {
 	out := strings.Join([]string{
 		"[0:0:0:0]  disk    ATA   Boot   1.0  /dev/sda  /dev/sg0",
 		"[1:0:0:0]  enclosu ACME  Shelf  1    -         /dev/sg1",
-		"[2:0:0:0]  enclosu ACME  Shelf  1    -         -",        // no device
+		"[2:0:0:0]  enclosu ACME  Shelf  1    -         -", // no generic device
+		// A shelf that also reports a block device: the generic device is
+		// the last column, and it is the one to talk to (A7).
+		"[3:0:0:0]  enclosu ACME  Shelf  1    /dev/sdz  /dev/sg7",
 		"[]         enclosu ACME  Shelf  1    -         /dev/sg3", // no slot
 		"[../etc]   enclosu ACME  Shelf  1    -         /dev/sg4", // escaping slot
 		"[10:0:0:0] enclosure ACME Shelf 1    -         /dev/sg5", // long spelling
@@ -41,6 +44,7 @@ func TestParseLsscsi(t *testing.T) {
 	refs, errs := parseLsscsi(out)
 	want := []enclosureRef{
 		{Slot: "1:0:0:0", Device: "/dev/sg1"},
+		{Slot: "3:0:0:0", Device: "/dev/sg7"},
 		{Slot: "10:0:0:0", Device: "/dev/sg5"},
 	}
 	if len(refs) != len(want) {
@@ -268,8 +272,8 @@ func FuzzParseLsscsi(f *testing.F) {
 			if ref.Slot == "" || ref.Slot == "." || ref.Slot == ".." || strings.ContainsAny(ref.Slot, "/\\") {
 				t.Fatalf("unsafe slot %q", ref.Slot)
 			}
-			if !strings.HasPrefix(ref.Device, "/dev/") {
-				t.Fatalf("device %q is not a /dev/ path", ref.Device)
+			if !strings.HasPrefix(ref.Device, "/dev/sg") {
+				t.Fatalf("device %q is not a generic device", ref.Device)
 			}
 		}
 	})

@@ -1,10 +1,21 @@
 Package: jbod-go
-Version: 1.0.0
+Version: @VERSION@
 Section: admin
 Priority: optional
 Architecture: @ARCH@
-Maintainer: jbod-go maintainers <maintainers@example.invalid>
+Maintainer: @MAINTAINER@
 Depends: lsscsi, sg3-utils
 Conflicts: jbod
+Provides: jbod
+Replaces: jbod
+Homepage: https://github.com/kmlebedev/jbod-go
 Description: Generic storage enclosure tool and Prometheus exporter
  Go port of Gandi/jbod-rs for Linux SCSI enclosure monitoring.
+ .
+ Ships the jbod command line tool and prometheus-jbod-exporter, which
+ exposes enclosure temperatures and fan speeds in Prometheus text format.
+ .
+ The tools read /sys/class/enclosure and call lsscsi and the sg3-utils
+ (sg_inq, sg_map, sg_ses, sginfo, scsi_temperature); the enclosure kernel
+ module has to be loaded and the HBA must not hide the shelf behind a RAID
+ firmware.

@@ -1,0 +1,3 @@
+/dev/sda locate: true
+/dev/sdc locate: true
+/dev/sg4 fault: true
