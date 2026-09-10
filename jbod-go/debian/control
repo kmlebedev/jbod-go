@@ -1,0 +1,10 @@
+Package: jbod-go
+Version: 1.0.0
+Section: admin
+Priority: optional
+Architecture: @ARCH@
+Maintainer: jbod-go maintainers <maintainers@example.invalid>
+Depends: lsscsi, sg3-utils
+Conflicts: jbod
+Description: Generic storage enclosure tool and Prometheus exporter
+ Go port of Gandi/jbod-rs for Linux SCSI enclosure monitoring.
