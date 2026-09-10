@@ -66,7 +66,7 @@ func multiSlot(t *testing.T) *Client {
 			}
 		}
 	}
-	return &Client{Sysfs: root, Run: func(_ context.Context, name string, _ ...string) (string, error) {
+	return New(WithSysfs(root), WithRunner(func(_ context.Context, name string, _ ...string) (string, error) {
 		switch name {
 		case "lsscsi":
 			// Deliberately listed in the "wrong" order.
@@ -77,7 +77,7 @@ func multiSlot(t *testing.T) *Client {
 			return "", nil
 		}
 		return "", fmt.Errorf("unexpected command %s", name)
-	}}
+	}))
 }
 
 func TestDisksNaturalOrder(t *testing.T) {
@@ -88,7 +88,7 @@ func TestDisksNaturalOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ds, err := c.Disks(ctx, es, false)
+	ds, err := c.Disks(ctx, es, DiskOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,34 +115,32 @@ func TestDisksNaturalOrder(t *testing.T) {
 // SetLED must accept both the generic device and its /dev/sd* mapping.
 func TestSetLEDMatchesDeviceAndMap(t *testing.T) {
 	t.Parallel()
-	c := fixture(t)
-	es, err := c.Enclosures(context.Background())
+	f := fixture(t)
+	ctx := context.Background()
+	es, err := f.client.Enclosures(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ds, err := c.Disks(context.Background(), es, false)
+	ds, err := f.client.Disks(ctx, es, DiskOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ds[0].Device != "/dev/sg1" || ds[0].Map != "/dev/sda" {
+	if ds[0].Device != "/dev/sg1" || ds[0].Map.Or("") != "/dev/sda" {
 		t.Fatalf("unexpected fixture disk %+v", ds[0])
 	}
 	for _, device := range []string{"/dev/sg1", "/dev/sda"} {
-		if err := SetLED(ds, device, "fault", true); err != nil {
+		if err := f.client.SetLED(ctx, device, LEDFault, true); err != nil {
 			t.Fatalf("%s: %v", device, err)
 		}
-		b, err := os.ReadFile(ds[0].Fault)
+		b, err := os.ReadFile(f.ledPath(LEDFault))
 		if err != nil || string(b) != "1" {
 			t.Fatalf("%s: %q %v", device, b, err)
 		}
-		if err := SetLED(ds, device, "fault", false); err != nil {
+		if err := f.client.SetLED(ctx, device, LEDFault, false); err != nil {
 			t.Fatalf("%s: %v", device, err)
 		}
 	}
-	if SetLED(ds, "/dev/sdz", "locate", true) == nil {
+	if f.client.SetLED(ctx, "/dev/sdz", LEDLocate, true) == nil {
 		t.Fatal("unmapped device accepted")
-	}
-	if SetLED(ds, "/dev/sg1", "blink", true) == nil {
-		t.Fatal("unknown LED kind accepted")
 	}
 }

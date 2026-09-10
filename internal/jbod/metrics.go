@@ -49,7 +49,7 @@ func (c *Client) Collect(ctx context.Context) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
-	disks := c.disks(ctx, enc, true, p)
+	disks := c.disks(ctx, enc, DiskOptions{WithTelemetry: true}, p)
 	fans := c.fans(ctx, enc, p)
 	return Snapshot{
 		Enclosures: enc,
@@ -81,8 +81,8 @@ func encode(s Snapshot, errorTotals map[string]int) string {
 	temps := map[string]int64{}
 	var tempKeys []string
 	for _, d := range s.Disks {
-		n, e := strconv.ParseInt(d.Temperature, 10, 64)
-		if e != nil {
+		n, ok := d.Temperature.Get()
+		if !ok {
 			continue
 		}
 		key := fmt.Sprintf("slot=\"%s\",enclosure=\"%s\"", label(d.Slot), label(d.Enclosure))

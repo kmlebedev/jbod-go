@@ -10,10 +10,10 @@ import (
 )
 
 func TestValidationAndHelp(t *testing.T) {
-	c := &jbod.Client{Run: func(context.Context, string, ...string) (string, error) {
-		t.Fatal("unexpected hardware access")
+	c := jbod.New(jbod.WithRunner(func(context.Context, string, ...string) (string, error) {
+		t.Error("unexpected hardware access")
 		return "", nil
-	}}
+	}))
 	for _, args := range [][]string{{"help"}, {"--version"}, {"list", "--help"}} {
 		var out bytes.Buffer
 		err := Run(context.Background(), args, &out, c)
@@ -28,7 +28,8 @@ func TestValidationAndHelp(t *testing.T) {
 	}
 }
 func TestList(t *testing.T) {
-	c := &jbod.Client{Run: func(_ context.Context, name string, _ ...string) (string, error) {
+	root := t.TempDir()
+	runner := func(_ context.Context, name string, _ ...string) (string, error) {
 		switch name {
 		case "lsscsi":
 			return "[0:0:0:0] enclosu ACME Shelf 1 - /dev/sg0", nil
@@ -37,7 +38,8 @@ func TestList(t *testing.T) {
 		default:
 			return "", fmt.Errorf("unexpected %s", name)
 		}
-	}}
+	}
+	c := jbod.New(jbod.WithSysfs(root), jbod.WithRunner(runner))
 	var out bytes.Buffer
 	if err := Run(context.Background(), []string{"list", "-e"}, &out, c); err != nil {
 		t.Fatal(err)
@@ -46,8 +48,8 @@ func TestList(t *testing.T) {
 		t.Fatal(out.String())
 	}
 	// Empty discovery accepts clap-style combined options without querying disks.
-	c.Run = func(context.Context, string, ...string) (string, error) { return "", nil }
-	if err := Run(context.Background(), []string{"list", "-ed"}, &out, c); err != nil {
+	empty := jbod.New(jbod.WithSysfs(root), jbod.WithRunner(func(context.Context, string, ...string) (string, error) { return "", nil }))
+	if err := Run(context.Background(), []string{"list", "-ed"}, &out, empty); err != nil {
 		t.Fatal(err)
 	}
 }
