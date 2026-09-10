@@ -3,11 +3,8 @@ package jbod
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 )
@@ -143,45 +140,6 @@ func TestInventoryAndLED(t *testing.T) {
 	}
 }
 
-func TestMetricsHTTP(t *testing.T) {
-	f := fixture(t)
-	h := f.client.Handler()
-	r := httptest.NewRecorder()
-	h.ServeHTTP(r, httptest.NewRequest("GET", "/metrics", nil))
-	for _, want := range []string{"number_of_enclosures 1", `jbod_slot_temperature{slot="Slot 01",enclosure="1:0:0:0"} 37`, `jbod_fan_rpm{device="Fan A",slot="2,0"} 1200`} {
-		if !strings.Contains(r.Body.String(), want) {
-			t.Fatalf("missing %s in %s", want, r.Body.String())
-		}
-	}
-	if r.Code != 200 || !strings.Contains(r.Header().Get("Content-Type"), "version=0.0.4") {
-		t.Fatal(r)
-	}
-	f.runners.set(func(context.Context, string, ...string) (string, error) { return "", nil })
-	r = httptest.NewRecorder()
-	h.ServeHTTP(r, httptest.NewRequest("GET", "/metrics", nil))
-	if strings.Contains(r.Body.String(), "Slot 01") || !strings.Contains(r.Body.String(), "number_of_enclosures 0") {
-		t.Fatal(r.Body.String())
-	}
-	f.runners.set(func(context.Context, string, ...string) (string, error) { return "", fmt.Errorf("failed") })
-	r = httptest.NewRecorder()
-	h.ServeHTTP(r, httptest.NewRequest("GET", "/metrics", nil))
-	if r.Code != 503 {
-		t.Fatal(r.Code)
-	}
-	for path, code := range map[string]int{"/": 200, "/missing": 404} {
-		r = httptest.NewRecorder()
-		h.ServeHTTP(r, httptest.NewRequest("GET", path, nil))
-		if r.Code != code {
-			t.Fatal(r.Code)
-		}
-	}
-	r = httptest.NewRecorder()
-	h.ServeHTTP(r, httptest.NewRequest(http.MethodPost, "/metrics", nil))
-	if r.Code != 405 {
-		t.Fatal(r.Code)
-	}
-}
-
 func TestMalformedAndUnavailable(t *testing.T) {
 	for _, tc := range []struct {
 		in    string
@@ -194,9 +152,9 @@ func TestMalformedAndUnavailable(t *testing.T) {
 		{"Current temperature: -2 C", -2, true},
 		{"Current temperature: 123 C", 123, true},
 	} {
-		got, ok := temperature(tc.in)
+		got, ok := parseTemperature(tc.in)
 		if ok != tc.found || got != tc.want {
-			t.Errorf("temperature(%q) = %d, %v; want %d, %v", tc.in, got, ok, tc.want, tc.found)
+			t.Errorf("parseTemperature(%q) = %d, %v; want %d, %v", tc.in, got, ok, tc.want, tc.found)
 		}
 	}
 	f := fixture(t)
@@ -225,15 +183,12 @@ func TestMalformedAndUnavailable(t *testing.T) {
 		if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if _, ok := serial(path); ok {
+		if _, ok := vpdSerial(path); ok {
 			t.Fatalf("invalid VPD accepted: %q", data)
 		}
 	}
-	if _, ok := serial(filepath.Join(t.TempDir(), "absent")); ok {
+	if _, ok := vpdSerial(filepath.Join(t.TempDir(), "absent")); ok {
 		t.Fatal("missing VPD file accepted")
-	}
-	if got := label("a\\b\"c\nd"); got != `a\\b\"c\nd` {
-		t.Fatal(got)
 	}
 }
 

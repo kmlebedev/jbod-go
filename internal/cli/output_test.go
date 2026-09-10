@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"jbod-go/internal/jbod"
+	"github.com/kmlebedev/jbod-go/internal/jbod"
 )
 
 var columns = regexp.MustCompile(` +`)

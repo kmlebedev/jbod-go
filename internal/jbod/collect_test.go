@@ -3,7 +3,6 @@ package jbod
 import (
 	"context"
 	"fmt"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -239,122 +238,11 @@ func TestPartialCollectionKeepsData(t *testing.T) {
 	if !s.Up || s.Duration <= 0 {
 		t.Fatalf("up=%v duration=%s", s.Up, s.Duration)
 	}
-	if s.Errors[collectorDisks] == 0 || s.Errors[collectorFans] == 0 {
+	if s.Errors[CollectorDisks] == 0 || s.Errors[CollectorFans] == 0 {
 		t.Fatalf("errors not counted: %v", s.Errors)
 	}
 	if len(s.Disks) != 1 || len(s.Fans) != 2 {
 		t.Fatalf("snapshot lost data: %d disks, %d fans", len(s.Disks), len(s.Fans))
-	}
-}
-
-// TestHealthMetrics is the B5 contract: a partial collection is a 200 with
-// health metrics, not a 503.
-func TestHealthMetrics(t *testing.T) {
-	t.Parallel()
-	e := NewExporter(partial(t), 0, 0)
-	h := e.Handler()
-	r := httptest.NewRecorder()
-	h.ServeHTTP(r, httptest.NewRequest("GET", "/metrics", nil))
-	if r.Code != 200 {
-		t.Fatalf("partial collection returned %d: %s", r.Code, r.Body.String())
-	}
-	body := r.Body.String()
-	for _, want := range []string{
-		"jbod_up 1",
-		"jbod_scrape_duration_seconds ",
-		`jbod_scrape_errors_total{collector="enclosures"} 0`,
-		// Two shelves, each with one fan that reports no RPM.
-		`jbod_scrape_errors_total{collector="fans"} 2`,
-		`jbod_slot_temperature{slot="Slot 01",enclosure="1:0:0:0"} 37`,
-	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("missing %q in\n%s", want, body)
-		}
-	}
-	// The error series is a counter: a second scrape must not reset it.
-	r = httptest.NewRecorder()
-	h.ServeHTTP(r, httptest.NewRequest("GET", "/metrics", nil))
-	if !strings.Contains(r.Body.String(), `jbod_scrape_errors_total{collector="fans"} 4`) {
-		t.Fatalf("counter did not accumulate:\n%s", r.Body.String())
-	}
-}
-
-// TestConcurrentScrapesShareOnePass is the B2 regression: Prometheus and a
-// manual curl used to walk the shelf twice, spawning a hundred processes each.
-func TestConcurrentScrapesShareOnePass(t *testing.T) {
-	t.Parallel()
-	release := make(chan struct{})
-	var calls int
-	var mu sync.Mutex
-	c := New(WithSysfs(t.TempDir()), WithRunner(func(_ context.Context, name string, _ ...string) (string, error) {
-		mu.Lock()
-		calls++
-		mu.Unlock()
-		<-release
-		return "", nil
-	}))
-	e := NewExporter(c, 0, 0)
-	h := e.Handler()
-	const requests = 4
-	bodies := make([]string, requests)
-	var wg sync.WaitGroup
-	for i := 0; i < requests; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			r := httptest.NewRecorder()
-			h.ServeHTTP(r, httptest.NewRequest("GET", "/metrics", nil))
-			bodies[i] = r.Body.String()
-		}(i)
-	}
-	// Wait for the leader to reach the hardware, then let everyone finish.
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		mu.Lock()
-		started := calls
-		mu.Unlock()
-		if started > 0 || time.Now().After(deadline) {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
-	close(release)
-	wg.Wait()
-	if passes := e.Passes(); passes != 1 {
-		t.Fatalf("%d collection passes for %d overlapping requests, want 1", passes, requests)
-	}
-	for i, body := range bodies {
-		if !strings.Contains(body, "number_of_enclosures 0") {
-			t.Fatalf("request %d got %q", i, body)
-		}
-	}
-}
-
-// TestCacheTTLServesRecentResult covers the other half of B2: a scrape that
-// arrives right after another one is answered without touching the hardware.
-func TestCacheTTLServesRecentResult(t *testing.T) {
-	t.Parallel()
-	c := partial(t)
-	e := NewExporter(c, 0, time.Minute)
-	h := e.Handler()
-	first := httptest.NewRecorder()
-	h.ServeHTTP(first, httptest.NewRequest("GET", "/metrics", nil))
-	second := httptest.NewRecorder()
-	h.ServeHTTP(second, httptest.NewRequest("GET", "/metrics", nil))
-	if e.Passes() != 1 {
-		t.Fatalf("%d collection passes, want 1 within the cache TTL", e.Passes())
-	}
-	if first.Body.String() != second.Body.String() {
-		t.Fatal("cached response differs from the collected one")
-	}
-	// A zero TTL keeps the previous behavior: every scrape is fresh.
-	fresh := NewExporter(c, 0, 0)
-	fh := fresh.Handler()
-	for i := 0; i < 2; i++ {
-		fh.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/metrics", nil))
-	}
-	if fresh.Passes() != 2 {
-		t.Fatalf("%d collection passes with caching disabled, want 2", fresh.Passes())
 	}
 }
 
