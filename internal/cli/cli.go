@@ -26,6 +26,18 @@ Usage:
 The exporter runs in the foreground (default 0.0.0.0:9945).
 `
 
+const ExporterHelp = `prometheus-jbod-exporter - Prometheus exporter for storage enclosures (Go)
+Usage:
+  prometheus-jbod-exporter [-i|--ip-address IP] [-p|--port PORT]
+  prometheus-jbod-exporter IP PORT
+
+Runs in the foreground (default 0.0.0.0:9945); GET /metrics serves the metrics.
+`
+
+// Version is the single source of truth for both binaries. Keep it in sync
+// with debian/control until the build injects it via -ldflags.
+const Version = "1.0.0"
+
 func flags(name string, w io.Writer) *flag.FlagSet {
 	f := flag.NewFlagSet(name, flag.ContinueOnError)
 	f.SetOutput(w)
@@ -46,7 +58,7 @@ func Run(ctx context.Context, args []string, out io.Writer, c *jbod.Client) erro
 		fmt.Fprint(out, Help)
 		return nil
 	case "--version", "-V":
-		fmt.Fprintln(out, "jbod-go 1.0.0")
+		fmt.Fprintln(out, "jbod-go "+Version)
 		return nil
 	case "list":
 		f := flags("list", out)
@@ -75,8 +87,11 @@ func Run(ctx context.Context, args []string, out io.Writer, c *jbod.Client) erro
 		if err != nil {
 			return err
 		}
-		w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
-		if disks || enc {
+		// Each flag selects an independent section: -e -f must print both.
+		// Sections are flushed separately so tabwriter does not align the
+		// enclosure columns against the fan columns.
+		printed := false
+		if enc || disks {
 			var ds []jbod.Disk
 			if disks {
 				ds, err = c.Disks(ctx, enclosures, true)
@@ -84,26 +99,24 @@ func Run(ctx context.Context, args []string, out io.Writer, c *jbod.Client) erro
 					return err
 				}
 			}
-			for _, e := range enclosures {
-				fmt.Fprintln(w, "SLOT\tDEVICE\tVENDOR\tMODEL\tREVISION\tSERIAL")
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", e.Slot, e.Device, e.Vendor, e.Model, e.Revision, e.Serial)
-				for _, d := range ds {
-					if d.Enclosure == e.Slot {
-						fmt.Fprintf(w, "  Disk: %s\tMap: %s\tSlot: %s\tVendor: %s\tModel: %s\tSerial: %s\tTemp: %s\tFw: %s\n", d.Device, d.Map, d.Slot, d.Vendor, d.Model, d.Serial, d.Temperature, d.Firmware)
-					}
-				}
+			if err := printEnclosures(out, enclosures, ds); err != nil {
+				return err
 			}
-		} else {
+			printed = true
+		}
+		if fans {
 			fs, err := c.Fans(ctx, enclosures)
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(w, "SLOT\tIDENT\tDESCRIPTION\tSTATUS\tRPM")
-			for _, fan := range fs {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\n", fan.Slot, fan.Index, fan.Description, fan.Comment, fan.Speed)
+			if printed {
+				fmt.Fprintln(out)
+			}
+			if err := printFans(out, fs); err != nil {
+				return err
 			}
 		}
-		return w.Flush()
+		return nil
 	case "led":
 		f := flags("led", out)
 		var locate, fault devices
@@ -147,6 +160,29 @@ func Run(ctx context.Context, args []string, out io.Writer, c *jbod.Client) erro
 	}
 }
 
+func printEnclosures(out io.Writer, enclosures []jbod.Enclosure, ds []jbod.Disk) error {
+	w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
+	for _, e := range enclosures {
+		fmt.Fprintln(w, "SLOT\tDEVICE\tVENDOR\tMODEL\tREVISION\tSERIAL")
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", e.Slot, e.Device, e.Vendor, e.Model, e.Revision, e.Serial)
+		for _, d := range ds {
+			if d.Enclosure == e.Slot {
+				fmt.Fprintf(w, "  Disk: %s\tMap: %s\tSlot: %s\tVendor: %s\tModel: %s\tSerial: %s\tTemp: %s\tFw: %s\n", d.Device, d.Map, d.Slot, d.Vendor, d.Model, d.Serial, d.Temperature, d.Firmware)
+			}
+		}
+	}
+	return w.Flush()
+}
+
+func printFans(out io.Writer, fans []jbod.Fan) error {
+	w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "SLOT\tIDENT\tDESCRIPTION\tSTATUS\tRPM")
+	for _, fan := range fans {
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\n", fan.Slot, fan.Index, fan.Description, fan.Comment, fan.Speed)
+	}
+	return w.Flush()
+}
+
 type devices []string
 
 func (d *devices) String() string { return strings.Join(*d, ",") }
@@ -159,6 +195,18 @@ func (d *devices) Set(v string) error {
 }
 
 func Exporter(ctx context.Context, args []string, out io.Writer, c *jbod.Client) error {
+	// The standalone binary never reaches Run, so it needs its own
+	// --help/--version handling.
+	if len(args) == 1 {
+		switch args[0] {
+		case "help", "-h", "--help":
+			fmt.Fprint(out, ExporterHelp)
+			return nil
+		case "-V", "--version":
+			fmt.Fprintln(out, "jbod-go "+Version)
+			return nil
+		}
+	}
 	f := flags("prometheus", out)
 	ip, port := "0.0.0.0", "9945"
 	for _, key := range []string{"i", "ip", "ip-address"} {
