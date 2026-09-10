@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"jbod-go/internal/jbod"
+	"github.com/kmlebedev/jbod-go/internal/jbod"
 )
 
 const (
@@ -82,7 +82,7 @@ func TestListSectionsAreIndependent(t *testing.T) {
 
 // The standalone exporter binary never reaches Run, so it needs its own
 // --help and --version.
-func TestExporterHelpAndVersion(t *testing.T) {
+func TestPrometheusHelpAndVersion(t *testing.T) {
 	t.Parallel()
 	c := jbod.New(jbod.WithRunner(func(context.Context, string, ...string) (string, error) {
 		t.Error("unexpected hardware access")
@@ -100,11 +100,11 @@ func TestExporterHelpAndVersion(t *testing.T) {
 	}
 	for _, tc := range cases {
 		var out bytes.Buffer
-		if err := Exporter(context.Background(), tc.args, &out, c); err != nil {
-			t.Fatalf("exporter %v: %v", tc.args, err)
+		if err := Prometheus(context.Background(), tc.args, &out, c); err != nil {
+			t.Fatalf("prometheus %v: %v", tc.args, err)
 		}
 		if !strings.Contains(out.String(), tc.want) {
-			t.Fatalf("exporter %v: got %q, want %q", tc.args, out.String(), tc.want)
+			t.Fatalf("prometheus %v: got %q, want %q", tc.args, out.String(), tc.want)
 		}
 	}
 	// Reachable through the subcommand too, and both report one version.

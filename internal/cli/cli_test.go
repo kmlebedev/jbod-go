@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"jbod-go/internal/jbod"
+	"github.com/kmlebedev/jbod-go/internal/jbod"
 	"strings"
 	"testing"
 )
