@@ -51,10 +51,10 @@ func TestWildcardWarning(t *testing.T) {
 
 func TestExporterRejectsBadTuning(t *testing.T) {
 	t.Parallel()
-	c := &jbod.Client{Run: func(context.Context, string, ...string) (string, error) {
-		t.Fatal("unexpected hardware access")
+	c := jbod.New(jbod.WithRunner(func(context.Context, string, ...string) (string, error) {
+		t.Error("unexpected hardware access")
 		return "", nil
-	}}
+	}))
 	for _, args := range [][]string{
 		{"--command-timeout", "0"},
 		{"--command-timeout", "-1s"},
@@ -107,7 +107,7 @@ func TestShutdownCancelsScrape(t *testing.T) {
 	scraping := make(chan struct{})
 	cancelled := make(chan error, 1)
 	var once sync.Once
-	c := &jbod.Client{Sysfs: t.TempDir(), Run: func(ctx context.Context, _ string, _ ...string) (string, error) {
+	c := jbod.New(jbod.WithSysfs(t.TempDir()), jbod.WithRunner(func(ctx context.Context, _ string, _ ...string) (string, error) {
 		once.Do(func() { close(scraping) })
 		<-ctx.Done()
 		select {
@@ -115,7 +115,7 @@ func TestShutdownCancelsScrape(t *testing.T) {
 		default:
 		}
 		return "", ctx.Err()
-	}}
+	}))
 	port := freePort(t)
 	out := &syncBuffer{}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -158,22 +158,23 @@ func TestShutdownCancelsScrape(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("exporter did not return after shutdown")
 	}
-	// The tuning flags reach the client that does the work.
-	if c.CommandTimeout != 60*time.Second {
-		t.Fatalf("command timeout not applied: %s", c.CommandTimeout)
-	}
-	if c.Concurrency != jbod.DefaultConcurrency {
-		t.Fatalf("concurrency not applied: %d", c.Concurrency)
-	}
 }
 
-// TestExporterTuningIsApplied checks the remaining knobs end up on the
-// client, since the README tells operators to raise them for big shelves.
-func TestExporterTuningIsApplied(t *testing.T) {
+// TestExporterTuningReachesTheCommands checks that --command-timeout ends up
+// on the client the handler collects with. The client is immutable, so the
+// flag is observable where it matters: in the deadline the command is given.
+func TestExporterTuningReachesTheCommands(t *testing.T) {
 	t.Parallel()
-	c := &jbod.Client{Sysfs: t.TempDir(), Run: func(context.Context, string, ...string) (string, error) {
+	budgets := make(chan time.Duration, 8)
+	c := jbod.New(jbod.WithSysfs(t.TempDir()), jbod.WithRunner(func(ctx context.Context, _ string, _ ...string) (string, error) {
+		if deadline, ok := ctx.Deadline(); ok {
+			select {
+			case budgets <- time.Until(deadline):
+			default:
+			}
+		}
 		return "", nil
-	}}
+	}))
 	port := freePort(t)
 	out := &syncBuffer{}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -199,7 +200,27 @@ func TestExporterTuningIsApplied(t *testing.T) {
 	if err := <-served; err != nil {
 		t.Fatal(err)
 	}
-	if c.CommandTimeout != 3*time.Second || c.Concurrency != 4 {
-		t.Fatalf("tuning not applied: timeout %s, concurrency %d", c.CommandTimeout, c.Concurrency)
+	select {
+	case budget := <-budgets:
+		// 3s from the flag, not the 15s default and not the scrape budget.
+		if budget > 3*time.Second || budget < 2*time.Second {
+			t.Fatalf("command budget %s, want about 3s", budget)
+		}
+	default:
+		t.Fatal("no command ran")
+	}
+	// The caller's client keeps its own defaults: the exporter collects with
+	// a derived copy (C6).
+	deadlines := make(chan time.Duration, 1)
+	probe := c.With(jbod.WithRunner(func(ctx context.Context, _ string, _ ...string) (string, error) {
+		deadline, _ := ctx.Deadline()
+		deadlines <- time.Until(deadline)
+		return "", nil
+	}))
+	if _, err := probe.Enclosures(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if budget := <-deadlines; budget < jbod.DefaultCommandTimeout-time.Second {
+		t.Fatalf("original client was mutated: command budget %s", budget)
 	}
 }
