@@ -21,17 +21,28 @@ const Help = `jbod - Generic storage enclosure tool (Go)
 Usage:
   jbod list [-e|--enclosure] [-d|--disks] [-f|--fan]
   jbod led [-l|--locate DEVICE] [-f|--fault DEVICE] --on|--off
-  jbod prometheus [-i|--ip-address IP] [-p|--port PORT]
+  jbod prometheus [-i|--ip-address IP] [-p|--port PORT] [tuning flags]
 
-The exporter runs in the foreground (default 0.0.0.0:9945).
+The exporter runs in the foreground (default 127.0.0.1:9945);
+see "jbod prometheus --help" for the tuning flags.
 `
 
 const ExporterHelp = `prometheus-jbod-exporter - Prometheus exporter for storage enclosures (Go)
 Usage:
-  prometheus-jbod-exporter [-i|--ip-address IP] [-p|--port PORT]
+  prometheus-jbod-exporter [-i|--ip-address IP] [-p|--port PORT] [tuning flags]
   prometheus-jbod-exporter IP PORT
 
-Runs in the foreground (default 0.0.0.0:9945); GET /metrics serves the metrics.
+Runs in the foreground (default 127.0.0.1:9945); GET /metrics serves the metrics.
+
+Tuning flags:
+  --command-timeout DUR  timeout of one external command (default 15s)
+  --scrape-timeout DUR   timeout of one full collection (default 2m0s)
+  --concurrency N        external commands allowed to run at once (default 12)
+  --cache-ttl DUR        reuse the previous collection for this long (default 0s)
+
+Concurrent scrapes always share one collection pass; --cache-ttl additionally
+serves a recent result without touching the hardware. Set it to about half the
+Prometheus scrape_interval if the shelf is polled from several places.
 `
 
 // Version is the single source of truth for both binaries. Keep it in sync
@@ -194,6 +205,30 @@ func (d *devices) Set(v string) error {
 	return nil
 }
 
+// Exporter listen defaults and derived timeouts.
+const (
+	// DefaultListenIP is the loopback address on purpose: the exporter has
+	// access to /dev/sg* and normally runs as root, so exposing it to the
+	// whole network should be a deliberate choice (B6).
+	DefaultListenIP   = "127.0.0.1"
+	DefaultListenPort = "9945"
+	// shutdownTimeout bounds the graceful stop after SIGINT/SIGTERM.
+	shutdownTimeout = 5 * time.Second
+	// writeGrace is how much longer than a full collection a response may
+	// take before the write times out.
+	writeGrace = 10 * time.Second
+)
+
+// wildcardWarning returns a warning for a wildcard bind address, or "" for a
+// specific one. A process that can read /dev/sg* and write LEDs should not
+// reach the whole network by accident (B6).
+func wildcardWarning(ip string) string {
+	if parsed := net.ParseIP(ip); parsed == nil || !parsed.IsUnspecified() {
+		return ""
+	}
+	return fmt.Sprintf("==> Warning: %s exposes enclosure telemetry on every interface; bind %s unless that is intended", ip, DefaultListenIP)
+}
+
 func Exporter(ctx context.Context, args []string, out io.Writer, c *jbod.Client) error {
 	// The standalone binary never reaches Run, so it needs its own
 	// --help/--version handling.
@@ -208,13 +243,30 @@ func Exporter(ctx context.Context, args []string, out io.Writer, c *jbod.Client)
 		}
 	}
 	f := flags("prometheus", out)
-	ip, port := "0.0.0.0", "9945"
+	ip, port := DefaultListenIP, DefaultListenPort
 	for _, key := range []string{"i", "ip", "ip-address"} {
 		f.StringVar(&ip, key, ip, "listen IP")
 	}
 	for _, key := range []string{"p", "port"} {
 		f.StringVar(&port, key, port, "listen port")
 	}
+	// Timeouts and the concurrency limit are operational knobs: what fits a
+	// 12-slot shelf is not what fits a 60-slot one, and a README advising
+	// "raise scrape_timeout" needs a matching flag on this side (B4).
+	commandTimeout := jbod.DefaultCommandTimeout
+	if c.CommandTimeout > 0 {
+		commandTimeout = c.CommandTimeout
+	}
+	concurrency := jbod.DefaultConcurrency
+	if c.Concurrency > 0 {
+		concurrency = c.Concurrency
+	}
+	scrapeTimeout := jbod.DefaultScrapeTimeout
+	var cacheTTL time.Duration
+	f.DurationVar(&commandTimeout, "command-timeout", commandTimeout, "timeout of one external command")
+	f.DurationVar(&scrapeTimeout, "scrape-timeout", scrapeTimeout, "timeout of one full collection")
+	f.DurationVar(&cacheTTL, "cache-ttl", cacheTTL, "reuse the previous collection for this long")
+	f.IntVar(&concurrency, "concurrency", concurrency, "external commands allowed to run at once")
 	// Keep standalone exporter's positional IP PORT invocation.
 	if len(args) == 2 && !strings.HasPrefix(args[0], "-") {
 		ip, port = args[0], args[1]
@@ -233,17 +285,43 @@ func Exporter(ctx context.Context, args []string, out io.Writer, c *jbod.Client)
 	if err != nil || n < 1 || n > 65535 {
 		return fmt.Errorf("invalid port %q", port)
 	}
+	if commandTimeout <= 0 {
+		return fmt.Errorf("invalid command timeout %s", commandTimeout)
+	}
+	if scrapeTimeout <= 0 {
+		return fmt.Errorf("invalid scrape timeout %s", scrapeTimeout)
+	}
+	if cacheTTL < 0 {
+		return fmt.Errorf("invalid cache TTL %s", cacheTTL)
+	}
+	if concurrency < 1 {
+		return fmt.Errorf("invalid concurrency %d", concurrency)
+	}
+	c.CommandTimeout = commandTimeout
+	c.Concurrency = concurrency
 	listener, err := net.Listen("tcp", net.JoinHostPort(ip, port))
 	if err != nil {
 		return err
 	}
-	server := &http.Server{Handler: c.Handler(), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second, WriteTimeout: 130 * time.Second}
+	if warning := wildcardWarning(ip); warning != "" {
+		fmt.Fprintln(out, warning)
+	}
+	server := &http.Server{
+		Handler:           jbod.NewExporter(c, scrapeTimeout, cacheTTL).Handler(),
+		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		WriteTimeout:      scrapeTimeout + writeGrace,
+		// Without BaseContext a scrape in flight only sees the cancellation
+		// when the connection is closed, so SIGTERM would wait out the whole
+		// shutdown timeout with sg_ses still running (B3).
+		BaseContext: func(net.Listener) context.Context { return ctx },
+	}
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
 		select {
 		case <-ctx.Done():
-			shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			shutdown, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 			defer cancel()
 			if err := server.Shutdown(shutdown); err != nil {
 				server.Close()
