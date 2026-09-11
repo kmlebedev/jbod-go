@@ -1,5 +1,6 @@
-# Verified with golangci-lint v2.6.2. The default linter set is kept; the
-# exclusions below are the ones this codebase can justify.
+# Verified with golangci-lint v2.13.2 (the version CI pins). The default
+# linter set is kept; the exclusions below are the ones this codebase can
+# justify.
 version: "2"
 
 linters:
