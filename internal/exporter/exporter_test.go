@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/kmlebedev/jbod-go/internal/jbod"
+	"github.com/kmlebedev/jbod-go/internal/process"
 )
 
 // collector is a Collector that answers from fixed data, so the exporter's
@@ -199,6 +200,17 @@ func TestConcurrentScrapesShareOnePass(t *testing.T) {
 	}
 }
 
+// collected cuts off the live process_* block. It is appended per request and
+// deliberately never cached, so only the part above it is expected to be
+// identical between a collection and a cache hit. Without this the test
+// passes on macOS, where there is no /proc, and fails on Linux.
+func collected(body string) string {
+	if i := strings.Index(body, "# HELP process_"); i >= 0 {
+		return body[:i]
+	}
+	return body
+}
+
 // TestCacheTTLServesRecentResult covers the other half of B2: a scrape that
 // arrives right after another one is answered without touching the hardware.
 func TestCacheTTLServesRecentResult(t *testing.T) {
@@ -211,8 +223,19 @@ func TestCacheTTLServesRecentResult(t *testing.T) {
 	if e.Passes() != 1 || c.count() != 1 {
 		t.Fatalf("%d passes and %d collector calls, want 1 within the cache TTL", e.Passes(), c.count())
 	}
-	if first != second {
-		t.Fatal("cached response differs from the collected one")
+	if collected(first) != collected(second) {
+		t.Fatalf("cached response differs from the collected one.\n--- first ---\n%s\n--- second ---\n%s",
+			collected(first), collected(second))
+	}
+	// The process metrics are appended live on purpose, so they are outside
+	// that comparison but must still be in both responses on a host that has
+	// them (A9).
+	if process.Encode() != "" {
+		for i, body := range []string{first, second} {
+			if !strings.Contains(body, "\nprocess_cpu_seconds_total ") {
+				t.Errorf("response %d carries no process metrics:\n%s", i, body)
+			}
+		}
 	}
 	// A zero TTL keeps the previous behaviour: every scrape is fresh.
 	fresh := New(c)
