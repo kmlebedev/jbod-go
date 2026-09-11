@@ -211,8 +211,11 @@ Unit сознательно не включает `PrivateDevices=` — он с�
 
 На целевой Linux-системе с dpkg можно собрать пакет: `make deb`.
 Результат: `dist/jbod-go_<версия>_<арх>.deb` и `dist/SHA256SUMS`. Версия
-пакета берётся из `git describe`, Maintainer — из `git config user.name/email`
-(или `make deb MAINTAINER="Имя <адрес>"`). Пакет содержит conffiles, md5sums и
+пакета берётся из `git describe`; если тегов ещё нет, `describe` отдаёт голый
+хеш, и версия становится `0.0.0+<хеш>` — Debian требует, чтобы версия
+начиналась с цифры. Maintainer берётся из `git config user.name/email`, а если
+идентичности нет (типичный CI-раннер), нужно передать свою:
+`make deb MAINTAINER="Имя <адрес>"`. Пакет содержит conffiles, md5sums и
 postinst/prerm/postrm с `deb-systemd-helper`. Сборка Debian-пакета на macOS
 не проверялась (нет dpkg-deb).
 

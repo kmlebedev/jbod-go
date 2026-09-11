@@ -111,7 +111,10 @@ jobs:
         with:
           go-version: '1.26.x'
       - name: build the .deb
-        run: make deb
+        # A runner has no git identity, so the maintainer is passed in; the
+        # version comes from git describe and becomes 0.0.0+<sha> until the
+        # repository has tags.
+        run: make deb MAINTAINER="${{ github.repository_owner }} <${{ github.repository_owner }}@users.noreply.github.com>"
       - name: inspect the .deb
         run: |
           dpkg-deb --info dist/*.deb
