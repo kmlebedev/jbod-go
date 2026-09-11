@@ -1,0 +1,17 @@
+# Arguments for prometheus-jbod-exporter, read by the systemd unit.
+#
+# The exporter listens on 127.0.0.1:9945 by default, because it has access to
+# /dev/sg* and runs as root. Bind an address Prometheus can reach only after
+# deciding that is what you want.
+#
+# ARGS="--ip-address 10.0.0.7 --port 9945"
+#
+# For a large shelf, give the collection more room and let a scrape reuse a
+# recent result:
+#
+# ARGS="--scrape-timeout 3m --concurrency 16 --cache-ttl 30s"
+#
+# Log level (debug, info, warn, error) and format (json, text):
+#
+# ARGS="--log-level warn"
+ARGS=""

@@ -1,0 +1,13 @@
+SLOT              DEVICE         VENDOR         MODEL         REVISION        SERIAL
+1:0:0:0           /dev/sg0       ACME           Shelf 24      1.03            ENC00001
+  Disk: /dev/sg1  Map: /dev/sda  Slot: Slot 01  Vendor: ACME  Model: HDD-16T  Serial: S0000001  Temp: 37   Fw: FW01
+  Disk: /dev/sg2  Map: NONE      Slot: Slot 02  Vendor: N/A   Model: N/A      Serial: N/A       Temp: ERR  Fw: N/A
+  Disk: /dev/sg3  Map: /dev/sdc  Slot: Slot 10  Vendor: ACME  Model: HDD-16T  Serial: S0000003  Temp: -2   Fw: FW02
+SLOT              DEVICE         VENDOR         MODEL         REVISION        SERIAL
+10:0:0:0          /dev/sg9       NONE           NONE          NONE            NONE
+  Disk: /dev/sg4  Map: NONE      Slot: Slot 03  Vendor: N/A   Model: N/A      Serial: N/A  Temp: 41  Fw: N/A
+
+SLOT      IDENT  DESCRIPTION    STATUS     RPM
+1:0:0:0   2,0    Fan A          low speed  1200
+1:0:0:0   2,1    Fan B                     3000
+10:0:0:0  2,0    Cooling fan 1  normal     4800

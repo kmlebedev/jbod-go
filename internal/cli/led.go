@@ -48,6 +48,9 @@ func cmdLED(ctx context.Context, args []string, out io.Writer, inv Inventory) er
 	if *on == *off || len(locate)+len(fault) == 0 {
 		return errors.New("led requires device(s) and exactly one of --on or --off")
 	}
+	if err := inv.Preflight(); err != nil {
+		return err
+	}
 	// The client resolves the sysfs attribute itself, so the CLI no longer
 	// carries LED paths around in a disk listing (C3). Writes happen in
 	// order and stop at the first failure; earlier ones are not rolled back.

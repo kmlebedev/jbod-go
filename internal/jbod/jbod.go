@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -46,7 +45,11 @@ const (
 // client was a data race waiting for a test to reassign it (C6). Derive a
 // differently configured client with With.
 type Client struct {
-	runner         Runner
+	runner Runner
+	// tools resolves and runs the external commands. It is nil when the
+	// runner was injected, which is what tells Preflight that there are no
+	// binaries to look for.
+	tools          *tools
 	sysfs          string
 	commandTimeout time.Duration
 	concurrency    int
@@ -58,11 +61,14 @@ type Client struct {
 // client and an empty Sysfs cannot be a working state (C7).
 type Option func(*Client)
 
-// WithRunner replaces the external command execution; for tests.
+// WithRunner replaces the external command execution; for tests. A client
+// with an injected runner runs no binaries, so Preflight stops looking for
+// them.
 func WithRunner(r Runner) Option {
 	return func(c *Client) {
 		if r != nil {
 			c.runner = r
+			c.tools = nil
 		}
 	}
 }
@@ -107,8 +113,10 @@ func WithLogger(l *slog.Logger) Option {
 // New returns a client for the local hardware, with opts applied. It is the
 // only way to build one.
 func New(opts ...Option) *Client {
+	resolved := newTools()
 	c := &Client{
-		runner:         run,
+		runner:         resolved.run,
+		tools:          resolved,
 		sysfs:          DefaultSysfs,
 		commandTimeout: DefaultCommandTimeout,
 		concurrency:    DefaultConcurrency,
@@ -129,17 +137,6 @@ func (c *Client) With(opts ...Option) *Client {
 		opt(&clone)
 	}
 	return &clone
-}
-
-func run(ctx context.Context, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("%s: %w: %s", name, err, strings.TrimSpace(stderr.String()))
-	}
-	return string(out), nil
 }
 
 // exec applies the per-command timeout. It lives here rather than in run so

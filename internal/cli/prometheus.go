@@ -148,6 +148,12 @@ func Prometheus(ctx context.Context, args []string, out, errOut io.Writer, c *jb
 		jbod.WithConcurrency(*concurrency),
 		jbod.WithLogger(logger),
 	)
+	// Refuse to start on a host where collection cannot work, with the
+	// full list of what is missing, instead of answering every scrape with
+	// an unexplained 503 (A4).
+	if err := collector.Preflight(); err != nil {
+		return err
+	}
 	listener, err := net.Listen("tcp", net.JoinHostPort(*ip, *port))
 	if err != nil {
 		return err
