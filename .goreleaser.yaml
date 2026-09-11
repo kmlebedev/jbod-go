@@ -1,0 +1,77 @@
+# goreleaser v2 configuration: binaries, .deb packages and checksums for a
+# tagged release. Run "goreleaser check" after editing.
+version: 2
+
+project_name: jbod-go
+
+before:
+  hooks:
+    - go mod download
+
+builds:
+  - id: jbod
+    main: ./cmd/jbod
+    binary: jbod
+    env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X github.com/kmlebedev/jbod-go/internal/cli.version={{ .Version }}
+  - id: exporter
+    main: ./cmd/prometheus-jbod-exporter
+    binary: prometheus-jbod-exporter
+    env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X github.com/kmlebedev/jbod-go/internal/cli.version={{ .Version }}
+
+archives:
+  - formats: [tar.gz]
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    files: [README.md, README.en.md, LICENSE, CHANGELOG.md]
+
+nfpms:
+  - id: deb
+    package_name: jbod-go
+    vendor: jbod-go
+    homepage: https://github.com/kmlebedev/jbod-go
+    maintainer: jbod-go maintainers <maintainers@example.invalid>
+    description: |
+      Generic storage enclosure tool and Prometheus exporter.
+      Go port of Gandi/jbod-rs for Linux SCSI enclosure monitoring.
+    license: BSD-2-Clause
+    section: admin
+    priority: optional
+    formats: [deb]
+    dependencies: [lsscsi, sg3-utils]
+    conflicts: [jbod]
+    provides: [jbod]
+    replaces: [jbod]
+    contents:
+      - src: debian/prometheus-jbod-exporter.service
+        dst: /lib/systemd/system/prometheus-jbod-exporter.service
+      - src: debian/prometheus-jbod-exporter.default
+        dst: /etc/default/prometheus-jbod-exporter
+        type: config|noreplace
+      - src: LICENSE
+        dst: /usr/share/doc/jbod-go/copyright
+    scripts:
+      postinstall: debian/postinst
+      preremove: debian/prerm
+      postremove: debian/postrm
+
+checksum:
+  name_template: SHA256SUMS
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude: ['^docs:', '^test:', '^chore:']
+
+release:
+  draft: false
+  prerelease: auto

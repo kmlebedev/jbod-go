@@ -16,6 +16,7 @@ import (
 
 	"github.com/kmlebedev/jbod-go/internal/jbod"
 	"github.com/kmlebedev/jbod-go/internal/metrics"
+	"github.com/kmlebedev/jbod-go/internal/process"
 )
 
 // DefaultScrapeTimeout bounds one full collection pass.
@@ -131,6 +132,11 @@ func (e *Exporter) Handler() http.Handler {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 		if r.Method != http.MethodHead {
 			fmt.Fprint(w, result)
+			// The process_* metrics describe this instant, so they are
+			// never served from the collection cache. The Rust exporter
+			// published them through the prometheus crate, and dashboards
+			// built on it need them (A9).
+			fmt.Fprint(w, process.Encode())
 		}
 	})
 }

@@ -1,0 +1,23 @@
+# HELP number_of_enclosures Number of enclosures
+# TYPE number_of_enclosures gauge
+number_of_enclosures 2
+# HELP jbod_slot_temperature Enclosure number, slot position and temperature
+# TYPE jbod_slot_temperature gauge
+jbod_slot_temperature{slot="Slot 01",enclosure="1:0:0:0"} 37
+jbod_slot_temperature{slot="Slot 10",enclosure="1:0:0:0"} -2
+jbod_slot_temperature{slot="Slot 03",enclosure="10:0:0:0"} 41
+# HELP jbod_fan_rpm The RPM speed of FAN components, device and slot
+# TYPE jbod_fan_rpm gauge
+jbod_fan_rpm{device="Fan A",slot="2,0"} 1200
+jbod_fan_rpm{device="Fan B",slot="2,1"} 3000
+# HELP jbod_up Whether the last collection completed
+# TYPE jbod_up gauge
+jbod_up 1
+# HELP jbod_scrape_duration_seconds Duration of the last collection
+# TYPE jbod_scrape_duration_seconds gauge
+jbod_scrape_duration_seconds 1.234
+# HELP jbod_scrape_errors_total Failed collection operations per collector
+# TYPE jbod_scrape_errors_total counter
+jbod_scrape_errors_total{collector="enclosures"} 0
+jbod_scrape_errors_total{collector="disks"} 7
+jbod_scrape_errors_total{collector="fans"} 3

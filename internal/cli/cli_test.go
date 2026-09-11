@@ -29,7 +29,7 @@ func TestValidationAndHelp(t *testing.T) {
 	}
 }
 func TestList(t *testing.T) {
-	root := t.TempDir()
+	root := sysfsRoot(t)
 	runner := func(_ context.Context, name string, _ ...string) (string, error) {
 		switch name {
 		case "lsscsi":

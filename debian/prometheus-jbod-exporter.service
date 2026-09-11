@@ -1,13 +1,42 @@
 [Unit]
 Description=Prometheus JBOD exporter (Go)
+Documentation=https://github.com/kmlebedev/jbod-go
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
-ExecStart=/usr/bin/prometheus-jbod-exporter
+# Type=exec so systemd reports a failure to exec as a failed start, not as a
+# successful one followed by an exit.
+Type=exec
+EnvironmentFile=-/etc/default/prometheus-jbod-exporter
+ExecStart=/usr/bin/prometheus-jbod-exporter $ARGS
 Restart=on-failure
 RestartSec=5
+
+# The process needs to read /sys/class/enclosure and talk to /dev/sg*, and
+# nothing else. PrivateDevices is deliberately not set: it would hide the
+# generic SCSI devices this exporter exists to read.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+CapabilityBoundingSet=CAP_SYS_RAWIO CAP_DAC_OVERRIDE
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target

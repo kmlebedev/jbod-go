@@ -4,6 +4,8 @@
 Исходная ревизия: `54fb20260aa0d5c88855fb71f3b9b7faf2d21e13`.
 Лицензия BSD-2-Clause; исходные уведомления сохранены в LICENSE.
 
+English version: [README.en.md](README.en.md).
+
 ## Требования и сборка
 
 Go 1.25+, одна зависимость — [spf13/pflag](https://github.com/spf13/pflag)
@@ -13,6 +15,13 @@ lsscsi, sg_inq, sg_map, sg_ses, sginfo, scsi_temperature.
 На Debian/Ubuntu установите пакеты lsscsi и sg3-utils.
 Доступ к устройствам /dev/sg* и запись LED требуют соответствующих прав
 (обычно root). Справка и тесты работают без оборудования, в том числе на macOS.
+
+Перед работой оба бинарника выполняют preflight: проверяют наличие всех
+утилит и читаемость `/sys/class/enclosure` и печатают единым списком всё,
+чего не хватает, с именами пакетов. Утилиты резолвятся один раз в абсолютные
+пути по фиксированному `PATH=/usr/sbin:/usr/bin:/sbin:/bin`, а запускаются с
+`LC_ALL=C` — парсеры завязаны на английский вывод sg3-utils, и демон под root
+не должен зависеть от унаследованного окружения.
 
 Модуль называется `github.com/kmlebedev/jbod-go`, поэтому бинарники можно
 поставить и без клонирования:
@@ -124,6 +133,14 @@ stderr.
 | jbod_scrape_duration_seconds | gauge | длительность последнего сбора |
 | jbod_scrape_errors_total | counter | накопленные ошибки по collector (enclosures, disks, fans) |
 
+Метрики самого процесса (`process_cpu_seconds_total`,
+`process_resident_memory_bytes`, `process_virtual_memory_bytes`,
+`process_start_time_seconds`, `process_open_fds`, `process_max_fds`) читаются
+из `/proc/self` при каждом запросе и не кешируются: в Rust-версии их отдавал
+крейт prometheus, и дашборды по ним ломались бы без них. На системах без
+`/proc` (например macOS) они просто не выводятся — лучше отсутствие серии,
+чем нули.
+
 Как в исходном проекте, device у вентилятора означает описание вентилятора,
 а slot — индекс sg_ses. Если разные корпуса имеют одинаковые описания и
 индексы, они совпадут по labels: последняя запись заменяет предыдущую.
@@ -145,13 +162,16 @@ stderr.
 - Экспортёр работает на переднем плане; SIGINT/SIGTERM корректно останавливают HTTP.
   Для фоновой работы используется systemd, без fork и второго дочернего процесса.
 - Таблицы текстовые, без цветовых и мигающих ANSI-последовательностей.
-- Утилиты находятся через PATH; справка не требует установленных SCSI-утилит.
+- Утилиты резолвятся по фиксированному PATH в абсолютные пути и запускаются
+  с чистым окружением; справка не требует установленных SCSI-утилит.
 - Разбор флагов на pflag, поэтому совместимость с clap буквальная, а не «на глаз».
 - Ошибки возвращаются с ненулевым кодом вместо panic или молчаливого успеха.
 - VPD page 0x80 разбирается с учётом бинарного заголовка и длины.
 - Слоты определяются по наличию device/scsi_generic, включая нестандартные имена.
 - LED не зависит от доступности scsi_temperature и sginfo.
 - Требуется ровно одно состояние --on/--off. Неизвестные устройства — ошибка.
+- Совместимость метрик полная, включая `process_*`; сверх Rust-версии есть
+  `jbod_up`, `jbod_scrape_duration_seconds` и `jbod_scrape_errors_total`.
 
 ## Установка и Debian
 
@@ -161,26 +181,54 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now prometheus-jbod-exporter
 ```
 
-Экспортёр по умолчанию слушает только 127.0.0.1, а unit запускает его без
-аргументов. Для scrape с другого хоста укажите адрес в ExecStart, например
-`ExecStart=/usr/bin/prometheus-jbod-exporter -i 0.0.0.0 -p 9945` (лучше —
-адрес конкретного интерфейса), затем `systemctl daemon-reload`.
+`make install` ставит оба бинарника в /usr/bin, unit в /lib/systemd/system
+и файл аргументов в /etc/default/prometheus-jbod-exporter. Для установки в
+staging-каталог задайте DESTDIR. При изменении PREFIX скорректируйте ExecStart
+в unit-файле.
 
-`make install` ставит оба бинарника в /usr/bin и unit в /lib/systemd/system.
-Для установки в staging-каталог задайте DESTDIR. При изменении PREFIX
-скорректируйте ExecStart в unit-файле.
+Аргументы задаются не правкой unit-файла, а `/etc/default/prometheus-jbod-exporter`
+(unit читает его через `EnvironmentFile=-` и подставляет `$ARGS`). Экспортёр
+по умолчанию слушает только 127.0.0.1, поэтому для scrape с другого хоста:
+
+```sh
+echo 'ARGS="--ip-address 10.0.0.7 --port 9945"' > /etc/default/prometheus-jbod-exporter
+systemctl restart prometheus-jbod-exporter
+```
+
+Unit сознательно не включает `PrivateDevices=` — он спрятал бы `/dev/sg*`,
+ради которых экспортёр и существует. Остальное усиление на месте:
+`ProtectSystem=strict`, `NoNewPrivileges`, `ProtectHome`, `PrivateTmp`,
+`ProtectKernel*`, `RestrictNamespaces`, `MemoryDenyWriteExecute`,
+`SystemCallFilter=@system-service`,
+`CapabilityBoundingSet=CAP_SYS_RAWIO CAP_DAC_OVERRIDE`.
+
+Если preflight не проходит (нет утилит, не читается `/sys/class/enclosure`),
+экспортёр не стартует и пишет причину в журнал — с `Restart=on-failure` это
+даёт цикл перезапусков до исправления, зато причина видна сразу.
 
 Сборке нужен доступ к модулям (`go mod download`) или каталог `vendor/`
-(`go mod vendor`) — единственная зависимость pflag в репозитории не лежит.
+(`make vendor`) — единственная зависимость pflag в репозитории не лежит.
 
 На целевой Linux-системе с dpkg можно собрать пакет: `make deb`.
-Результат: dist/jbod-go.deb. Перед распространением замените Maintainer в
-debian/control на свои данные. Сборка Debian-пакета на macOS не проверялась.
+Результат: `dist/jbod-go_<версия>_<арх>.deb` и `dist/SHA256SUMS`. Версия
+пакета берётся из `git describe`; если тегов ещё нет, `describe` отдаёт голый
+хеш, и версия становится `0.0.0+<хеш>` — Debian требует, чтобы версия
+начиналась с цифры. Maintainer берётся из `git config user.name/email`, а если
+идентичности нет (типичный CI-раннер), нужно передать свою:
+`make deb MAINTAINER="Имя <адрес>"`. Пакет содержит conffiles, md5sums и
+postinst/prerm/postrm с `deb-systemd-helper`. Сборка Debian-пакета на macOS
+не проверялась (нет dpkg-deb).
+
+Релизы собирает goreleaser по тегу `v*` (`.goreleaser.yaml`,
+`.github/workflows/release.yml`): архивы для linux/amd64 и linux/arm64,
+`.deb` через nfpm и `SHA256SUMS`.
 
 ## Проверка
 
 ```sh
-make test
+make test      # go vet + go test -race
+make lint      # гейт gofmt + golangci-lint, если установлен
+make cover     # покрытие с -covermode=atomic
 GOOS=linux GOARCH=amd64 go build ./...
 GOOS=linux GOARCH=arm64 go build ./...
 ```
@@ -197,6 +245,17 @@ GOOS=linux GOARCH=arm64 go build ./...
 go test -run xxx -fuzz FuzzParseVPD80 -fuzztime 30s ./internal/jbod/
 ```
 
+Вывод `list` и текст метрик зафиксированы golden-файлами, поэтому лишняя или
+исчезнувшая строка видна как diff, а не проходит незамеченной:
+
+```sh
+go test ./internal/cli/ ./internal/metrics/ -update   # переписать golden
+```
+
+CI (`.github/workflows/go.yml`) прогоняет тесты на Go 1.25 и 1.26, гейт
+`gofmt`, `go vet`, golangci-lint, govulncheck, короткий фаззинг парсеров,
+сборку под linux/amd64 и linux/arm64 и сборку `.deb` с `dpkg-deb --contents`.
+
 На реальном JBOD проверки не выполнялись. Перед эксплуатацией проверьте
 вывод list и метрики на своём оборудовании; тестовые ответы не заменяют
 проверку разных версий sg3-utils и моделей корпусов.
@@ -210,5 +269,6 @@ go test -run xxx -fuzz FuzzParseVPD80 -fuzztime 30s ./internal/jbod/
 - internal/metrics — кодирование снимка в Prometheus text format 0.0.4.
 - internal/exporter — HTTP-обработчик, таймаут scrape, объединение
   одновременных scrape и кеш по TTL.
+- internal/process — метрики `process_*` из `/proc/self`.
 - internal/cli — разбор аргументов: `list.go`, `led.go`, `prometheus.go`,
-  вывод таблиц в `output.go`.
+  вывод таблиц в `output.go`, версия в `version.go`, логгер в `log.go`.
