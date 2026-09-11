@@ -219,8 +219,11 @@ directory (`make vendor`): the single pflag dependency is not committed.
 
 On a Linux host with dpkg, `make deb` builds the package. The result is
 `dist/jbod-go_<version>_<arch>.deb` plus `dist/SHA256SUMS`. The package
-version comes from `git describe` and the maintainer from `git config
-user.name/user.email` (or `make deb MAINTAINER="Name <address>"`). The
+version comes from `git describe`; with no tags yet describe returns a bare
+commit hash, which becomes `0.0.0+<hash>` because a Debian version has to
+start with a digit. The maintainer comes from `git config
+user.name/user.email`, and a host without a git identity (a CI runner,
+typically) has to pass one: `make deb MAINTAINER="Name <address>"`. The
 package carries conffiles, md5sums and postinst/prerm/postrm using
 `deb-systemd-helper`. Building the Debian package on macOS is untested (no
 dpkg-deb).
