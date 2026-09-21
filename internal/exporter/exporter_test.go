@@ -10,13 +10,13 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/kmlebedev/jbod-go/internal/jbod"
-	"github.com/kmlebedev/jbod-go/internal/process"
 )
 
 // collector is a Collector that answers from fixed data, so the exporter's
@@ -144,7 +144,7 @@ func TestHealthMetrics(t *testing.T) {
 		"jbod_scrape_duration_seconds ",
 		`jbod_scrape_errors_total{collector="enclosures"} 0`,
 		`jbod_scrape_errors_total{collector="fans"} 1`,
-		`jbod_slot_temperature{slot="Slot 01",enclosure="1:0:0:0"} 37`,
+		`jbod_slot_temperature{enclosure="1:0:0:0",slot="Slot 01"} 37`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("missing %q in\n%s", want, body)
@@ -200,15 +200,18 @@ func TestConcurrentScrapesShareOnePass(t *testing.T) {
 	}
 }
 
-// collected cuts off the live process_* block. It is appended per request and
-// deliberately never cached, so only the part above it is expected to be
-// identical between a collection and a cache hit. Without this the test
-// passes on macOS, where there is no /proc, and fails on Linux.
+// collected keeps only the series that come from the snapshot. The process,
+// Go runtime and handler metrics are gathered live on every request and are
+// deliberately never cached, so only the snapshot part is expected to be
+// identical between a collection and a cache hit.
 func collected(body string) string {
-	if i := strings.Index(body, "# HELP process_"); i >= 0 {
-		return body[:i]
+	var b strings.Builder
+	for line := range strings.Lines(body) {
+		if strings.Contains(line, "jbod_") || strings.Contains(line, "number_of_enclosures") {
+			b.WriteString(line)
+		}
 	}
-	return body
+	return b.String()
 }
 
 // TestCacheTTLServesRecentResult covers the other half of B2: a scrape that
@@ -227,10 +230,11 @@ func TestCacheTTLServesRecentResult(t *testing.T) {
 		t.Fatalf("cached response differs from the collected one.\n--- first ---\n%s\n--- second ---\n%s",
 			collected(first), collected(second))
 	}
-	// The process metrics are appended live on purpose, so they are outside
+	// The process metrics are gathered live on purpose, so they are outside
 	// that comparison but must still be in both responses on a host that has
-	// them (A9).
-	if process.Encode() != "" {
+	// them (A9). They now come from the client library's process collector,
+	// which reads /proc and therefore only publishes on Linux.
+	if runtime.GOOS == "linux" {
 		for i, body := range []string{first, second} {
 			if !strings.Contains(body, "\nprocess_cpu_seconds_total ") {
 				t.Errorf("response %d carries no process metrics:\n%s", i, body)
@@ -310,7 +314,7 @@ func TestEndToEndWithAClient(t *testing.T) {
 	}
 	for _, want := range []string{
 		"number_of_enclosures 1",
-		`jbod_slot_temperature{slot="Slot 01",enclosure="1:0:0:0"} 37`,
+		`jbod_slot_temperature{enclosure="1:0:0:0",slot="Slot 01"} 37`,
 		`jbod_fan_rpm{device="Fan A",slot="2,0"} 1200`,
 		"jbod_up 1",
 	} {

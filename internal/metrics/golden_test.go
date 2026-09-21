@@ -14,8 +14,8 @@ import (
 var update = flag.Bool("update", false, "rewrite the golden files")
 
 // golden compares got with testdata/<name>, so an accidental change to the
-// exposition format shows up as a diff instead of surviving a
-// strings.Contains assertion (G).
+// exposition — including one that comes from a client_golang upgrade — shows
+// up as a diff instead of surviving a strings.Contains assertion (G).
 func golden(t *testing.T, name, got string) {
 	t.Helper()
 	path := filepath.Join("testdata", name)
@@ -161,7 +161,7 @@ func shelfStatus() []jbod.EnclosureStatus {
 
 func TestEncodeGolden(t *testing.T) {
 	t.Parallel()
-	golden(t, "metrics.golden", Encode(fullSnapshot(), map[string]int{
+	golden(t, "metrics.golden", encode(t, fullSnapshot(), map[string]int{
 		jbod.CollectorDisks: 7,
 		jbod.CollectorFans:  3,
 	}, Options{Deprecated: true}))
@@ -172,5 +172,5 @@ func TestEncodeGoldenIncomplete(t *testing.T) {
 	s := fullSnapshot()
 	s.Up = false
 	s.Duration = 120 * time.Second
-	golden(t, "metrics-down.golden", Encode(s, s.Errors, Options{Deprecated: true}))
+	golden(t, "metrics-down.golden", encode(t, s, s.Errors, Options{Deprecated: true}))
 }

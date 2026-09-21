@@ -8,8 +8,10 @@ English version: [README.en.md](README.en.md).
 
 ## Требования и сборка
 
-Go 1.25+, одна зависимость — [spf13/pflag](https://github.com/spf13/pflag)
-для POSIX-разбора флагов. Работа с оборудованием требует Linux,
+Go 1.25+ и две зависимости: [prometheus/client_golang](https://github.com/prometheus/client_golang)
+— официальный клиент Prometheus, которым экспортёр отдаёт метрики, — и
+[spf13/pflag](https://github.com/spf13/pflag) для POSIX-разбора флагов.
+Работа с оборудованием требует Linux,
 драйвера enclosure, доступного /sys/class/enclosure и утилит
 lsscsi, sg_inq, sg_map, sg_ses, sginfo, scsi_temperature.
 На Debian/Ubuntu установите пакеты lsscsi и sg3-utils.
@@ -419,6 +421,16 @@ stderr.
 | jbod_enclosure_generation_changed | gauge | 1, если страницы одного прохода описали разные конфигурации |
 | jbod_enclosure_components_missing | gauge | сколько объявленных элементов не отдала ни одна status-страница |
 
+Метрики самого экспортёра приходят из client_golang и собираются заново на
+каждый запрос, мимо кеша сбора:
+
+| Метрика | Тип | Значение |
+| --- | --- | --- |
+| process_* | gauge/counter | CPU, память, дескрипторы и время старта процесса (только Linux: читается из /proc) |
+| go_* | gauge/counter | горутины, GC и память рантайма |
+| jbod_build_info | gauge | версия бинарника и тулчейн в labels, значение всегда 1 |
+| promhttp_metric_handler_requests_total | counter | ответы /metrics по коду |
+
 `jbod_enclosure_info` — точка join для всех серий, у которых в labels стоит
 SCSI-адрес: адрес назначается при сканировании и меняется, поэтому дашборд,
 которому нужна устойчивая идентичность, джойнит по `enclosure` и берёт
@@ -427,11 +439,16 @@ SCSI-адрес: адрес назначается при сканировани
 
 Метрики самого процесса (`process_cpu_seconds_total`,
 `process_resident_memory_bytes`, `process_virtual_memory_bytes`,
-`process_start_time_seconds`, `process_open_fds`, `process_max_fds`) читаются
-из `/proc/self` при каждом запросе и не кешируются: в Rust-версии их отдавал
-крейт prometheus, и дашборды по ним ломались бы без них. На системах без
+`process_start_time_seconds`, `process_open_fds`, `process_max_fds`) отдаёт
+сборщик из client_golang — тот же, что и в остальных экспортёрах Prometheus;
+в Rust-версии их отдавал крейт prometheus, и дашборды по ним ломались бы без
+них. Читаются они при каждом запросе и не кешируются. На системах без
 `/proc` (например macOS) они просто не выводятся — лучше отсутствие серии,
 чем нули.
+
+Ответ отдаётся через `promhttp`, поэтому доступны согласование формата
+(text 0.0.4 и OpenMetrics), gzip и заголовки, которые ждёт Prometheus:
+ничего из этого в репозитории не написано руками.
 
 ### Миграция с jbod_fan_rpm
 
@@ -489,7 +506,8 @@ jbod_fan_speed_rpm{enclosure="10:0:0:0",enclosure_id="naa.5000...02",component="
   элементов, датчики с порогами и отображение slot → SAS address → disk.
   Аппаратное состояние и полнота опроса — две разные строки отчёта.
 - Требуется ровно одно состояние --on/--off. Неизвестные устройства — ошибка.
-- Совместимость метрик полная, включая `process_*`; сверх Rust-версии есть
+- Совместимость метрик полная, включая `process_*` (их, как и в Rust-версии,
+  отдаёт официальный клиент Prometheus); сверх Rust-версии есть
   `jbod_up`, `jbod_scrape_duration_seconds`, `jbod_scrape_errors_total`,
   `jbod_enclosure_info`, `jbod_enclosure_slots`, `jbod_fan_speed_rpm`,
   метрики состояния и компонентов (`jbod_enclosure_health`,
@@ -532,7 +550,8 @@ Unit сознательно не включает `PrivateDevices=` — он с�
 даёт цикл перезапусков до исправления, зато причина видна сразу.
 
 Сборке нужен доступ к модулям (`go mod download`) или каталог `vendor/`
-(`make vendor`) — единственная зависимость pflag в репозитории не лежит.
+(`make vendor`) — зависимости (client_golang, pflag и их транзитивные
+модули) в репозитории не лежат.
 
 На целевой Linux-системе с dpkg можно собрать пакет: `make deb`.
 Результат: `dist/jbod-go_<версия>_<арх>.deb` и `dist/SHA256SUMS`. Версия
@@ -596,10 +615,11 @@ CI (`.github/workflows/go.yml`) прогоняет тесты на Go 1.25 и 1.
   `parse.go` — чистые парсеры вывода утилит (табличные тесты и фаззинг),
   `sespage.go` — парсеры страниц SES, `ses.go` — модель компонентов,
   датчиков и состояния, `order.go` — натуральная сортировка слотов.
-- internal/metrics — кодирование снимка в Prometheus text format 0.0.4.
+- internal/metrics — снимок в виде `prometheus.Collector`: дескрипторы серий
+  и const-метрики, сам формат пишет client_golang.
 - internal/exporter — HTTP-обработчик, таймаут scrape, объединение
-  одновременных scrape и кеш по TTL.
-- internal/process — метрики `process_*` из `/proc/self`.
+  одновременных scrape, кеш по TTL и реестр с процессными, рантаймовыми и
+  build-info метриками; ответ пишет `promhttp`.
 - internal/cli — разбор аргументов: `list.go`, `led.go`, `prometheus.go`,
   `health.go` (health и sensors), вывод таблиц в `output.go`, версия в
   `version.go`, логгер в `log.go`.

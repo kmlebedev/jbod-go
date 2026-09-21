@@ -175,6 +175,7 @@ func Prometheus(ctx context.Context, args []string, out, errOut io.Writer, c *jb
 			exporter.WithCacheTTL(*cacheTTL),
 			exporter.WithDeprecatedMetrics(*deprecated),
 			exporter.WithLogger(logger),
+			exporter.WithVersion(Version()),
 		).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
