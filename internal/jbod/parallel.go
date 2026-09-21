@@ -60,13 +60,17 @@ const (
 	CollectorSlots = "slots"
 	CollectorDisks = "disks"
 	CollectorFans  = "fans"
+	// CollectorComponents covers the SES page reads behind the health,
+	// component and sensor reports: a page that did not answer is counted
+	// here, and the readings it would have carried stay absent.
+	CollectorComponents = "components"
 	// CollectorLED covers the LED writes and their readback.
 	CollectorLED = "led"
 )
 
 // Collectors lists every collector, so the error series exist from the first
 // scrape even when nothing failed.
-var Collectors = []string{CollectorEnclosures, CollectorSlots, CollectorDisks, CollectorFans, CollectorLED}
+var Collectors = []string{CollectorEnclosures, CollectorSlots, CollectorDisks, CollectorFans, CollectorComponents, CollectorLED}
 
 // problems accumulates the failures of a single collection pass.
 //

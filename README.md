@@ -43,6 +43,10 @@ make build
 ./bin/jbod list --slots --enclosure-id naa.50050cc10c400000 --json
 ./bin/jbod capabilities
 ./bin/jbod capabilities --enclosure naa.50050cc10c400000 --json
+./bin/jbod health
+./bin/jbod health naa.50050cc10c400000 --json
+./bin/jbod sensors
+./bin/jbod list --components naa.50050cc10c400000
 sudo ./bin/jbod led --locate /dev/sda --on
 sudo ./bin/jbod led --locate /dev/sda --off
 sudo ./bin/jbod led --fault /dev/sg1 --on
@@ -50,7 +54,7 @@ sudo ./bin/jbod led --enclosure naa.50050cc10c400000 --locate 5 --on
 ./bin/jbod prometheus --ip-address 127.0.0.1 --port 9945
 ```
 
-Флаги `-e`, `-d`, `-f` и `-s` независимы: каждый добавляет свою секцию вывода,
+Флаги `-e`, `-d`, `-f`, `-s` и `-c` независимы: каждый добавляет свою секцию вывода,
 поэтому `list -ef` печатает и корпуса, и вентиляторы. Диски упорядочены
 натурально — `Slot 2` идёт перед `Slot 10`.
 
@@ -196,6 +200,110 @@ disk.temperature   unknown      unsupported  scsi_temperature: installed; ...
 `null`, а не ноль; секции, которые не запрашивали, в документе отсутствуют,
 а запрошенная и пустая — это `[]`.
 
+## Здоровье корпуса, компоненты и датчики
+
+`jbod health` отвечает на вопрос «что с полкой», `jbod sensors` показывает
+числа, на которых этот ответ основан, а `jbod list --components` перечисляет
+каждый элемент SES, который корпус объявляет: корзины, блоки питания,
+вентиляторы, датчики и модули ввода-вывода.
+
+За один проход читаются четыре страницы: Configuration (`--page=cf`),
+Enclosure Status (`--page=es`), join Enclosure Status + Element Descriptor +
+Additional Element Status (`--join`) и Threshold In (`--page=th`). Ничего не
+пишется: чтение порогов — это чтение, а изменение порогов и охлаждения —
+версия 1.4.
+
+```
+$ jbod health
+Enclosure 1:0:0:0  address 0x5000ccab05629d00 (stable)  health critical
+SCOPE       LEVEL     DETAIL
+hardware    warning   INVOP=0 INFO=0 NON-CRIT=1 CRIT=0 UNRECOV=0
+components  critical  8 elements: 4 ok, 1 critical, 3 unknown
+collection  complete  3/4 pages read, generation 0x1
+note: the threshold in page did not answer and is not required: sg_ses: Threshold In dpage not supported
+note: 1 element(s) are declared by the configuration page and were not reported by any status page
+```
+
+Три строки отвечают на три разных вопроса и намеренно не сводятся в одну:
+
+| Строка | Что это |
+| --- | --- |
+| `hardware` | вердикт самого корпуса: пять бит страницы Enclosure Status |
+| `components` | худшее состояние среди элементов |
+| `collection` | полнота опроса: сколько страниц ответило и совпал ли generation code |
+
+Аппаратная авария и неудавшийся опрос — разные события, и смешивать их
+нельзя: полка, у которой не ответила страница, не становится исправной, а
+полка, у которой не реализована страница порогов, не становится сломанной.
+Поэтому страница, которая не ответила, попадает в строку `collection` и в
+сноски, а не в `hardware`, и каждый бит, который не был прочитан,
+печатается как `-`, а не как `0`.
+
+Уровни состояния:
+
+| Уровень | Когда |
+| --- | --- |
+| `ok` | корпус сообщает `OK` |
+| `warning` | SES `noncritical` |
+| `critical` | SES `critical` |
+| `unrecoverable` | SES `unrecoverable` |
+| `absent` | `not installed`: элемент объявлен, и его нет |
+| `unknown` | `unsupported`, `unknown`, `not available`, `no access allowed`, либо состояние не прочитано |
+
+`unknown` и `absent` не участвуют в вычислении худшего уровня, но считаются
+отдельно. Иначе шасси с двумя IOM всегда сообщало бы `unknown`: тридцать
+корзин чужого модуля отдаются кодом «no access allowed», и это не диагноз
+полки, а граница видимости модуля. Если же не прочитано вообще ничего,
+ответ — `unknown`: тогда наблюдения нет.
+
+Элемент, который объявлен в Configuration и не отдан ни одной status-страницей,
+остаётся в списке со статусом `declared only`. «Полка сообщает о двух блоках
+питания, ответил один» — это находка, а таблица с одним блоком питания её
+прячет.
+
+```
+$ jbod sensors
+Enclosure 1:0:0:0  address 0x5000ccab05629d00 (stable)
+ID   NAME        TYPE                READING      VALUE  UNIT     STATUS       HEALTH   HIGH CRIT  HIGH WARN  LOW WARN  LOW CRIT
+1,0  PSU A       power supply        temperature  41     celsius  OK           ok       -          -          -         -
+3,0  TEMP IOM A  temperature sensor  temperature  35     celsius  OK           ok       65         60         0         -19
+3,1  TEMP IOM B  temperature sensor  temperature  -      celsius  Unsupported  unknown  -          -          -         -
+```
+
+Пороги — это числа самого корпуса со страницы Threshold In, а не константа в
+правиле алертинга: на следующей полке она будет другой. Датчик, который
+объявляет показание и не отдал значения, остаётся строкой со значением `-`:
+пропавшая строка неотличима от датчика, которого никогда не было, а ноль —
+это ложь. В JSON каждое показание несёт значение, единицу, источник, время
+опроса и причину отсутствия.
+
+```
+$ jbod list --components
+Enclosure 1:0:0:0  address 0x5000ccab05629d00 (stable)
+ID   TYPE                NAME        STATUS             HEALTH    READINGS  SLOT  SAS ADDRESS         DEVICE    MAP
+0,0  array device slot   SLOT 00     OK                 ok        -         0     0x5000cca2a0d6e2f5  /dev/sg1  /dev/sda
+0,1  array device slot   SLOT 01     No access allowed  unknown   -         1     -                   -         -
+0,2  array device slot   SLOT 02     declared only      unknown   -         -     -                   -         -
+1,1  power supply        PSU B       Critical           critical  -         -     -                   -         -
+2,0  cooling             FAN ENCL 1  OK                 ok        7220 rpm  -     -                   -         -
+```
+
+Колонки SAS ADDRESS, DEVICE и MAP — это отображение slot → SAS address →
+disk: адрес приходит из Additional Element Status, диск — из обхода sysfs, а
+связывает их номер корзины, который отдаёт сам корпус (при его отсутствии —
+номер элемента, затем имя компонента). Нулевой адрес не публикуется: это не
+идентичность, и по нему все пустые корзины сошлись бы в одну.
+
+Generation code читается со всех страниц. Если они не совпали, страницы
+описывают разные конфигурации: отчёт помечается как смешанный и `collection`
+становится `partial`. Повторного опроса нет — полка, которую в этот момент
+перенастраивают, повторялась бы бесконечно, — вместо этого сказано прямо,
+что произошло.
+
+`--json` есть у `health`, `sensors` и `list --components`. Команды ничего не
+решают за оператора: `jbod health` печатает состояние и всегда завершается
+с кодом 0, если сам сбор не сломался.
+
 ## Prometheus
 
 Оба способа запуска используют один экспортёр:
@@ -230,6 +338,12 @@ GET / возвращает пустой ответ; GET /metrics — Prometheus 
 Внешние команды выполняются параллельно с ограничением `--concurrency`:
 на полку в 60 дисков приходится 120 запусков процессов, последовательно они
 не укладываются в интервал scrape. Порядок вывода от параллелизма не зависит.
+
+С 1.2 к этому добавляются страницы SES: до четырёх вызовов `sg_ses` на
+корпус за проход — по корпусам параллельно, внутри корпуса последовательно
+(страницы идут через один и тот же SES-процессор, и ставить их в очередь
+одновременно незачем). Страница порогов читается только если корпус
+сообщает о датчиках.
 
 Одновременные scrape объединяются в один проход по оборудованию, поэтому
 `curl /metrics` рядом с Prometheus не удваивает нагрузку на экспандер.
@@ -271,13 +385,39 @@ stderr.
 | jbod_enclosure_slots | gauge | enclosure, enclosure_id, occupancy | число слотов в каждом состоянии |
 | jbod_fan_speed_rpm | gauge | enclosure, enclosure_id, component, component_id | RPM вентилятора без коллизий |
 
+Добавлены в 1.2:
+
+| Метрика | Тип | Labels | Значение |
+| --- | --- | --- | --- |
+| jbod_enclosure_health | gauge | enclosure, enclosure_id, source, level | 1 у текущего уровня; source — `hardware` или `components` |
+| jbod_enclosure_components | gauge | enclosure, enclosure_id, type, health | сколько элементов каждого типа в каждом состоянии |
+| jbod_component_info | gauge | enclosure, enclosure_id, component, component_id, type, status, health | один элемент, всегда 1 |
+| jbod_sensor_temperature_celsius | gauge | enclosure, enclosure_id, component, component_id, type | температура элемента корпуса |
+| jbod_sensor_voltage_volts | gauge | те же | напряжение |
+| jbod_sensor_current_amps | gauge | те же | ток |
+| jbod_sensor_*_threshold_* | gauge | те же + threshold | порог корпуса: high_critical, high_warning, low_warning, low_critical |
+| jbod_slot_sas_address_info | gauge | enclosure, enclosure_id, slot, component_id, sas_address, device, block_device | отображение slot → SAS address → disk, всегда 1 |
+
+Состояние — это label, а не число: числовой шкале пришлось бы куда-то
+поместить `unknown`, и любое место неверно. Рядом с `ok` он прячет полку,
+которую не удалось прочитать, рядом с `critical` — будит дежурного из-за
+нереализованной страницы порогов. Серия публикуется для каждого уровня,
+поэтому вернувшаяся в норму полка отдаёт ноль, а не оставляет висеть
+прошлую критическую серию. Показание, которого корпус не отдал, не
+публикуется вовсе.
+
 Добавлены метрики состояния самого сбора:
 
 | Метрика | Тип | Значение |
 | --- | --- | --- |
 | jbod_up | gauge | 1, если сбор завершился полностью |
 | jbod_scrape_duration_seconds | gauge | длительность последнего сбора |
-| jbod_scrape_errors_total | counter | накопленные ошибки по collector (enclosures, slots, disks, fans, led) |
+| jbod_scrape_errors_total | counter | накопленные ошибки по collector (enclosures, slots, disks, fans, components, led) |
+| jbod_snapshot_timestamp_seconds | gauge | когда начался сбор, стоящий за этим ответом |
+| jbod_collection_complete | gauge | 1, если у корпуса ответили все обязательные страницы и совпал generation code |
+| jbod_ses_page_read | gauge | ответила ли конкретная страница SES (labels: page, required) |
+| jbod_enclosure_generation_changed | gauge | 1, если страницы одного прохода описали разные конфигурации |
+| jbod_enclosure_components_missing | gauge | сколько объявленных элементов не отдала ни одна status-страница |
 
 `jbod_enclosure_info` — точка join для всех серий, у которых в labels стоит
 SCSI-адрес: адрес назначается при сканировании и меняется, поэтому дашборд,
@@ -321,7 +461,9 @@ jbod_fan_speed_rpm{enclosure="10:0:0:0",enclosure_id="naa.5000...02",component="
 недоступная прошивка отображается как N/A.
 
 Частичный сбор — это HTTP 200: сломанный датчик, недоступное дерево sysfs
-одного корпуса или вентилятор без RPM учитываются в `jbod_scrape_errors_total`,
+одного корпуса, страница SES, которая не ответила, или вентилятор без RPM
+учитываются в `jbod_scrape_errors_total` (страницы — под collector
+`components`, а полнота опроса видна в `jbod_collection_complete`),
 а всё остальное отдаётся как обычно. HTTP 503 остаётся только для полного
 отказа — когда не удалось получить сам список корпусов (нет утилиты lsscsi,
 нет драйвера). CLI по-прежнему считает такие ошибки фатальными и не печатает
@@ -343,10 +485,18 @@ jbod_fan_speed_rpm{enclosure="10:0:0:0",enclosure_id="naa.5000...02",component="
 - LED не зависит от доступности scsi_temperature и sginfo; результат записи
   проверяется чтением, и неподтверждённая запись так и называется.
 - Есть `capabilities` и `--json` у `list`, `capabilities` и `led`.
+- Есть `health`, `sensors` и `list --components`: состояние корпуса и его
+  элементов, датчики с порогами и отображение slot → SAS address → disk.
+  Аппаратное состояние и полнота опроса — две разные строки отчёта.
 - Требуется ровно одно состояние --on/--off. Неизвестные устройства — ошибка.
 - Совместимость метрик полная, включая `process_*`; сверх Rust-версии есть
   `jbod_up`, `jbod_scrape_duration_seconds`, `jbod_scrape_errors_total`,
-  `jbod_enclosure_info`, `jbod_enclosure_slots` и `jbod_fan_speed_rpm`.
+  `jbod_enclosure_info`, `jbod_enclosure_slots`, `jbod_fan_speed_rpm`,
+  метрики состояния и компонентов (`jbod_enclosure_health`,
+  `jbod_enclosure_components`, `jbod_component_info`), датчики с порогами
+  (`jbod_sensor_*`), отображение корзин (`jbod_slot_sas_address_info`) и
+  полнота сбора (`jbod_collection_complete`, `jbod_ses_page_read`,
+  `jbod_snapshot_timestamp_seconds`).
 
 ## Установка и Debian
 
@@ -420,7 +570,11 @@ GOOS=linux GOARCH=arm64 go build ./...
 go test -run xxx -fuzz FuzzParseVPD80 -fuzztime 30s ./internal/jbod/
 ```
 
-Вывод `list` и текст метрик зафиксированы golden-файлами, поэтому лишняя или
+Страницы SES разбираются от фикстур: конфигурация, статус корпуса, join с
+Additional Element Status и пороги, включая три написания типа элемента,
+нулевой SAS-адрес, overall-элемент и датчик без значения.
+
+Вывод `list`, `health`, `sensors` и текст метрик зафиксированы golden-файлами, поэтому лишняя или
 исчезнувшая строка видна как diff, а не проходит незамеченной:
 
 ```sh
@@ -440,10 +594,12 @@ CI (`.github/workflows/go.yml`) прогоняет тесты на Go 1.25 и 1.
   общее тело обоих бинарников в `internal/cli.Main`.
 - internal/jbod — доменные типы, сбор через sysfs и sg3-utils, LED;
   `parse.go` — чистые парсеры вывода утилит (табличные тесты и фаззинг),
-  `order.go` — натуральная сортировка слотов.
+  `sespage.go` — парсеры страниц SES, `ses.go` — модель компонентов,
+  датчиков и состояния, `order.go` — натуральная сортировка слотов.
 - internal/metrics — кодирование снимка в Prometheus text format 0.0.4.
 - internal/exporter — HTTP-обработчик, таймаут scrape, объединение
   одновременных scrape и кеш по TTL.
 - internal/process — метрики `process_*` из `/proc/self`.
 - internal/cli — разбор аргументов: `list.go`, `led.go`, `prometheus.go`,
-  вывод таблиц в `output.go`, версия в `version.go`, логгер в `log.go`.
+  `health.go` (health и sensors), вывод таблиц в `output.go`, версия в
+  `version.go`, логгер в `log.go`.

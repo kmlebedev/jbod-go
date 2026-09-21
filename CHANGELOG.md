@@ -7,6 +7,97 @@ built from a checkout.
 
 ## Unreleased
 
+### 1.2 — enclosure health and sensors
+
+The enclosure stops being a list of bays: every SES element it declares is
+read, with its condition, its sensors and the thresholds it publishes for
+them. What the hardware reports and how much of it could be read are two
+separate answers throughout. ROADMAP section 5.
+
+#### Added
+
+- `jbod health` reports the condition of a shelf in three rows that answer
+  three different questions: `hardware` is the enclosure's own verdict from
+  the five bits of the Enclosure Status page, `components` is the worst
+  condition among its elements, and `collection` is how complete the poll
+  was. A page that did not answer lands in the collection row and in the
+  notes, never in the hardware verdict, and a condition bit that was not
+  read prints as `-` rather than as `0`.
+- `jbod sensors` prints the temperature, voltage, current and speed values
+  the enclosure reports, each with the thresholds it declares for that
+  element on the Threshold In page. The page is read and never written.
+- `jbod list --components` (`-c`) lists every element the enclosure
+  declares, including the ones no status page reported, which are marked
+  `declared only` instead of being dropped.
+- The slot → SAS address → disk mapping: the address comes from the
+  Additional Element Status page, the disk from the sysfs slot walk, and the
+  bay number the enclosure reports ties them together, falling back to the
+  element number and then to the component name. The null SAS address is
+  never published as an identity.
+- Six health levels — `ok`, `warning`, `critical`, `unrecoverable`, `absent`
+  and `unknown` — with `absent` and `unknown` counted but kept out of the
+  worst-of, so thirty bays owned by the other I/O module of a chassis do not
+  make a working shelf report `unknown`, and an element nobody could read
+  never reports `ok`.
+- Every reading carries its value, unit, source, read time and the reason a
+  value is absent. A sensor that declares a reading and reported none keeps
+  its row with the value absent, because a dropped row is indistinguishable
+  from a sensor that never existed.
+- New metrics: `jbod_enclosure_health{source,level}`,
+  `jbod_enclosure_components{type,health}`, `jbod_component_info`,
+  `jbod_sensor_temperature_celsius`, `jbod_sensor_voltage_volts`,
+  `jbod_sensor_current_amps`, their `_threshold_` counterparts and
+  `jbod_slot_sas_address_info`. Health is a label and never a number,
+  because a numeric severity has nowhere right to put `unknown`, and a
+  reading the hardware did not report gets no series at all.
+- Collection metrics: `jbod_snapshot_timestamp_seconds`,
+  `jbod_collection_complete`, `jbod_ses_page_read{page,required}`,
+  `jbod_enclosure_generation_changed` and
+  `jbod_enclosure_components_missing`, plus the new `components` collector in
+  `jbod_scrape_errors_total`. An enclosure in trouble and an enclosure
+  nobody could read are different alerts and now have different series.
+- `--json` on `health`, `sensors` and `list --components`, with the same
+  rules as the existing documents: an absent reading is `null`, a section
+  nobody asked for is missing, and a requested empty one is `[]`.
+
+#### Changed
+
+- One collection pass now also reads the SES pages, so the exporter and the
+  command line render the same snapshot rather than collecting twice. The
+  slot walk is shared with the inspection instead of being repeated.
+- `Snapshot` carries `Status` (the per-shelf reports) and `ReadAt` (when the
+  pass started), which is what the freshness metric publishes.
+- The shelf selector helper is shared by `list`, `capabilities`, `health`
+  and `sensors`: the shelf is either the value of `--enclosure-id` or the
+  single operand, and naming it twice is an error in all four.
+
+#### Notes
+
+- The four pages are read per shelf and in sequence — `--page=cf`,
+  `--join`, `--page=es` and, only when the shelf reports sensor elements,
+  `--page=th` — while different shelves are read in parallel. The join is
+  the one call that carries the descriptors, the statuses and the
+  Additional Element Status together, which is what makes the mapping
+  possible without a page read per element.
+- The generation code is recorded from every page. When the pages disagree
+  they describe different configurations, so the report is marked as a
+  mixture and the collection is not complete; the pass is not repeated,
+  because a shelf being reconfigured would repeat forever.
+- The Threshold In page is optional: a shelf that does not implement it is
+  not a shelf that failed to answer, and the collection stays complete.
+- The element type is accepted in the three shapes sg_ses has printed it in
+  (`[3,0]  Element type: Cooling`, `Fan A [2,0]  Cooling element`, and a
+  standalone type header above its elements), because a parser that knows
+  only one of them reports a shelf with no cooling elements on the versions
+  that print another.
+- `jbod_fan_speed_rpm` is unchanged and still comes from the fan collector.
+  The cooling elements also appear as components, with their speed as a
+  reading; the two agree because they read the same enclosure, and the fan
+  metric stays the one to alert on.
+- None of this has been verified against hardware yet. The parsers are
+  covered by fixtures for the page shapes above; the matrix in ROADMAP 10
+  still applies.
+
 ### 1.1 — correct inventory and capabilities
 
 Slots and disks become separate things, enclosures get an identity that

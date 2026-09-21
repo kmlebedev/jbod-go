@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/spf13/pflag"
 
@@ -22,12 +23,21 @@ import (
 // Help is the top-level usage of the jbod binary.
 const Help = `jbod - Generic storage enclosure tool (Go)
 Usage:
-  jbod list [-e|--enclosure] [-d|--disks] [-f|--fan] [-s|--slots] [ENCLOSURE] [--json]
+  jbod list [-e|--enclosure] [-d|--disks] [-f|--fan] [-s|--slots] [-c|--components] [ENCLOSURE] [--json]
   jbod capabilities [ENCLOSURE] [--json]
+  jbod health [ENCLOSURE] [--json]
+  jbod sensors [ENCLOSURE] [--json]
   jbod led [-l|--locate TARGET] [-f|--fault TARGET] --on|--off [--json]
   jbod prometheus [-i|--ip-address IP] [-p|--port PORT] [tuning flags]
 
-  --slots lists every bay, empty ones included.
+  --slots lists every bay, empty ones included, and --components every SES
+  element the shelf declares: bays, power supplies, fans, sensors and I/O
+  modules, with the disk behind each bay.
+
+  health reports the condition of a shelf and sensors the values behind it.
+  Both separate what the enclosure reports from what could not be read: a
+  page that did not answer is shown as a gap in the poll and never as a
+  healthy component.
 
   ENCLOSURE narrows a listing to one shelf and is any of the four spellings
   the listings print: the logical identifier, the unit serial number, the
@@ -56,6 +66,9 @@ type Inventory interface {
 	Disks(ctx context.Context, enclosures []jbod.Enclosure, opts jbod.DiskOptions) ([]jbod.Disk, error)
 	Fans(ctx context.Context, enclosures []jbod.Enclosure) ([]jbod.Fan, error)
 	Capabilities(ctx context.Context, enclosures []jbod.Enclosure) ([]jbod.EnclosureCapabilities, error)
+	// Inspect reads the SES pages behind the health, component and sensor
+	// reports: one pass per command, shared by all three (ROADMAP 5).
+	Inspect(ctx context.Context, enclosures []jbod.Enclosure) ([]jbod.EnclosureStatus, error)
 	SetLED(ctx context.Context, target jbod.LEDTarget, kind jbod.LEDKind, on bool) (jbod.LEDResult, error)
 }
 
@@ -91,6 +104,26 @@ func listAliases(_ *pflag.FlagSet, name string) pflag.NormalizedName {
 	return pflag.NormalizedName(name)
 }
 
+// oneEnclosure resolves the shelf a command was pointed at.
+//
+// Every report takes the shelf either as the value of --enclosure-id or as
+// its single operand, because the flag spelling is easy to reach for and a
+// bare argument is what people type first. Naming it twice is an error
+// rather than a silent winner.
+func oneEnclosure(f *pflag.FlagSet, command, id string) (string, error) {
+	switch f.NArg() {
+	case 0:
+		return id, nil
+	case 1:
+		if id != "" && !strings.EqualFold(id, f.Arg(0)) {
+			return "", fmt.Errorf("the shelf is named twice, as %q and %q", id, f.Arg(0))
+		}
+		return f.Arg(0), nil
+	default:
+		return "", fmt.Errorf("%s takes at most one enclosure, got %d arguments", command, f.NArg())
+	}
+}
+
 // flags returns a POSIX flag set that reports errors to the caller instead of
 // exiting, and prints its usage where the command prints everything else.
 func flags(name string, w io.Writer) *pflag.FlagSet {
@@ -118,6 +151,10 @@ func Run(ctx context.Context, args []string, out, errOut io.Writer, c *jbod.Clie
 		return cmdList(ctx, args[1:], out, c)
 	case "capabilities":
 		return cmdCapabilities(ctx, args[1:], out, c)
+	case "health":
+		return cmdHealth(ctx, args[1:], out, c)
+	case "sensors":
+		return cmdSensors(ctx, args[1:], out, c)
 	case "led":
 		return cmdLED(ctx, args[1:], out, c)
 	case "prometheus":

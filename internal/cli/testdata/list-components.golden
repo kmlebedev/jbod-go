@@ -1,0 +1,20 @@
+Enclosure 1:0:0:0  address 0x5000ccab05629d00 (stable)
+ID   TYPE                NAME        STATUS             HEALTH    READINGS  SLOT  SAS ADDRESS         DEVICE    MAP
+0,0  array device slot   SLOT 00     OK                 ok        -         0     0x5000cca2a0d6e2f5  /dev/sg1  /dev/sda
+0,1  array device slot   SLOT 01     No access allowed  unknown   -         1     -                   -         -
+0,2  array device slot   SLOT 02     declared only      unknown   -         -     -                   -         -
+1,0  power supply        PSU A       OK                 ok        41 C      -     -                   -         -
+1,1  power supply        PSU B       Critical           critical  -         -     -                   -         -
+2,0  cooling             FAN ENCL 1  OK                 ok        7220 rpm  -     -                   -         -
+3,0  temperature sensor  TEMP IOM A  OK                 ok        35 C      -     -                   -         -
+3,1  temperature sensor  TEMP IOM B  Unsupported        unknown   -         -     -                   -         -
+note: the threshold in page did not answer and is not required: sg_ses: Threshold In dpage not supported
+note: 1 element(s) are declared by the configuration page and were not reported by any status page
+
+Enclosure 10:0:0:0  address 10:0:0:0 (temporary)
+ID  TYPE  NAME  STATUS  HEALTH  READINGS  SLOT  SAS ADDRESS  DEVICE  MAP
+note: the configuration page did not answer: sg_ses: device or resource busy
+note: the join page did not answer: sg_ses: device or resource busy
+note: the enclosure status page did not answer: sg_ses: device or resource busy
+note: the threshold in page was not read: not read: the shelf reports no sensor elements
+note: the enclosure status page did not answer, so the hardware verdict is unknown: sg_ses: device or resource busy
