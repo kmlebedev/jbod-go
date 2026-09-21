@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/kmlebedev/jbod-go/internal/jbod"
 )
@@ -20,13 +21,23 @@ import (
 func cmdCapabilities(ctx context.Context, args []string, out io.Writer, inv Inventory) error {
 	f := flags("capabilities", out)
 	f.SetNormalizeFunc(enclosureAliases)
-	id := f.String("enclosure-id", "", "limit the report to one shelf, by identifier, serial or SCSI address")
+	id := f.String("enclosure-id", "", "limit the report to one shelf, by id, serial, SCSI address or device")
 	asJSON := f.Bool("json", false, "print the report as JSON")
 	if err := f.Parse(args); err != nil {
 		return err
 	}
-	if f.NArg() != 0 {
-		return fmt.Errorf("capabilities takes no arguments, got %q", f.Arg(0))
+	// The shelf can be named positionally here too, for the same reason as
+	// in list: it is the only operand the command has.
+	selector := *id
+	switch f.NArg() {
+	case 0:
+	case 1:
+		if selector != "" && !strings.EqualFold(selector, f.Arg(0)) {
+			return fmt.Errorf("the shelf is named twice, as %q and %q", selector, f.Arg(0))
+		}
+		selector = f.Arg(0)
+	default:
+		return fmt.Errorf("capabilities takes at most one enclosure, got %d arguments", f.NArg())
 	}
 	if err := inv.Preflight(); err != nil {
 		return err
@@ -35,7 +46,7 @@ func cmdCapabilities(ctx context.Context, args []string, out io.Writer, inv Inve
 	if err != nil {
 		return err
 	}
-	enclosures, err := jbod.SelectEnclosures(all, *id)
+	enclosures, err := jbod.SelectEnclosures(all, selector)
 	if err != nil {
 		return err
 	}

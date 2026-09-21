@@ -46,9 +46,12 @@ func TestListFlagSemantics(t *testing.T) {
 		{name: "nothing selected", args: nil, wantErr: "requires"},
 		{name: "unknown flag", args: []string{"-z"}, wantErr: "unknown shorthand"},
 		{name: "unknown long flag", args: []string{"--zap"}, wantErr: "unknown flag"},
-		// After -- everything is a positional argument, and list takes none.
-		{name: "end of options", args: []string{"-e", "--", "-d"}, wantErr: "takes no arguments"},
-		{name: "stray argument", args: []string{"-e", "extra"}, wantErr: "takes no arguments"},
+		// The one positional argument list takes is the shelf, so a stray
+		// word is read as the name of a shelf and fails as an unknown one.
+		// After -- everything is positional, which is how a value that
+		// looks like a flag can still be a shelf name.
+		{name: "end of options", args: []string{"-e", "--", "-d"}, wantErr: "no enclosure matches"},
+		{name: "stray argument", args: []string{"-e", "extra"}, wantErr: "no enclosure matches"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

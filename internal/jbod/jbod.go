@@ -235,15 +235,20 @@ func (e Enclosure) IDSource() string {
 	}
 }
 
-// Matches reports whether ref addresses this shelf. Any of the three
-// spellings is accepted so an operator can paste whichever one they have in
-// front of them; the identifier comparison is case-insensitive because NAA
-// identifiers are hex.
+// Matches reports whether ref addresses this shelf.
+//
+// Every spelling the listings print is accepted — the SCSI address, the
+// logical identifier, the unit serial number and the generic device — so an
+// operator can paste back whichever column they are looking at. The
+// comparison is case-insensitive because NAA identifiers are hex.
+//
+// The device is the only one of the four that tells two I/O modules of one
+// chassis apart: they share both the identifier and the serial number.
 func (e Enclosure) Matches(ref string) bool {
 	if ref == "" {
 		return false
 	}
-	if strings.EqualFold(ref, e.Slot) {
+	if strings.EqualFold(ref, e.Slot) || strings.EqualFold(ref, e.Device) {
 		return true
 	}
 	for _, candidate := range []Optional[string]{e.ID, e.Serial} {
@@ -293,7 +298,9 @@ func SelectEnclosures(enclosures []Enclosure, ref string) ([]Enclosure, error) {
 		}
 	}
 	if len(kept) == 0 {
-		return nil, fmt.Errorf("no enclosure matches %q; jbod list --enclosure lists the known identifiers", ref)
+		return nil, fmt.Errorf(
+			"no enclosure matches %q; run \"jbod list --enclosure\" and use a value from the SLOT, DEVICE or SERIAL column, or the id from \"jbod list --slots\"",
+			ref)
 	}
 	return kept, nil
 }
