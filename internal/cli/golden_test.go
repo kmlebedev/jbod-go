@@ -70,9 +70,9 @@ func shelf() *fake {
 			},
 		},
 		fans: []jbod.Fan{
-			{Slot: "1:0:0:0", Description: "Fan A", Index: "2,0", Comment: jbod.Some("low speed"), Speed: 1200},
-			{Slot: "1:0:0:0", Description: "Fan B", Index: "2,1", Speed: 3000},
-			{Slot: "10:0:0:0", Description: "Cooling fan 1", Index: "2,0", Comment: jbod.Some("normal"), Speed: 4800},
+			{Slot: "1:0:0:0", Description: "Fan A", Index: "2,0", Comment: jbod.Some("low speed"), Speed: jbod.Some(int64(1200))},
+			{Slot: "1:0:0:0", Description: "Fan B", Index: "2,1", Speed: jbod.Some(int64(3000))},
+			{Slot: "10:0:0:0", Description: "Cooling fan 1", Index: "2,0", Comment: jbod.Some("normal"), Speed: jbod.Some(int64(4800))},
 		},
 	}
 }

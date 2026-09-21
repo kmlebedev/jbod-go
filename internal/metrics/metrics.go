@@ -135,6 +135,13 @@ func encodeFans(b *strings.Builder, s jbod.Snapshot, opts Options) {
 	speeds := map[string]int64{}
 	var keys []string
 	for _, f := range s.Fans {
+		// A cooling element that answered without an RPM reading gets no
+		// series: a missing value is not zero, and a zero here reads as a
+		// stopped fan.
+		speed, ok := f.Speed.Get()
+		if !ok {
+			continue
+		}
 		id := ids[f.Slot]
 		if id == "" {
 			id = f.Serial.Or(f.Slot)
@@ -144,7 +151,7 @@ func encodeFans(b *strings.Builder, s jbod.Snapshot, opts Options) {
 		if _, seen := speeds[key]; !seen {
 			keys = append(keys, key)
 		}
-		speeds[key] = f.Speed
+		speeds[key] = speed
 	}
 	for _, key := range keys {
 		fmt.Fprintf(b, "jbod_fan_speed_rpm{%s} %d\n", key, speeds[key])
@@ -156,11 +163,15 @@ func encodeFans(b *strings.Builder, s jbod.Snapshot, opts Options) {
 	old := map[string]int64{}
 	keys = keys[:0]
 	for _, f := range s.Fans {
+		speed, ok := f.Speed.Get()
+		if !ok {
+			continue
+		}
 		key := fmt.Sprintf(`device="%s",slot="%s"`, label(f.Description), label(f.Index))
 		if _, seen := old[key]; !seen {
 			keys = append(keys, key)
 		}
-		old[key] = f.Speed
+		old[key] = speed
 	}
 	for _, key := range keys {
 		fmt.Fprintf(b, "jbod_fan_rpm{%s} %d\n", key, old[key])

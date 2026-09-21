@@ -1,0 +1,15 @@
+Enclosure 1:0:0:0  id 0x5000ccab05629d00 (logical)  (same chassis as 1:0:31:0)
+SLOT  NAME              TYPE          STATUS  OCCUPANCY    DEVICE    MAP       LOCATE  FAULT  POWER
+0     SLOT 00,SERIAL00  array device  OK      occupied     /dev/sg3  /dev/sdc  off     off    on
+1     SLOT 01,SERIAL01  array device  OK      occupied     /dev/sg4  /dev/sdd  off     off    on
+2     SLOT 02,SERIAL02  array device  -       unavailable  -         -         off     off    on
+3     SLOT 03,SERIAL03  array device  -       unavailable  -         -         off     off    on
+note: 2 slot(s): the enclosure reports a status code the driver cannot name (sysfs status is "(null)"); SES code 8 is "no access allowed", which is how a bay owned by another I/O module of the same shelf reads
+
+Enclosure 1:0:31:0  id 0x5000ccab05629d00 (logical)  (same chassis as 1:0:0:0)
+SLOT  NAME              TYPE          STATUS  OCCUPANCY    DEVICE    MAP       LOCATE  FAULT  POWER
+0     SLOT 00,SERIAL00  array device  -       unavailable  -         -         off     off    on
+1     SLOT 01,SERIAL01  array device  -       unavailable  -         -         off     off    on
+2     SLOT 02,SERIAL02  array device  OK      occupied     /dev/sg5  /dev/sde  off     off    on
+3     SLOT 03,SERIAL03  array device  OK      occupied     /dev/sg6  /dev/sdf  off     off    on
+note: 2 slot(s): the enclosure reports a status code the driver cannot name (sysfs status is "(null)"); SES code 8 is "no access allowed", which is how a bay owned by another I/O module of the same shelf reads

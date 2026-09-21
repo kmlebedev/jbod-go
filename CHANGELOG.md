@@ -71,6 +71,45 @@ colliding fan metric is replaced. ROADMAP section 4.
 - `Client.SetLED` takes a `LEDTarget` and returns an `LEDResult`
   (internal API).
 
+#### Fixed on hardware
+
+First run against a physical shelf — a WD/HGST H4060-J, 60 bays, two I/O
+modules, 60 disks — found four things the fixtures could not.
+
+- Thirty populated bays per module were listed as `empty`. Each I/O module
+  registers its own sysfs enclosure listing all sixty bays and reports the
+  thirty it does not own with a status the driver has no name for:
+  `enclosure.c` indexes its name table with the raw SES element status, and
+  code 8, "no access allowed", is past the end of it, so sysfs prints a
+  literal `(null)`. The occupancy rule is now strict — a bay is `empty` only
+  when the enclosure says `not installed`, and everything else unexplained
+  is `unavailable` with the reason attached.
+- Every one of the sixty disks reported `Temp: ERR`. `scsi_temperature`
+  wraps `sg_logs --temperature`, which prints `Current temperature = 33 C`
+  with an equals sign, and the parser required a colon. Both separators are
+  accepted now; a line with neither is still rejected, because guessing a
+  number out of "Current temperature sensor 2 unavailable" is worse than
+  reporting nothing.
+- The SES overall element of the cooling type was listed as a fan. The shelf
+  reports it as `[3,-1] ... Fan stopped` at 0 RPM, which put a dead fan in
+  front of an operator whose fans were all running and a zero-RPM series in
+  front of an alert rule. Overall elements are no longer listed as devices.
+- A cooling element whose speed could not be read disappeared from the
+  listing entirely, so a table of eight fans quietly became seven.
+  `Fan.Speed` is now optional: the element stays, with a dash instead of a
+  speed, and no metric series.
+
+Also from that run:
+
+- An enclosure identifier can match two sysfs enclosures, because it names
+  the chassis and not the I/O module. `list --slots` and `capabilities` say
+  so in the heading, and `led` picks the path that owns the bay — a write
+  through the module with no access is accepted and lights nothing. The LED
+  result line now names the enclosure and slot it resolved to.
+- `list --enclosure` printed the table header once per shelf.
+- `--fans`, `--enclosures`, `--disk` and `--slot` are accepted as spellings
+  of the existing flags.
+
 #### Deprecated
 
 - `jbod_fan_rpm`. Its labels are the fan description and the sg_ses index,
