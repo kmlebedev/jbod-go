@@ -57,10 +57,106 @@ func fullSnapshot() jbod.Snapshot {
 			{Slot: "1:0:0:0", Description: "Fan A", Index: "2,0", Comment: jbod.Some("low speed"), Speed: jbod.Some(int64(1200))},
 			{Slot: "1:0:0:0", Description: "Fan B", Index: "2,1", Speed: jbod.Some(int64(3000))},
 		},
+		Status:   shelfStatus(),
 		Errors:   map[string]int{jbod.CollectorFans: 1, jbod.CollectorDisks: 2},
 		Duration: 1234 * time.Millisecond,
+		ReadAt:   readAt,
 		Up:       true,
 	}
+}
+
+// readAt is fixed so the snapshot timestamp is a golden value rather than
+// the time the test ran.
+var readAt = time.Date(2026, 9, 21, 10, 0, 0, 0, time.UTC)
+
+// shelfStatus is one shelf that answered and one that did not, which is
+// what the health series have to keep apart: an enclosure in trouble and an
+// enclosure nobody could read are different alerts (ROADMAP 5).
+func shelfStatus() []jbod.EnclosureStatus {
+	full := jbod.EnclosureStatus{
+		Enclosure: "1:0:0:0", EnclosureID: jbod.Some("ENC1"), Address: "ENC1", StableID: true,
+		Hardware: jbod.HardwareStatus{
+			Level:       jbod.HealthWarning,
+			NonCritical: jbod.Some(true), Critical: jbod.Some(false),
+		},
+		Components: []jbod.Component{
+			{
+				Enclosure: "1:0:0:0", Index: "0,0", Type: "array device slot", Name: "SLOT 00",
+				Status: jbod.Some("OK"), Health: jbod.HealthOK, SlotNumber: jbod.Some(int64(0)),
+				SASAddresses: []string{"0x5000cca2a0d6e2f5"},
+				Device:       jbod.Some("/dev/sg1"), Map: jbod.Some("/dev/sda"),
+			},
+			{
+				// A bay the near module cannot reach: no address, so no
+				// mapping series, and unknown is not ok.
+				Enclosure: "1:0:0:0", Index: "0,1", Type: "array device slot", Name: "SLOT 01",
+				Status: jbod.Some("No access allowed"), Health: jbod.HealthUnknown,
+			},
+			{
+				Enclosure: "1:0:0:0", Index: "1,0", Type: "power supply", Name: "PSU A",
+				Status: jbod.Some("Critical"), Health: jbod.HealthCritical,
+			},
+			{
+				Enclosure: "1:0:0:0", Index: "3,0", Type: "temperature sensor", Name: "TEMP A",
+				Status: jbod.Some("OK"), Health: jbod.HealthOK,
+				Readings: []jbod.Reading{{
+					Kind: jbod.ReadingTemperature, Unit: jbod.UnitCelsius, Value: jbod.Some(35.0),
+					Source: "sg_ses --join", ReadAt: readAt,
+					Thresholds: &jbod.Thresholds{
+						HighCritical: jbod.Some(65.0), HighWarning: jbod.Some(60.0),
+						LowWarning: jbod.Some(0.0), LowCritical: jbod.Some(-19.0),
+					},
+				}},
+			},
+			{
+				// A sensor that reported nothing. It gets no value series
+				// at all: a zero here is a cold disk that is not cold.
+				Enclosure: "1:0:0:0", Index: "3,1", Type: "temperature sensor", Name: "TEMP B",
+				Status: jbod.Some("Unsupported"), Health: jbod.HealthUnknown,
+				Readings: []jbod.Reading{{
+					Kind: jbod.ReadingTemperature, Unit: jbod.UnitCelsius,
+					Source: "sg_ses --join", ReadAt: readAt,
+					Err: jbod.Some("the element declares this reading but reported no value"),
+				}},
+			},
+			{
+				Enclosure: "1:0:0:0", Index: "4,0", Type: "voltage sensor", Name: "VOLT 12V",
+				Status: jbod.Some("OK"), Health: jbod.HealthOK,
+				Readings: []jbod.Reading{{
+					Kind: jbod.ReadingVoltage, Unit: jbod.UnitVolts, Value: jbod.Some(12.01),
+					Source: "sg_ses --join", ReadAt: readAt,
+				}},
+			},
+		},
+		Summary: jbod.ComponentSummary{
+			Total: 6, Level: jbod.HealthCritical,
+			Counts: map[jbod.HealthLevel]int{jbod.HealthOK: 3, jbod.HealthCritical: 1, jbod.HealthUnknown: 2},
+		},
+		Collection: jbod.CollectionStatus{
+			Complete: true, ReadAt: readAt, Generation: jbod.Some("0x1"), Missing: 1,
+			Pages: []jbod.PageStatus{
+				{Name: "configuration", OK: true, Required: true},
+				{Name: "join", OK: true, Required: true},
+				{Name: "enclosure status", OK: true, Required: true},
+				{Name: "threshold in", OK: false, Required: false, Err: jbod.Some("not supported")},
+			},
+		},
+	}
+	unreadable := jbod.EnclosureStatus{
+		Enclosure: "10:0:0:0", Address: "10:0:0:0",
+		Hardware: jbod.HardwareStatus{Level: jbod.HealthUnknown, Err: jbod.Some("device or resource busy")},
+		Summary:  jbod.ComponentSummary{Level: jbod.HealthUnknown, Counts: map[jbod.HealthLevel]int{}},
+		Collection: jbod.CollectionStatus{
+			Complete: false, ReadAt: readAt, GenerationChanged: true,
+			Pages: []jbod.PageStatus{
+				{Name: "configuration", OK: false, Required: true, Err: jbod.Some("device or resource busy")},
+				{Name: "join", OK: false, Required: true, Err: jbod.Some("device or resource busy")},
+				{Name: "enclosure status", OK: false, Required: true, Err: jbod.Some("device or resource busy")},
+				{Name: "threshold in", OK: false, Required: false, Err: jbod.Some("device or resource busy")},
+			},
+		},
+	}
+	return []jbod.EnclosureStatus{full, unreadable}
 }
 
 func TestEncodeGolden(t *testing.T) {

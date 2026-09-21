@@ -37,8 +37,13 @@ func Encode(s jbod.Snapshot, errorTotals map[string]int, opts Options) string {
 	var b strings.Builder
 	encodeEnclosures(&b, s)
 	encodeSlots(&b, s)
+	encodeEnclosureHealth(&b, s)
+	encodeComponents(&b, s)
+	encodeSensors(&b, s)
+	encodeMapping(&b, s)
 	encodeTemperatures(&b, s)
 	encodeFans(&b, s, opts)
+	encodeCollection(&b, s)
 	encodeHealth(&b, s, errorTotals)
 	return b.String()
 }

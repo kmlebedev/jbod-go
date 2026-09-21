@@ -17,10 +17,17 @@ type Snapshot struct {
 	Slots []Slot
 	Disks []Disk
 	Fans  []Fan
+	// Status is the per-shelf health report: what the enclosure says about
+	// itself, its components and their sensors, and how much of that this
+	// pass managed to read (ROADMAP 5).
+	Status []EnclosureStatus
 	// Errors counts failed operations per collector.
 	Errors map[string]int
 	// Duration is how long the pass took.
 	Duration time.Duration
+	// ReadAt is when the pass started, so a consumer can tell how fresh
+	// the readings are rather than how fresh the scrape is.
+	ReadAt time.Time
 	// Up is false when the pass was cut short (deadline or shutdown), so
 	// the data is known to be incomplete.
 	Up bool
@@ -45,11 +52,17 @@ func (c *Client) Collect(ctx context.Context) (Snapshot, error) {
 	slots := c.slots(ctx, enc, p)
 	disks := c.disksFromSlots(ctx, slots, DiskOptions{WithTelemetry: true}, p)
 	fans := c.fans(ctx, enc, p)
+	// One inspection per pass, reusing the slot walk above: the health
+	// report and the metrics are two renderings of the same collection,
+	// not two collections (ROADMAP 3).
+	status := c.inspect(ctx, enc, slots, p)
 	s := Snapshot{
 		Enclosures: enc,
 		Slots:      slots,
 		Disks:      disks,
 		Fans:       fans,
+		Status:     status,
+		ReadAt:     start,
 		Errors:     p.snapshotCounts(),
 		Duration:   time.Since(start),
 		Up:         ctx.Err() == nil,
@@ -68,6 +81,17 @@ func (c *Client) Collect(ctx context.Context) (Snapshot, error) {
 	}
 	c.logger.Log(ctx, level, "collection finished",
 		"duration", s.Duration, "enclosures", len(s.Enclosures), "slots", len(s.Slots),
-		"disks", len(s.Disks), "fans", len(s.Fans), "errors", failed, "up", s.Up)
+		"disks", len(s.Disks), "fans", len(s.Fans), "components", components(s),
+		"errors", failed, "up", s.Up)
 	return s, nil
+}
+
+// components counts the elements of every shelf in a snapshot, for the
+// collection log line.
+func components(s Snapshot) int {
+	n := 0
+	for _, status := range s.Status {
+		n += len(status.Components)
+	}
+	return n
 }

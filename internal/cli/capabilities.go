@@ -4,9 +4,7 @@ package cli
 
 import (
 	"context"
-	"fmt"
 	"io"
-	"strings"
 
 	"github.com/kmlebedev/jbod-go/internal/jbod"
 )
@@ -28,16 +26,9 @@ func cmdCapabilities(ctx context.Context, args []string, out io.Writer, inv Inve
 	}
 	// The shelf can be named positionally here too, for the same reason as
 	// in list: it is the only operand the command has.
-	selector := *id
-	switch f.NArg() {
-	case 0:
-	case 1:
-		if selector != "" && !strings.EqualFold(selector, f.Arg(0)) {
-			return fmt.Errorf("the shelf is named twice, as %q and %q", selector, f.Arg(0))
-		}
-		selector = f.Arg(0)
-	default:
-		return fmt.Errorf("capabilities takes at most one enclosure, got %d arguments", f.NArg())
+	selector, err := oneEnclosure(f, "capabilities", *id)
+	if err != nil {
+		return err
 	}
 	if err := inv.Preflight(); err != nil {
 		return err

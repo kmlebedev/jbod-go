@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/kmlebedev/jbod-go/internal/jbod"
 )
@@ -24,6 +23,10 @@ func cmdList(ctx context.Context, args []string, out io.Writer, inv Inventory) e
 	disks := f.BoolP("disks", "d", false, "list enclosures with their disks")
 	fans := f.BoolP("fan", "f", false, "list cooling elements")
 	slots := f.BoolP("slots", "s", false, "list every slot, empty ones included")
+	// Components are the SES elements, which is a superset of the bays: a
+	// power supply and a temperature sensor have no sysfs slot to be
+	// listed as (ROADMAP 5).
+	components := f.BoolP("components", "c", false, "list every SES element the enclosure declares")
 	// The selector is a separate name because --enclosure is already the
 	// section switch above; enclosureAliases makes --enclosure mean this
 	// one in the commands that have no such clash.
@@ -37,20 +40,13 @@ func cmdList(ctx context.Context, args []string, out io.Writer, inv Inventory) e
 	// own, and "jbod list --enclosure-id X" answering "list requires
 	// --enclosure" helps nobody. A bare argument is unambiguous — list has
 	// no other operand — and it is what people type first.
-	selector := *id
-	switch f.NArg() {
-	case 0:
-	case 1:
-		if selector != "" && !strings.EqualFold(selector, f.Arg(0)) {
-			return fmt.Errorf("the shelf is named twice, as %q and %q", selector, f.Arg(0))
-		}
-		selector = f.Arg(0)
-	default:
-		return fmt.Errorf("list takes at most one enclosure, got %d arguments", f.NArg())
+	selector, err := oneEnclosure(f, "list", *id)
+	if err != nil {
+		return err
 	}
-	if !*enc && !*disks && !*fans && !*slots {
+	if !*enc && !*disks && !*fans && !*slots && !*components {
 		if selector == "" {
-			return errors.New("list requires --enclosure, --disks, --slots or --fan")
+			return errors.New("list requires --enclosure, --disks, --slots, --components or --fan")
 		}
 		// Naming a shelf and nothing else means "show me that shelf".
 		*enc = true
@@ -72,6 +68,7 @@ func cmdList(ctx context.Context, args []string, out io.Writer, inv Inventory) e
 	var ds []jbod.Disk
 	var ss []jbod.Slot
 	var fs []jbod.Fan
+	var statuses []jbod.EnclosureStatus
 	if *enc || *disks {
 		document.Enclosures = section(enclosures)
 	}
@@ -93,6 +90,12 @@ func cmdList(ctx context.Context, args []string, out io.Writer, inv Inventory) e
 		}
 		document.Fans = section(fs)
 	}
+	if *components {
+		if statuses, err = inv.Inspect(ctx, enclosures); err != nil {
+			return err
+		}
+		document.Components = section(componentsOf(statuses))
+	}
 	if *asJSON {
 		return writeJSON(out, document)
 	}
@@ -109,6 +112,9 @@ func cmdList(ctx context.Context, args []string, out io.Writer, inv Inventory) e
 	if *fans {
 		sections = append(sections, func() error { return printFans(out, fs) })
 	}
+	if *components {
+		sections = append(sections, func() error { return printComponents(out, statuses) })
+	}
 	for i, section := range sections {
 		if i > 0 {
 			fmt.Fprintln(out)
@@ -118,4 +124,14 @@ func cmdList(ctx context.Context, args []string, out io.Writer, inv Inventory) e
 		}
 	}
 	return nil
+}
+
+// componentsOf flattens the per-shelf reports into one component list for
+// the JSON document, which is the shape the other sections have.
+func componentsOf(statuses []jbod.EnclosureStatus) []jbod.Component {
+	var result []jbod.Component
+	for _, status := range statuses {
+		result = append(result, status.Components...)
+	}
+	return result
 }
