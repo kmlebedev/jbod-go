@@ -74,7 +74,11 @@ colliding fan metric is replaced. ROADMAP section 4.
 #### Fixed on hardware
 
 First run against a physical shelf — a WD/HGST H4060-J, 60 bays, two I/O
-modules, 60 disks — found four things the fixtures could not.
+modules, 60 disks — found three defects the fixtures could not produce, and
+a fourth weakness worth fixing while there. All of it was re-run on the same
+shelf afterwards: 30 occupied and 30 unavailable bays per module with no
+false empties, temperatures reading 31-32 °C where all sixty had read ERR,
+and eight cooling elements with no overall element among them.
 
 - Thirty populated bays per module were listed as `empty`. Each I/O module
   registers its own sysfs enclosure listing all sixty bays and reports the
@@ -94,13 +98,25 @@ modules, 60 disks — found four things the fixtures could not.
   reports it as `[3,-1] ... Fan stopped` at 0 RPM, which put a dead fan in
   front of an operator whose fans were all running and a zero-RPM series in
   front of an alert rule. Overall elements are no longer listed as devices.
-- A cooling element whose speed could not be read disappeared from the
-  listing entirely, so a table of eight fans quietly became seven.
-  `Fan.Speed` is now optional: the element stays, with a dash instead of a
-  speed, and no metric series.
+- A cooling element whose speed cannot be read was dropped from the
+  listing entirely. This shelf did not demonstrate it — all eight of its
+  fans answer — but a dropped row is indistinguishable from a fan that was
+  never there, which is the same mistake as reporting a missing reading as
+  zero. `Fan.Speed` is now optional: the element stays, with a dash instead
+  of a speed, and gets no metric series.
 
 Also from that run:
 
+- Narrowing a listing to one shelf could not be discovered. `--enclosure-id`
+  reads like a section of its own, so `jbod list --enclosure-id <id>`
+  answered "list requires --enclosure", and pasting the identifier after
+  `-e` answered "list takes no arguments" — five attempts on the shelf, none
+  of which worked. The shelf is now the one positional argument of `list`
+  and `capabilities` (`jbod list -e 0x5000...`), naming a shelf without a
+  section implies `--enclosure`, and the generic device joins the SCSI
+  address, the logical identifier and the serial number as a way to name
+  one. The device is also the only one of the four that tells two I/O
+  modules of a chassis apart.
 - An enclosure identifier can match two sysfs enclosures, because it names
   the chassis and not the I/O module. `list --slots` and `capabilities` say
   so in the heading, and `led` picks the path that owns the bay — a write
