@@ -26,6 +26,19 @@ type listDocument struct {
 	Slots      *[]jbod.Slot      `json:"slots,omitempty"`
 	Disks      *[]jbod.Disk      `json:"disks,omitempty"`
 	Fans       *[]jbod.Fan       `json:"fans,omitempty"`
+	Components *[]jbod.Component `json:"components,omitempty"`
+}
+
+// healthDocument is what "jbod health --json" prints: one report per shelf,
+// each carrying the hardware verdict, the component roll-up and the
+// completeness of the poll as three separate things (ROADMAP 5).
+type healthDocument struct {
+	Enclosures []jbod.EnclosureStatus `json:"enclosures"`
+}
+
+// sensorsDocument is what "jbod sensors --json" prints.
+type sensorsDocument struct {
+	Enclosures []sensorSection `json:"enclosures"`
 }
 
 // capabilitiesDocument is what "jbod capabilities --json" prints.

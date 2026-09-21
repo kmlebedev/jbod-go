@@ -1,0 +1,16 @@
+Enclosure 1:0:0:0  address 0x5000ccab05629d00 (stable)
+ID   NAME        TYPE                READING      VALUE  UNIT     STATUS       HEALTH   HIGH CRIT  HIGH WARN  LOW WARN  LOW CRIT
+1,0  PSU A       power supply        temperature  41     celsius  OK           ok       -          -          -         -
+2,0  FAN ENCL 1  cooling             speed        7220   rpm      OK           ok       -          -          -         -
+3,0  TEMP IOM A  temperature sensor  temperature  35     celsius  OK           ok       65         60         0         -19
+3,1  TEMP IOM B  temperature sensor  temperature  -      celsius  Unsupported  unknown  -          -          -         -
+note: the threshold in page did not answer and is not required: sg_ses: Threshold In dpage not supported
+note: 1 element(s) are declared by the configuration page and were not reported by any status page
+
+Enclosure 10:0:0:0  address 10:0:0:0 (temporary)
+no element of this enclosure reports a reading
+note: the configuration page did not answer: sg_ses: device or resource busy
+note: the join page did not answer: sg_ses: device or resource busy
+note: the enclosure status page did not answer: sg_ses: device or resource busy
+note: the threshold in page was not read: not read: the shelf reports no sensor elements
+note: the enclosure status page did not answer, so the hardware verdict is unknown: sg_ses: device or resource busy

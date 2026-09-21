@@ -25,6 +25,7 @@ type fake struct {
 	disks        []jbod.Disk
 	fans         []jbod.Fan
 	capabilities []jbod.EnclosureCapabilities
+	statuses     []jbod.EnclosureStatus
 	err          error
 	preflight    error
 	leds         []ledCall
@@ -65,6 +66,20 @@ func (f *fake) Capabilities(_ context.Context, enclosures []jbod.Enclosure) ([]j
 		for _, e := range enclosures {
 			if e.Slot == report.Enclosure {
 				kept = append(kept, report)
+				break
+			}
+		}
+	}
+	return kept, f.err
+}
+
+// Inspect honours the selection as Capabilities does.
+func (f *fake) Inspect(_ context.Context, enclosures []jbod.Enclosure) ([]jbod.EnclosureStatus, error) {
+	var kept []jbod.EnclosureStatus
+	for _, status := range f.statuses {
+		for _, e := range enclosures {
+			if e.Slot == status.Enclosure {
+				kept = append(kept, status)
 				break
 			}
 		}
