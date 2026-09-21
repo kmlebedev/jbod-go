@@ -506,14 +506,7 @@ func containsInt(list []int64, want int64) bool {
 func subenclosures(config sesConfig) []Subenclosure {
 	var result []Subenclosure
 	for _, s := range config.Subenclosures {
-		result = append(result, Subenclosure{
-			ID:        s.ID,
-			Primary:   s.Primary,
-			LogicalID: s.LogicalID,
-			Vendor:    s.Vendor,
-			Product:   s.Product,
-			Revision:  s.Revision,
-		})
+		result = append(result, Subenclosure(s))
 	}
 	return result
 }
