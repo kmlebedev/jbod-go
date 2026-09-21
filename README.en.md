@@ -8,8 +8,11 @@ Russian version: [README.md](README.md).
 
 ## Requirements and building
 
-Go 1.25+ and one dependency, [spf13/pflag](https://github.com/spf13/pflag),
-for POSIX option parsing. Talking to hardware needs Linux, the enclosure
+Go 1.25+ and two dependencies:
+[prometheus/client_golang](https://github.com/prometheus/client_golang), the
+official Prometheus client the exporter publishes through, and
+[spf13/pflag](https://github.com/spf13/pflag) for POSIX option parsing.
+Talking to hardware needs Linux, the enclosure
 driver, a readable /sys/class/enclosure and the lsscsi, sg_inq, sg_map,
 sg_ses, sginfo and scsi_temperature tools. On Debian and Ubuntu install the
 lsscsi and sg3-utils packages. Reading /dev/sg* and writing LEDs need the
@@ -425,6 +428,16 @@ The health of the collection itself was added:
 | jbod_enclosure_generation_changed | gauge | 1 when the pages of one pass described different configurations |
 | jbod_enclosure_components_missing | gauge | declared elements no status page reported |
 
+The exporter's own metrics come from client_golang and are gathered afresh on
+every request, past the collection cache:
+
+| Metric | Type | Meaning |
+| --- | --- | --- |
+| process_* | gauge/counter | CPU, memory, file descriptors and start time of the process (Linux only: read from /proc) |
+| go_* | gauge/counter | goroutines, GC and runtime memory |
+| jbod_build_info | gauge | the binary's version and toolchain in labels, value always 1 |
+| promhttp_metric_handler_requests_total | counter | /metrics responses by status code |
+
 `jbod_enclosure_info` is the join target for every series labelled with the
 SCSI address: the address is assigned at scan time and gets reassigned, so a
 dashboard that needs a stable identity joins on `enclosure` and reads
@@ -433,11 +446,16 @@ dashboard that needs a stable identity joins on `enclosure` and reads
 
 The process metrics (`process_cpu_seconds_total`,
 `process_resident_memory_bytes`, `process_virtual_memory_bytes`,
-`process_start_time_seconds`, `process_open_fds`, `process_max_fds`) are read
-from `/proc/self` on every request and never cached: the Rust version got
-them from the prometheus crate, and dashboards built on them would break
-without them. On a host without `/proc` (macOS, say) they are simply absent —
-a missing series beats a fake zero.
+`process_start_time_seconds`, `process_open_fds`, `process_max_fds`) come
+from client_golang's process collector, the same one every other Prometheus
+exporter uses; the Rust version got them from the prometheus crate, and
+dashboards built on them would break without them. They are gathered on every
+request and never cached. On a host without `/proc` (macOS, say) they are
+simply absent — a missing series beats a fake zero.
+
+The response is written by `promhttp`, so content negotiation (text 0.0.4 and
+OpenMetrics), gzip and the headers Prometheus expects come with it, and none
+of that is hand-written in this repository.
 
 ### Migrating off jbod_fan_rpm
 
@@ -498,7 +516,8 @@ half table; the exception is a fan without an RPM reading, which is skipped.
   declares, and the slot → SAS address → disk mapping. The hardware verdict
   and the completeness of the poll are two separate rows of the report.
 - Exactly one of --on and --off is required. An unknown device is an error.
-- Metric compatibility is complete, `process_*` included; on top of the Rust
+- Metric compatibility is complete, `process_*` included — published, as in
+  the Rust version, by the official Prometheus client; on top of the Rust
   version there are `jbod_up`, `jbod_scrape_duration_seconds`,
   `jbod_scrape_errors_total`, `jbod_enclosure_info`, `jbod_enclosure_slots`,
   `jbod_fan_speed_rpm`, the health and component series
@@ -543,8 +562,9 @@ When the preflight check fails (missing tools, unreadable
 `Restart=on-failure` that means a restart loop until it is fixed, but the
 reason is visible immediately.
 
-Building needs access to the module (`go mod download`) or a `vendor/`
-directory (`make vendor`): the single pflag dependency is not committed.
+Building needs access to the modules (`go mod download`) or a `vendor/`
+directory (`make vendor`): the dependencies (client_golang, pflag and their
+transitive modules) are not committed.
 
 On a Linux host with dpkg, `make deb` builds the package. The result is
 `dist/jbod-go_<version>_<arch>.deb` plus `dist/SHA256SUMS`. The package
@@ -614,10 +634,11 @@ Layout:
   and fuzzing), `sespage.go` the SES page parsers, `ses.go` the component,
   sensor and health model, `order.go` the natural slot ordering, `exec.go`
   the tool resolution and the preflight check.
-- internal/metrics — encoding a snapshot as Prometheus text format 0.0.4.
+- internal/metrics — a snapshot as a `prometheus.Collector`: the series
+  descriptors and the const metrics; the format itself is client_golang's.
 - internal/exporter — the HTTP handler, the scrape timeout, sharing
-  concurrent scrapes and the TTL cache.
-- internal/process — the `process_*` metrics from `/proc/self`.
+  concurrent scrapes, the TTL cache and the registry holding the process,
+  runtime and build-info collectors; the response is written by `promhttp`.
 - internal/cli — argument parsing: `list.go`, `led.go`, `health.go`
   (health and sensors), `prometheus.go`, table rendering in `output.go`, the version in `version.go`, the logger in
   `log.go`.

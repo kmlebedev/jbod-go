@@ -30,11 +30,11 @@ func snapshot() jbod.Snapshot {
 
 func TestEncode(t *testing.T) {
 	t.Parallel()
-	got := Encode(snapshot(), map[string]int{jbod.CollectorFans: 3}, Options{Deprecated: true})
+	got := encode(t, snapshot(), map[string]int{jbod.CollectorFans: 3}, Options{Deprecated: true})
 	for _, want := range []string{
 		"# TYPE number_of_enclosures gauge\nnumber_of_enclosures 1\n",
 		// A disk without a reading is skipped, not exported as zero.
-		`jbod_slot_temperature{slot="Slot 01",enclosure="1:0:0:0"} 41`,
+		`jbod_slot_temperature{enclosure="1:0:0:0",slot="Slot 01"} 41`,
 		"# TYPE jbod_up gauge\njbod_up 1\n",
 		"jbod_scrape_duration_seconds 1.234\n",
 		"# TYPE jbod_scrape_errors_total counter\n",
@@ -52,7 +52,7 @@ func TestEncode(t *testing.T) {
 	}
 	// Duplicate label sets collapse to one series, last value winning, as
 	// the original gauge vector did.
-	if n := strings.Count(got, `jbod_slot_temperature{slot="Slot 01"`); n != 1 {
+	if n := strings.Count(got, `jbod_slot_temperature{enclosure="1:0:0:0",slot="Slot 01"`); n != 1 {
 		t.Errorf("%d series for one label set:\n%s", n, got)
 	}
 	if !strings.Contains(got, `jbod_fan_rpm{device="Fan A",slot="2,0"} 1500`) || strings.Count(got, "jbod_fan_rpm{") != 1 {
@@ -64,7 +64,7 @@ func TestEncodeIncompleteCollection(t *testing.T) {
 	t.Parallel()
 	s := snapshot()
 	s.Up = false
-	got := Encode(s, s.Errors, Options{Deprecated: true})
+	got := encode(t, s, s.Errors, Options{Deprecated: true})
 	if !strings.Contains(got, "jbod_up 0") {
 		t.Errorf("an incomplete pass must report jbod_up 0:\n%s", got)
 	}
@@ -81,17 +81,14 @@ func TestEncodeEscapesLabels(t *testing.T) {
 		Fans:  []jbod.Fan{{Description: "Fan\\A", Index: `2,"0"`, Speed: jbod.Some(int64(900))}},
 		Up:    true,
 	}
-	got := Encode(s, nil, Options{Deprecated: true})
+	got := encode(t, s, nil, Options{Deprecated: true})
 	for _, want := range []string{
-		`jbod_slot_temperature{slot="Slot \"1\"\\x",enclosure="enc\n1"} 20`,
+		`jbod_slot_temperature{enclosure="enc\n1",slot="Slot \"1\"\\x"} 20`,
 		`jbod_fan_rpm{device="Fan\\A",slot="2,\"0\""} 900`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in\n%s", want, got)
 		}
-	}
-	if got := label("a\\b\"c\nd"); got != `a\\b\"c\nd` {
-		t.Errorf("label = %q", got)
 	}
 }
 
@@ -99,7 +96,7 @@ func TestEncodeEscapesLabels(t *testing.T) {
 // of the output if someone adds one without touching this package.
 func TestEncodeUnknownCollector(t *testing.T) {
 	t.Parallel()
-	got := Encode(jbod.Snapshot{Up: true}, map[string]int{"psu": 2, jbod.CollectorDisks: 1}, Options{Deprecated: true})
+	got := encode(t, jbod.Snapshot{Up: true}, map[string]int{"psu": 2, jbod.CollectorDisks: 1}, Options{Deprecated: true})
 	if !strings.Contains(got, `jbod_scrape_errors_total{collector="psu"} 2`) {
 		t.Errorf("unknown collector missing:\n%s", got)
 	}
@@ -132,11 +129,11 @@ func TestFanSeriesDoNotCollideAcrossEnclosures(t *testing.T) {
 		},
 		Up: true,
 	}
-	got := Encode(s, nil, Options{Deprecated: true})
+	got := encode(t, s, nil, Options{Deprecated: true})
 
 	for _, want := range []string{
-		`jbod_fan_speed_rpm{enclosure="1:0:0:0",enclosure_id="naa.5000000000000001",component="Fan A",component_id="2,0"} 1200`,
-		`jbod_fan_speed_rpm{enclosure="10:0:0:0",enclosure_id="naa.5000000000000002",component="Fan A",component_id="2,0"} 4800`,
+		`jbod_fan_speed_rpm{component="Fan A",component_id="2,0",enclosure="1:0:0:0",enclosure_id="naa.5000000000000001"} 1200`,
+		`jbod_fan_speed_rpm{component="Fan A",component_id="2,0",enclosure="10:0:0:0",enclosure_id="naa.5000000000000002"} 4800`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %s in:\n%s", want, got)
@@ -156,7 +153,7 @@ func TestFanSeriesDoNotCollideAcrossEnclosures(t *testing.T) {
 	}
 
 	// And it can be switched off once nothing reads it.
-	without := Encode(s, nil, Options{})
+	without := encode(t, s, nil, Options{})
 	if strings.Contains(without, "jbod_fan_rpm{") {
 		t.Error("the deprecated series survived Options{Deprecated: false}")
 	}
@@ -178,11 +175,11 @@ func TestEnclosureInfoCarriesTheIdentity(t *testing.T) {
 		},
 		Up: true,
 	}
-	got := Encode(s, nil, Options{})
+	got := encode(t, s, nil, Options{})
 	for _, want := range []string{
-		`jbod_enclosure_info{enclosure="1:0:0:0",enclosure_id="naa.5000",id_source="logical",vendor="ACME",model="Shelf 24",revision="",serial=""} 1`,
-		`jbod_enclosure_info{enclosure="2:0:0:0",enclosure_id="ENC2",id_source="serial",vendor="",model="",revision="",serial="ENC2"} 1`,
-		`jbod_enclosure_info{enclosure="3:0:0:0",enclosure_id="3:0:0:0",id_source="address",vendor="",model="",revision="",serial=""} 1`,
+		`jbod_enclosure_info{enclosure="1:0:0:0",enclosure_id="naa.5000",id_source="logical",model="Shelf 24",revision="",serial="",vendor="ACME"} 1`,
+		`jbod_enclosure_info{enclosure="2:0:0:0",enclosure_id="ENC2",id_source="serial",model="",revision="",serial="ENC2",vendor=""} 1`,
+		`jbod_enclosure_info{enclosure="3:0:0:0",enclosure_id="3:0:0:0",id_source="address",model="",revision="",serial="",vendor=""} 1`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %s in:\n%s", want, got)
@@ -204,7 +201,7 @@ func TestSlotCountsPerOccupancy(t *testing.T) {
 		},
 		Up: true,
 	}
-	got := Encode(s, nil, Options{})
+	got := encode(t, s, nil, Options{})
 	for _, want := range []string{
 		`jbod_enclosure_slots{enclosure="1:0:0:0",enclosure_id="naa.5000",occupancy="occupied"} 2`,
 		`jbod_enclosure_slots{enclosure="1:0:0:0",enclosure_id="naa.5000",occupancy="empty"} 1`,
@@ -216,7 +213,7 @@ func TestSlotCountsPerOccupancy(t *testing.T) {
 	}
 	// A shelf with no slots at all still publishes the three series, so a
 	// count dropping to zero is a value and not a gap.
-	empty := Encode(jbod.Snapshot{Enclosures: s.Enclosures, Up: true}, nil, Options{})
+	empty := encode(t, jbod.Snapshot{Enclosures: s.Enclosures, Up: true}, nil, Options{})
 	if n := strings.Count(empty, "jbod_enclosure_slots{"); n != 3 {
 		t.Errorf("got %d occupancy series for an empty shelf, want 3:\n%s", n, empty)
 	}
@@ -228,12 +225,12 @@ func TestSlotCountsPerOccupancy(t *testing.T) {
 // (ROADMAP 5).
 func TestEncodeSkipsUnreportedReadings(t *testing.T) {
 	t.Parallel()
-	out := Encode(fullSnapshot(), nil, Options{})
-	if strings.Contains(out, `component="TEMP B"`) && strings.Contains(out, "jbod_sensor_temperature_celsius{enclosure=\"1:0:0:0\",enclosure_id=\"ENC1\",component=\"TEMP B\"") {
+	out := encode(t, fullSnapshot(), nil, Options{})
+	if strings.Contains(out, `jbod_sensor_temperature_celsius{component="TEMP B"`) {
 		t.Errorf("a sensor without a value was published:\n%s", out)
 	}
 	// It is still visible as an element, with its condition.
-	if !strings.Contains(out, `component="TEMP B",component_id="3,1",type="temperature sensor",status="Unsupported",health="unknown"`) {
+	if !strings.Contains(out, `jbod_component_info{component="TEMP B",component_id="3,1",enclosure="1:0:0:0",enclosure_id="ENC1",health="unknown",status="Unsupported",type="temperature sensor"} 1`) {
 		t.Errorf("the unreadable sensor lost its info series:\n%s", out)
 	}
 }
@@ -242,14 +239,14 @@ func TestEncodeSkipsUnreportedReadings(t *testing.T) {
 // severity scale, and every place it could be put is wrong.
 func TestEncodeHealthLevels(t *testing.T) {
 	t.Parallel()
-	out := Encode(fullSnapshot(), nil, Options{})
+	out := encode(t, fullSnapshot(), nil, Options{})
 	for _, want := range []string{
-		`jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",source="hardware",level="warning"} 1`,
-		`jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",source="components",level="critical"} 1`,
-		`jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",source="hardware",level="unknown"} 1`,
+		`jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",level="warning",source="hardware"} 1`,
+		`jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",level="critical",source="components"} 1`,
+		`jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",level="unknown",source="hardware"} 1`,
 		// Every level keeps a series, so a shelf that recovers publishes a
 		// zero instead of leaving a stale critical series behind.
-		`jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",source="hardware",level="critical"} 0`,
+		`jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",level="critical",source="hardware"} 0`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing series:\n%s\nin:\n%s", want, out)
@@ -261,7 +258,7 @@ func TestEncodeHealthLevels(t *testing.T) {
 // hardware, because they are different alerts.
 func TestEncodeCollection(t *testing.T) {
 	t.Parallel()
-	out := Encode(fullSnapshot(), nil, Options{})
+	out := encode(t, fullSnapshot(), nil, Options{})
 	for _, want := range []string{
 		`jbod_collection_complete{enclosure="1:0:0:0",enclosure_id="ENC1"} 1`,
 		`jbod_collection_complete{enclosure="10:0:0:0",enclosure_id="10:0:0:0"} 0`,
@@ -280,12 +277,13 @@ func TestEncodeCollection(t *testing.T) {
 // every other empty one.
 func TestEncodeMappingNeedsAnAddress(t *testing.T) {
 	t.Parallel()
-	out := Encode(fullSnapshot(), nil, Options{})
-	if !strings.Contains(out, `sas_address="0x5000cca2a0d6e2f5",device="/dev/sg1",block_device="/dev/sda"`) {
+	out := encode(t, fullSnapshot(), nil, Options{})
+	if !strings.Contains(out, `jbod_slot_sas_address_info{block_device="/dev/sda",component_id="0,0",device="/dev/sg1",enclosure="1:0:0:0",enclosure_id="ENC1",sas_address="0x5000cca2a0d6e2f5",slot="0"} 1`) {
 		t.Errorf("the mapping series is missing:\n%s", out)
 	}
-	if strings.Contains(out, `jbod_slot_sas_address_info{enclosure="1:0:0:0",enclosure_id="ENC1",slot="",component_id="0,1"`) {
-		t.Errorf("a bay without an address was published:\n%s", out)
+	// SLOT 01 declares no address, so it is the one bay without a series.
+	if n := strings.Count(out, "jbod_slot_sas_address_info{"); n != 1 {
+		t.Errorf("got %d mapping series, want only the bay that has an address:\n%s", n, out)
 	}
 }
 
@@ -295,7 +293,7 @@ func TestEncodeWithoutStatus(t *testing.T) {
 	t.Parallel()
 	s := fullSnapshot()
 	s.Status = nil
-	out := Encode(s, nil, Options{})
+	out := encode(t, s, nil, Options{})
 	for _, unwanted := range []string{"jbod_enclosure_health", "jbod_component_info", "jbod_collection_complete", "jbod_sensor_"} {
 		if strings.Contains(out, unwanted) {
 			t.Errorf("%s was published without an inspection:\n%s", unwanted, out)

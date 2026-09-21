@@ -7,6 +7,42 @@ built from a checkout.
 
 ## Unreleased
 
+### Changed
+
+- The exposition is now built with
+  [prometheus/client_golang](https://github.com/prometheus/client_golang)
+  v1.24.1 instead of a hand-written text encoder. `internal/metrics` is a
+  `prometheus.Collector` that hands const metrics to the library, and
+  `internal/exporter` serves them through `promhttp` over a registry. Every
+  series keeps its name, its labels and its meaning; what changes in the
+  output is what the library owns: families are sorted by name, labels are
+  sorted within a series, a family with no samples is no longer announced
+  with a bare `# HELP`, and floats are formatted by the library (the
+  snapshot timestamp now reads `1.7899848e+09`).
+- The response goes through content negotiation, so a scrape that asks for
+  OpenMetrics or for gzip gets it. Prometheus' default text format 0.0.4 is
+  unchanged.
+- The scrape budget, the sharing of concurrent scrapes and the TTL cache are
+  unchanged and still live in `internal/exporter`: they hold a collected
+  snapshot, which is what a `prometheus.Collector` cannot do, because a
+  hardware pass needs a context and a deadline.
+
+### Added
+
+- `jbod_build_info` with the version and the toolchain of the running
+  binary, and `promhttp_metric_handler_requests_total` with the /metrics
+  responses by status code.
+- `go_*` runtime metrics (goroutines, GC, runtime memory) from the client
+  library's Go collector.
+
+### Removed
+
+- `internal/process`, the hand-written `/proc/self` reader. The `process_*`
+  series are now published by client_golang's process collector, which is
+  where they came from in the Rust original (A9). The series and their
+  meanings are the same.
+
+
 ### 1.2 — enclosure health and sensors
 
 The enclosure stops being a list of bays: every SES element it declares is
