@@ -128,9 +128,9 @@ func TestListRendersFans(t *testing.T) {
 	inv := &fake{
 		enclosures: []jbod.Enclosure{{Slot: "1:0:0:0", Device: "/dev/sg0"}},
 		fans: []jbod.Fan{
-			{Slot: "1:0:0:0", Description: "Fan A", Index: "2,0", Comment: jbod.Some("low speed"), Speed: 1200},
+			{Slot: "1:0:0:0", Description: "Fan A", Index: "2,0", Comment: jbod.Some("low speed"), Speed: jbod.Some(int64(1200))},
 			// sg_ses printed a speed but no condition after it.
-			{Slot: "1:0:0:0", Description: "Fan B", Index: "2,1", Speed: 3000},
+			{Slot: "1:0:0:0", Description: "Fan B", Index: "2,1", Speed: jbod.Some(int64(3000))},
 		},
 	}
 	var out bytes.Buffer

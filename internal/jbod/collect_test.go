@@ -217,18 +217,31 @@ func TestPartialCollectionKeepsData(t *testing.T) {
 	if len(ds) != 1 || ds[0].Temperature.Or(0) != 37 {
 		t.Fatalf("lost the readable disk: %+v", ds)
 	}
-	// A fan without an RPM reading is skipped, not fatal.
+	// A fan without an RPM reading is not fatal, and it is not dropped
+	// either: the element stays in the listing with its speed absent, so a
+	// sensor that stopped answering is visible instead of missing.
 	fs, err := c.Fans(ctx, es)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(fs) != 2 {
-		t.Fatalf("got %d fans, want the two readable ones: %+v", len(fs), fs)
+	if len(fs) != 4 {
+		t.Fatalf("got %d cooling elements, want all four: %+v", len(fs), fs)
 	}
+	readable := 0
 	for _, f := range fs {
-		if f.Description != "Fan A" || f.Speed != 1200 {
+		if f.Index == "2,1" {
+			if f.Speed.Present() {
+				t.Fatalf("the element without an RPM line reported a speed: %+v", f)
+			}
+			continue
+		}
+		readable++
+		if f.Description != "Fan A" || f.Speed.Or(0) != 1200 {
 			t.Fatalf("unexpected fan %+v", f)
 		}
+	}
+	if readable != 2 {
+		t.Fatalf("got %d readable fans, want 2", readable)
 	}
 	// Collect never fails on partial data and counts what went wrong.
 	s, err := c.Collect(ctx)
@@ -243,8 +256,8 @@ func TestPartialCollectionKeepsData(t *testing.T) {
 	if s.Errors[CollectorSlots] == 0 || s.Errors[CollectorFans] == 0 {
 		t.Fatalf("errors not counted: %v", s.Errors)
 	}
-	if len(s.Disks) != 1 || len(s.Fans) != 2 {
-		t.Fatalf("snapshot lost data: %d disks, %d fans", len(s.Disks), len(s.Fans))
+	if len(s.Disks) != 1 || len(s.Fans) != 4 {
+		t.Fatalf("snapshot lost data: %d disks, %d cooling elements", len(s.Disks), len(s.Fans))
 	}
 }
 

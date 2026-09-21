@@ -63,7 +63,7 @@ func partialSnapshot() jbod.Snapshot {
 	return jbod.Snapshot{
 		Enclosures: []jbod.Enclosure{{Slot: "1:0:0:0", Device: "/dev/sg0"}},
 		Disks:      []jbod.Disk{{Enclosure: "1:0:0:0", Slot: "Slot 01", Temperature: jbod.Some(int64(37))}},
-		Fans:       []jbod.Fan{{Slot: "1:0:0:0", Description: "Fan A", Index: "2,0", Speed: 1200}},
+		Fans:       []jbod.Fan{{Slot: "1:0:0:0", Description: "Fan A", Index: "2,0", Speed: jbod.Some(int64(1200))}},
 		Errors:     map[string]int{jbod.CollectorFans: 1},
 		Duration:   12 * time.Millisecond,
 		Up:         true,

@@ -19,8 +19,8 @@ func snapshot() jbod.Snapshot {
 			{Enclosure: "1:0:0:0", Slot: "Slot 01", Temperature: jbod.Some(int64(41))},
 		},
 		Fans: []jbod.Fan{
-			{Slot: "1:0:0:0", Description: "Fan A", Index: "2,0", Speed: 1200},
-			{Slot: "1:0:0:0", Description: "Fan A", Index: "2,0", Speed: 1500},
+			{Slot: "1:0:0:0", Description: "Fan A", Index: "2,0", Speed: jbod.Some(int64(1200))},
+			{Slot: "1:0:0:0", Description: "Fan A", Index: "2,0", Speed: jbod.Some(int64(1500))},
 		},
 		Errors:   map[string]int{jbod.CollectorFans: 1},
 		Duration: 1234 * time.Millisecond,
@@ -78,7 +78,7 @@ func TestEncodeEscapesLabels(t *testing.T) {
 	t.Parallel()
 	s := jbod.Snapshot{
 		Disks: []jbod.Disk{{Enclosure: "enc\n1", Slot: `Slot "1"\x`, Temperature: jbod.Some(int64(20))}},
-		Fans:  []jbod.Fan{{Description: "Fan\\A", Index: `2,"0"`, Speed: 900}},
+		Fans:  []jbod.Fan{{Description: "Fan\\A", Index: `2,"0"`, Speed: jbod.Some(int64(900))}},
 		Up:    true,
 	}
 	got := Encode(s, nil, Options{Deprecated: true})
@@ -127,8 +127,8 @@ func TestFanSeriesDoNotCollideAcrossEnclosures(t *testing.T) {
 			{Slot: "10:0:0:0", Device: "/dev/sg9", ID: jbod.Some("naa.5000000000000002")},
 		},
 		Fans: []jbod.Fan{
-			{Slot: "1:0:0:0", Description: "Fan A", Index: "2,0", Speed: 1200},
-			{Slot: "10:0:0:0", Description: "Fan A", Index: "2,0", Speed: 4800},
+			{Slot: "1:0:0:0", Description: "Fan A", Index: "2,0", Speed: jbod.Some(int64(1200))},
+			{Slot: "10:0:0:0", Description: "Fan A", Index: "2,0", Speed: jbod.Some(int64(4800))},
 		},
 		Up: true,
 	}

@@ -41,7 +41,19 @@ func TestLEDReportsWhatWasConfirmed(t *testing.T) {
 		{
 			name:   "a slot addressed by number names its disk too",
 			result: jbod.LEDResult{Target: "naa.5000/1", Kind: jbod.LEDLocate, Requested: true, Device: jbod.Some("/dev/sg1"), Observed: jbod.Some(true), Confirmed: true},
-			want:   "naa.5000/1 (/dev/sg1) locate: on (confirmed)",
+			want:   "naa.5000/1 locate: on (confirmed) [/dev/sg1]",
+		},
+		{
+			// An identifier shared by two I/O modules resolves to one of
+			// them, and the line says which, because the other module
+			// would have accepted the write and lit nothing.
+			name: "an identifier resolved to one of two paths",
+			result: jbod.LEDResult{
+				Target: "0x5000ccab05629d00/30", Enclosure: "1:0:31:0", Slot: "30",
+				Kind: jbod.LEDLocate, Requested: true, Device: jbod.Some("/dev/sg34"),
+				Observed: jbod.Some(true), Confirmed: true,
+			},
+			want: "0x5000ccab05629d00/30 locate: on (confirmed) [1:0:31:0 slot 30, /dev/sg34]",
 		},
 	}
 	for _, c := range cases {
@@ -175,10 +187,10 @@ func TestEndToEndOverARealClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, slot := range []struct {
-		dir    string
-		number string
-	}{{occupied, "1"}, {empty, "2"}} {
-		for name, value := range map[string]string{"slot": slot.number, "type": "array device", "status": "OK", "locate": "0", "fault": "0"} {
+		dir            string
+		number, status string
+	}{{occupied, "1", "OK"}, {empty, "2", "not installed"}} {
+		for name, value := range map[string]string{"slot": slot.number, "type": "array device", "status": slot.status, "locate": "0", "fault": "0"} {
 			if err := os.WriteFile(filepath.Join(slot.dir, name), []byte(value+"\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}

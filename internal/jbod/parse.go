@@ -79,13 +79,27 @@ var number = regexp.MustCompile(`-?\d+`)
 
 // parseTemperature extracts the current temperature in degrees Celsius from
 // scsi_temperature output.
+//
+// The separator is not fixed. scsi_temperature is a shell wrapper around
+// "sg_logs --temperature", which prints
+//
+//	Current temperature = 33 C
+//
+// with an equals sign, while other builds and smartctl print a colon
+// ("Current Drive Temperature: 33 C"). Requiring a colon is what made a
+// 60-disk shelf report ERR for every drive on a WD H4060-J, so both
+// separators are accepted.
+//
+// A separator is still required. Taking the first number out of any line
+// mentioning a current temperature would read "Current temperature sensor 2
+// unavailable" as two degrees, and a wrong reading is worse than none.
 func parseTemperature(out string) (int64, bool) {
 	for line := range strings.Lines(out) {
 		lower := strings.ToLower(line)
 		if !strings.Contains(lower, "current") || !strings.Contains(lower, "temperature") {
 			continue
 		}
-		_, value, ok := strings.Cut(line, ":")
+		value, ok := temperatureValue(line)
 		if !ok {
 			continue
 		}
@@ -98,6 +112,18 @@ func parseTemperature(out string) (int64, bool) {
 		}
 	}
 	return 0, false
+}
+
+// temperatureValue returns the part of a temperature line that holds the
+// reading, so a number inside the label ("Current temperature 1 = 33 C")
+// cannot be mistaken for it. It returns false when the line carries no
+// separator and therefore no value this parser will trust.
+func temperatureValue(line string) (string, bool) {
+	i := strings.IndexAny(line, ":=")
+	if i < 0 {
+		return "", false
+	}
+	return line[i+1:], true
 }
 
 // parseVPD80 decodes the unit serial number from VPD page 0x80, which is
@@ -121,9 +147,19 @@ var rpm = regexp.MustCompile(`(?i)(\d+)\s*rpm`)
 type fanRef struct {
 	Description string
 	Index       string
+	// Overall marks the SES overall element of the cooling type, which
+	// summarises the fans instead of being one.
+	Overall bool
 }
 
 // parseFanElements picks the cooling elements out of "sg_ses -j -ff" output.
+//
+// An element index of -1 is SES's overall element for the type: a summary of
+// every fan of the enclosure, not a fan. A WD H4060-J reports it as
+// "[3,-1] ... Fan stopped" at 0 RPM, which the listing used to print as a
+// dead fan and the exporter used to publish as a zero-RPM series — a false
+// alarm on a shelf whose fans are all running. Overall elements are counted
+// but not listed as devices.
 func parseFanElements(out string) []fanRef {
 	var refs []fanRef
 	for line := range strings.Lines(out) {
@@ -131,9 +167,24 @@ func parseFanElements(out string) []fanRef {
 		if m == nil {
 			continue
 		}
-		refs = append(refs, fanRef{Description: strings.TrimSpace(m[1]), Index: m[2]})
+		ref := fanRef{Description: strings.TrimSpace(m[1]), Index: m[2]}
+		if _, element, ok := strings.Cut(ref.Index, ","); ok && strings.TrimSpace(element) == "-1" {
+			ref.Overall = true
+		}
+		refs = append(refs, ref)
 	}
 	return refs
+}
+
+// individual returns the elements that are real fans.
+func individual(refs []fanRef) []fanRef {
+	kept := refs[:0:0]
+	for _, ref := range refs {
+		if !ref.Overall {
+			kept = append(kept, ref)
+		}
+	}
+	return kept
 }
 
 // parseFanSpeed reads the speed of one element from "sg_ses --index=" output,
