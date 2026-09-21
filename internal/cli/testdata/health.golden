@@ -1,0 +1,18 @@
+Enclosure 1:0:0:0  address 0x5000ccab05629d00 (stable)  health critical
+SCOPE       LEVEL     DETAIL
+hardware    warning   INVOP=0 INFO=0 NON-CRIT=1 CRIT=0 UNRECOV=0
+components  critical  8 elements: 4 ok, 1 critical, 3 unknown
+collection  complete  3/4 pages read, generation 0x1
+note: the threshold in page did not answer and is not required: sg_ses: Threshold In dpage not supported
+note: 1 element(s) are declared by the configuration page and were not reported by any status page
+
+Enclosure 10:0:0:0  address 10:0:0:0 (temporary)  health unknown
+SCOPE       LEVEL    DETAIL
+hardware    unknown  INVOP=- INFO=- NON-CRIT=- CRIT=- UNRECOV=-
+components  unknown  no elements reported
+collection  partial  1/4 pages read
+note: the configuration page did not answer: sg_ses: device or resource busy
+note: the join page did not answer: sg_ses: device or resource busy
+note: the enclosure status page did not answer: sg_ses: device or resource busy
+note: the threshold in page was not read: not read: the shelf reports no sensor elements
+note: the enclosure status page did not answer, so the hardware verdict is unknown: sg_ses: device or resource busy

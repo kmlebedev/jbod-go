@@ -43,6 +43,10 @@ make build
 ./bin/jbod list --slots --enclosure-id naa.50050cc10c400000 --json
 ./bin/jbod capabilities
 ./bin/jbod capabilities --enclosure naa.50050cc10c400000 --json
+./bin/jbod health
+./bin/jbod health naa.50050cc10c400000 --json
+./bin/jbod sensors
+./bin/jbod list --components naa.50050cc10c400000
 sudo ./bin/jbod led --locate /dev/sda --on
 sudo ./bin/jbod led --locate /dev/sda --off
 sudo ./bin/jbod led --fault /dev/sg1 --on
@@ -50,7 +54,7 @@ sudo ./bin/jbod led --enclosure naa.50050cc10c400000 --locate 5 --on
 ./bin/jbod prometheus --ip-address 127.0.0.1 --port 9945
 ```
 
-`-e`, `-d`, `-f` and `-s` are independent: each adds its own section, so
+`-e`, `-d`, `-f`, `-s` and `-c` are independent: each adds its own section, so
 `list -ef` prints both the enclosures and the fans. Disks are ordered
 naturally — `Slot 2` comes before `Slot 10`.
 
@@ -199,6 +203,112 @@ The rules behind it:
 is `null`, not zero; sections that were not requested are missing from the
 document, and a requested but empty one is `[]`.
 
+## Enclosure health, components and sensors
+
+`jbod health` answers "what is wrong with this shelf", `jbod sensors` shows
+the numbers that answer rests on, and `jbod list --components` lists every
+SES element the enclosure declares: bays, power supplies, fans, sensors and
+I/O modules.
+
+One pass reads four pages: Configuration (`--page=cf`), Enclosure Status
+(`--page=es`), the join of Enclosure Status, Element Descriptor and
+Additional Element Status (`--join`), and Threshold In (`--page=th`).
+Nothing is written: reading a threshold is a read, and changing thresholds
+or cooling is 1.4.
+
+```
+$ jbod health
+Enclosure 1:0:0:0  address 0x5000ccab05629d00 (stable)  health critical
+SCOPE       LEVEL     DETAIL
+hardware    warning   INVOP=0 INFO=0 NON-CRIT=1 CRIT=0 UNRECOV=0
+components  critical  8 elements: 4 ok, 1 critical, 3 unknown
+collection  complete  3/4 pages read, generation 0x1
+note: the threshold in page did not answer and is not required: sg_ses: Threshold In dpage not supported
+note: 1 element(s) are declared by the configuration page and were not reported by any status page
+```
+
+The three rows answer three different questions and are deliberately not
+collapsed into one:
+
+| Row | What it is |
+| --- | --- |
+| `hardware` | the enclosure's own verdict: the five bits of the Enclosure Status page |
+| `components` | the worst condition among its elements |
+| `collection` | how complete the poll was: which pages answered, and whether they agreed on the generation code |
+
+A fault and a failed poll are different events. A shelf whose page did not
+answer does not become healthy, and a shelf that does not implement the
+threshold page does not become broken. So a page that failed lands in the
+`collection` row and in the notes, never in `hardware`, and a condition bit
+that was not read prints as `-` rather than as `0`.
+
+The levels:
+
+| Level | When |
+| --- | --- |
+| `ok` | the enclosure reports `OK` |
+| `warning` | SES `noncritical` |
+| `critical` | SES `critical` |
+| `unrecoverable` | SES `unrecoverable` |
+| `absent` | `not installed`: the element is declared and is not there |
+| `unknown` | `unsupported`, `unknown`, `not available`, `no access allowed`, or nothing was read |
+
+`unknown` and `absent` are counted but take no part in the worst-of. A
+two-module chassis would otherwise always report `unknown`: thirty bays of
+the far module answer with "no access allowed", which is the boundary of
+what that module can see and not a diagnosis of the shelf. When nothing at
+all was readable the answer is `unknown`, because then there is no
+observation to report.
+
+An element the Configuration page declares and no status page reported stays
+in the listing as `declared only`. "The shelf says it has two power supplies
+and one of them answered" is a finding, and a table showing one power supply
+hides it.
+
+```
+$ jbod sensors
+Enclosure 1:0:0:0  address 0x5000ccab05629d00 (stable)
+ID   NAME        TYPE                READING      VALUE  UNIT     STATUS       HEALTH   HIGH CRIT  HIGH WARN  LOW WARN  LOW CRIT
+1,0  PSU A       power supply        temperature  41     celsius  OK           ok       -          -          -         -
+3,0  TEMP IOM A  temperature sensor  temperature  35     celsius  OK           ok       65         60         0         -19
+3,1  TEMP IOM B  temperature sensor  temperature  -      celsius  Unsupported  unknown  -          -          -         -
+```
+
+The thresholds are the enclosure's own numbers from the Threshold In page,
+not a constant in an alerting rule: the next shelf declares different ones.
+A sensor that declares a reading and reported no value keeps its row with a
+`-`: a dropped row is indistinguishable from a sensor that never existed,
+and a zero is a lie. In JSON every reading carries its value, unit, source,
+read time and the reason the value is absent.
+
+```
+$ jbod list --components
+Enclosure 1:0:0:0  address 0x5000ccab05629d00 (stable)
+ID   TYPE                NAME        STATUS             HEALTH    READINGS  SLOT  SAS ADDRESS         DEVICE    MAP
+0,0  array device slot   SLOT 00     OK                 ok        -         0     0x5000cca2a0d6e2f5  /dev/sg1  /dev/sda
+0,1  array device slot   SLOT 01     No access allowed  unknown   -         1     -                   -         -
+0,2  array device slot   SLOT 02     declared only      unknown   -         -     -                   -         -
+1,1  power supply        PSU B       Critical           critical  -         -     -                   -         -
+2,0  cooling             FAN ENCL 1  OK                 ok        7220 rpm  -     -                   -         -
+```
+
+The SAS ADDRESS, DEVICE and MAP columns are the slot → SAS address → disk
+mapping: the address comes from the Additional Element Status page, the disk
+from the sysfs walk, and what ties them together is the bay number the
+enclosure itself reports (falling back to the element number and then to the
+component name). The null address is never published: it is not an identity,
+and every empty bay would join on it.
+
+The generation code is read from every page. When they disagree, the pages
+describe different configurations: the report is marked as a mixture and
+`collection` becomes `partial`. The pass is not repeated — a shelf being
+reconfigured would repeat forever — and what happened is said plainly
+instead.
+
+`--json` is available on `health`, `sensors` and `list --components`. The
+commands decide nothing for the operator: `jbod health` prints the condition
+and exits 0 unless the collection itself failed.
+
 ## Prometheus
 
 Both ways of starting it run the same exporter:
@@ -230,6 +340,12 @@ Tuning flags (`--help` shows the defaults):
 | `--deprecated-metrics` | true | also export the pre-1.1 series (`jbod_fan_rpm`) |
 | `--log-level` | info | debug, info, warn or error |
 | `--log-format` | json | json for systemd, text for a terminal |
+
+Since 1.2 the SES pages are read as well: up to four `sg_ses` calls per
+shelf per pass, shelves in parallel and pages in sequence within a shelf
+(they go through the same SES processor, so there is nothing to win by
+queueing them at once). The threshold page is only read when the shelf
+reports sensor elements.
 
 External commands run in parallel up to `--concurrency`: a 60-slot shelf
 means 120 process starts, and sequentially they do not fit into a scrape
@@ -276,13 +392,38 @@ Added in 1.1:
 | jbod_enclosure_slots | gauge | enclosure, enclosure_id, occupancy | slots per state |
 | jbod_fan_speed_rpm | gauge | enclosure, enclosure_id, component, component_id | fan RPM without collisions |
 
+Added in 1.2:
+
+| Metric | Type | Labels | Meaning |
+| --- | --- | --- | --- |
+| jbod_enclosure_health | gauge | enclosure, enclosure_id, source, level | 1 on the current level; source is `hardware` or `components` |
+| jbod_enclosure_components | gauge | enclosure, enclosure_id, type, health | elements per type in each condition |
+| jbod_component_info | gauge | enclosure, enclosure_id, component, component_id, type, status, health | one element, always 1 |
+| jbod_sensor_temperature_celsius | gauge | enclosure, enclosure_id, component, component_id, type | temperature of an enclosure element |
+| jbod_sensor_voltage_volts | gauge | the same | voltage |
+| jbod_sensor_current_amps | gauge | the same | current |
+| jbod_sensor_*_threshold_* | gauge | the same plus threshold | the enclosure's own limit: high_critical, high_warning, low_warning, low_critical |
+| jbod_slot_sas_address_info | gauge | enclosure, enclosure_id, slot, component_id, sas_address, device, block_device | the slot → SAS address → disk mapping, always 1 |
+
+Health is a label and never a number: a numeric scale would have to put
+`unknown` somewhere, and every place is wrong. Next to `ok` it hides a shelf
+nobody could read; next to `critical` it wakes somebody up over a threshold
+page that is not implemented. Every level keeps a series, so a shelf that
+recovers publishes a zero instead of leaving a stale critical series behind.
+A reading the hardware did not report gets no series at all.
+
 The health of the collection itself was added:
 
 | Metric | Type | Meaning |
 | --- | --- | --- |
 | jbod_up | gauge | 1 when the collection completed |
 | jbod_scrape_duration_seconds | gauge | duration of the last collection |
-| jbod_scrape_errors_total | counter | cumulative failures per collector (enclosures, slots, disks, fans, led) |
+| jbod_scrape_errors_total | counter | cumulative failures per collector (enclosures, slots, disks, fans, components, led) |
+| jbod_snapshot_timestamp_seconds | gauge | when the collection behind this response started |
+| jbod_collection_complete | gauge | 1 when every required SES page of a shelf answered and the pages agreed |
+| jbod_ses_page_read | gauge | whether one SES page answered (labels: page, required) |
+| jbod_enclosure_generation_changed | gauge | 1 when the pages of one pass described different configurations |
+| jbod_enclosure_components_missing | gauge | declared elements no status page reported |
 
 `jbod_enclosure_info` is the join target for every series labelled with the
 SCSI address: the address is assigned at scan time and gets reassigned, so a
@@ -352,11 +493,20 @@ half table; the exception is a fan without an RPM reading, which is skipped.
   the result of a write is read back, and an unconfirmed write is called one.
 - There is a `capabilities` command, and `--json` on `list`, `capabilities`
   and `led`.
+- There are `health`, `sensors` and `list --components`: the condition of a
+  shelf and of its elements, the sensors with the thresholds the enclosure
+  declares, and the slot → SAS address → disk mapping. The hardware verdict
+  and the completeness of the poll are two separate rows of the report.
 - Exactly one of --on and --off is required. An unknown device is an error.
 - Metric compatibility is complete, `process_*` included; on top of the Rust
   version there are `jbod_up`, `jbod_scrape_duration_seconds`,
-  `jbod_scrape_errors_total`, `jbod_enclosure_info`, `jbod_enclosure_slots`
-  and `jbod_fan_speed_rpm`.
+  `jbod_scrape_errors_total`, `jbod_enclosure_info`, `jbod_enclosure_slots`,
+  `jbod_fan_speed_rpm`, the health and component series
+  (`jbod_enclosure_health`, `jbod_enclosure_components`,
+  `jbod_component_info`), the sensors with their thresholds
+  (`jbod_sensor_*`), the bay mapping (`jbod_slot_sas_address_info`) and the
+  completeness of the collection (`jbod_collection_complete`,
+  `jbod_ses_page_read`, `jbod_snapshot_timestamp_seconds`).
 
 ## Installing, and the Debian package
 
@@ -433,7 +583,13 @@ tool output have table tests and fuzz targets:
 go test -run xxx -fuzz FuzzParseVPD80 -fuzztime 30s ./internal/jbod/
 ```
 
-The `list` output and the metric text are pinned by golden files, so an
+The SES pages are parsed from fixtures: configuration, enclosure status, the
+join with Additional Element Status and the thresholds, including the three
+spellings of an element type, the null SAS address, the overall element of a
+type and a sensor without a value.
+
+The `list`, `health` and `sensors` output and the metric text are pinned by
+golden files, so an
 extra or missing line shows up as a diff instead of slipping through:
 
 ```sh
@@ -455,12 +611,13 @@ Layout:
   shared body of both binaries is `internal/cli.Main`.
 - internal/jbod — domain types, collection through sysfs and the sg3-utils,
   LED control; `parse.go` holds the pure parsers of tool output (table tests
-  and fuzzing), `order.go` the natural slot ordering, `exec.go` the tool
-  resolution and the preflight check.
+  and fuzzing), `sespage.go` the SES page parsers, `ses.go` the component,
+  sensor and health model, `order.go` the natural slot ordering, `exec.go`
+  the tool resolution and the preflight check.
 - internal/metrics — encoding a snapshot as Prometheus text format 0.0.4.
 - internal/exporter — the HTTP handler, the scrape timeout, sharing
   concurrent scrapes and the TTL cache.
 - internal/process — the `process_*` metrics from `/proc/self`.
-- internal/cli — argument parsing: `list.go`, `led.go`, `prometheus.go`,
-  table rendering in `output.go`, the version in `version.go`, the logger in
+- internal/cli — argument parsing: `list.go`, `led.go`, `health.go`
+  (health and sensors), `prometheus.go`, table rendering in `output.go`, the version in `version.go`, the logger in
   `log.go`.

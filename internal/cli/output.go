@@ -229,3 +229,301 @@ func printCapabilities(out io.Writer, reports []jbod.EnclosureCapabilities) erro
 	}
 	return nil
 }
+
+// The v1.2 reports: the condition of a shelf, the elements behind it and
+// the sensor values with their thresholds (ROADMAP 5).
+//
+// All three print the enclosure's own answers and the gaps in the poll as
+// two different things, which is why the collection row exists and why a
+// failed page becomes a note rather than an absent element.
+
+// statusHeading names one shelf in the health, sensor and component
+// reports, the way the capability report does.
+func statusHeading(status jbod.EnclosureStatus) string {
+	stability := "temporary"
+	if status.StableID {
+		stability = "stable"
+	}
+	return fmt.Sprintf("Enclosure %s  address %s (%s)", status.Enclosure, status.Address, stability)
+}
+
+// conditionBits renders the five bits of the Enclosure Status page. A bit
+// the page did not report prints as "-", because a shelf nobody could ask
+// is not a shelf that answered zero.
+func conditionBits(h jbod.HardwareStatus) string {
+	pairs := []struct {
+		name  string
+		value jbod.Optional[bool]
+	}{
+		{"INVOP", h.InvalidOperation}, {"INFO", h.Info}, {"NON-CRIT", h.NonCritical},
+		{"CRIT", h.Critical}, {"UNRECOV", h.Unrecoverable},
+	}
+	parts := make([]string, 0, len(pairs))
+	for _, pair := range pairs {
+		value := noAttribute
+		if v, ok := pair.value.Get(); ok {
+			value = "0"
+			if v {
+				value = "1"
+			}
+		}
+		parts = append(parts, pair.name+"="+value)
+	}
+	return strings.Join(parts, " ")
+}
+
+// componentCounts renders the roll-up as "60 ok, 8 unknown", in the fixed
+// order of the levels so two shelves read the same way.
+func componentCounts(summary jbod.ComponentSummary) string {
+	var parts []string
+	for _, level := range jbod.HealthLevels {
+		if n := summary.Count(level); n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", n, level))
+		}
+	}
+	if len(parts) == 0 {
+		return "no elements reported"
+	}
+	return fmt.Sprintf("%d elements: %s", summary.Total, strings.Join(parts, ", "))
+}
+
+// collectionDetail says what the poll got, in pages.
+func collectionDetail(status jbod.CollectionStatus) string {
+	ok := 0
+	for _, page := range status.Pages {
+		if page.OK {
+			ok++
+		}
+	}
+	detail := fmt.Sprintf("%d/%d pages read", ok, len(status.Pages))
+	if generation, has := status.Generation.Get(); has {
+		detail += ", generation " + generation
+	}
+	if status.GenerationChanged {
+		detail += " (changed during the pass)"
+	}
+	return detail
+}
+
+// printHealth renders the condition of each shelf.
+//
+// The three rows are deliberately separate. The hardware row is the
+// enclosure's own verdict, the components row is what its elements report,
+// and the collection row is how much of that was readable — a partial poll
+// is not a fault and must not be printed as one (ROADMAP 5).
+func printHealth(out io.Writer, statuses []jbod.EnclosureStatus) error {
+	for i, status := range statuses {
+		if i > 0 {
+			fmt.Fprintln(out)
+		}
+		fmt.Fprintf(out, "%s  health %s\n", statusHeading(status), status.Level())
+		w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(w, "SCOPE\tLEVEL\tDETAIL")
+		fmt.Fprintf(w, "hardware\t%s\t%s\n", status.Hardware.Level, conditionBits(status.Hardware))
+		fmt.Fprintf(w, "components\t%s\t%s\n", status.Summary.Level, componentCounts(status.Summary))
+		fmt.Fprintf(w, "collection\t%s\t%s\n", completeness(status.Collection), collectionDetail(status.Collection))
+		if err := w.Flush(); err != nil {
+			return err
+		}
+		for _, note := range collectionNotes(status) {
+			fmt.Fprintln(out, "note: "+note)
+		}
+	}
+	return nil
+}
+
+// completeness is the word the collection row shows.
+func completeness(status jbod.CollectionStatus) string {
+	if status.Complete {
+		return "complete"
+	}
+	return "partial"
+}
+
+// collectionNotes lists what the poll did not get, one line each: the pages
+// that failed, the elements the configuration declared but nothing
+// reported, and a configuration that changed mid-pass.
+func collectionNotes(status jbod.EnclosureStatus) []string {
+	var notes []string
+	for _, page := range status.Collection.Pages {
+		err, failed := page.Err.Get()
+		if !failed {
+			continue
+		}
+		word := "did not answer"
+		if page.OK {
+			// A page that was not required and was not read at all.
+			word = "was not read"
+		} else if !page.Required {
+			word = "did not answer and is not required"
+		}
+		notes = append(notes, fmt.Sprintf("the %s page %s: %s", page.Name, word, err))
+	}
+	if n := status.Collection.Missing; n > 0 {
+		notes = append(notes, fmt.Sprintf(
+			"%d element(s) are declared by the configuration page and were not reported by any status page", n))
+	}
+	if status.Collection.GenerationChanged {
+		notes = append(notes, "the pages of this pass report different generation codes, "+
+			"so this report mixes two configurations; run it again")
+	}
+	if err, ok := status.Hardware.Err.Get(); ok {
+		notes = append(notes, "the enclosure status page did not answer, so the hardware verdict is unknown: "+err)
+	}
+	return notes
+}
+
+// number renders a reading. An absent value is a dash and never a zero.
+func readingValue(r jbod.Reading) string {
+	v, ok := r.Value.Get()
+	if !ok {
+		return noAttribute
+	}
+	return strconv.FormatFloat(v, 'f', -1, 64)
+}
+
+// threshold renders one limit of a reading.
+func threshold(r jbod.Reading, pick func(jbod.Thresholds) jbod.Optional[float64]) string {
+	if r.Thresholds == nil {
+		return noAttribute
+	}
+	v, ok := pick(*r.Thresholds).Get()
+	if !ok {
+		return noAttribute
+	}
+	return strconv.FormatFloat(v, 'f', -1, 64)
+}
+
+// unitSuffix is the short form of a unit, for the component listing.
+var unitSuffix = map[string]string{
+	jbod.UnitCelsius: "C",
+	jbod.UnitRPM:     "rpm",
+	jbod.UnitVolts:   "V",
+	jbod.UnitAmps:    "A",
+}
+
+// readings renders every value of one element for the component table.
+func readings(c jbod.Component) string {
+	if len(c.Readings) == 0 {
+		return noAttribute
+	}
+	parts := make([]string, 0, len(c.Readings))
+	for _, r := range c.Readings {
+		// A reading the element did not report is a dash on its own: "- C"
+		// reads as a temperature that is somehow missing its digits.
+		if !r.Value.Present() {
+			parts = append(parts, noAttribute)
+			continue
+		}
+		suffix := unitSuffix[r.Unit]
+		if suffix == "" {
+			suffix = r.Unit
+		}
+		parts = append(parts, readingValue(r)+" "+suffix)
+	}
+	return strings.Join(parts, ", ")
+}
+
+// printSensors renders the sensor values of each shelf with the thresholds
+// the enclosure declares for them.
+func printSensors(out io.Writer, statuses []jbod.EnclosureStatus) error {
+	for i, status := range statuses {
+		if i > 0 {
+			fmt.Fprintln(out)
+		}
+		fmt.Fprintln(out, statusHeading(status))
+		sensors := status.Sensors()
+		if len(sensors) == 0 {
+			fmt.Fprintln(out, "no element of this enclosure reports a reading")
+			for _, note := range collectionNotes(status) {
+				fmt.Fprintln(out, "note: "+note)
+			}
+			continue
+		}
+		w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(w, "ID\tNAME\tTYPE\tREADING\tVALUE\tUNIT\tSTATUS\tHEALTH\tHIGH CRIT\tHIGH WARN\tLOW WARN\tLOW CRIT")
+		for _, c := range sensors {
+			for _, r := range c.Readings {
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+					c.Index, name(c), c.Type, r.Kind, readingValue(r), r.Unit,
+					c.Status.Or(noAttribute), c.Health,
+					threshold(r, func(t jbod.Thresholds) jbod.Optional[float64] { return t.HighCritical }),
+					threshold(r, func(t jbod.Thresholds) jbod.Optional[float64] { return t.HighWarning }),
+					threshold(r, func(t jbod.Thresholds) jbod.Optional[float64] { return t.LowWarning }),
+					threshold(r, func(t jbod.Thresholds) jbod.Optional[float64] { return t.LowCritical }))
+			}
+		}
+		if err := w.Flush(); err != nil {
+			return err
+		}
+		for _, note := range collectionNotes(status) {
+			fmt.Fprintln(out, "note: "+note)
+		}
+	}
+	return nil
+}
+
+// name is the element descriptor, or a dash when the enclosure publishes
+// none. An empty column is harder to read than an explicit absence.
+func name(c jbod.Component) string {
+	if strings.TrimSpace(c.Name) == "" {
+		return noAttribute
+	}
+	return c.Name
+}
+
+// printComponents renders every element of each shelf, including the ones
+// the configuration declares and no status page reported.
+//
+// The SAS address and the device are the two halves of the slot → SAS
+// address → disk mapping: the enclosure names the bay, the kernel names the
+// disk, and this is where the two meet (ROADMAP 5).
+func printComponents(out io.Writer, statuses []jbod.EnclosureStatus) error {
+	for i, status := range statuses {
+		if i > 0 {
+			fmt.Fprintln(out)
+		}
+		fmt.Fprintln(out, statusHeading(status))
+		w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(w, "ID\tTYPE\tNAME\tSTATUS\tHEALTH\tREADINGS\tSLOT\tSAS ADDRESS\tDEVICE\tMAP")
+		for _, c := range status.Components {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				c.Index, c.Type, name(c), componentStatus(c), c.Health, readings(c),
+				slotCell(c), addresses(c), c.Device.Or(noDevice), c.Map.Or(noDevice))
+		}
+		if err := w.Flush(); err != nil {
+			return err
+		}
+		for _, note := range collectionNotes(status) {
+			fmt.Fprintln(out, "note: "+note)
+		}
+	}
+	return nil
+}
+
+// componentStatus renders the condition the enclosure reported. An element
+// that only exists in the configuration page is marked as such, because
+// "no status" and "declared and never reported" are different findings.
+func componentStatus(c jbod.Component) string {
+	if c.Declared {
+		return "declared only"
+	}
+	return c.Status.Or(noAttribute)
+}
+
+// slotCell renders the bay number of an element that has one.
+func slotCell(c jbod.Component) string {
+	n, ok := c.SlotNumber.Get()
+	if !ok {
+		return noAttribute
+	}
+	return strconv.FormatInt(n, 10)
+}
+
+// addresses renders the SAS addresses the enclosure reports for an element.
+func addresses(c jbod.Component) string {
+	if len(c.SASAddresses) == 0 {
+		return noAttribute
+	}
+	return strings.Join(c.SASAddresses, ",")
+}

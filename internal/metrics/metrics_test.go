@@ -221,3 +221,87 @@ func TestSlotCountsPerOccupancy(t *testing.T) {
 		t.Errorf("got %d occupancy series for an empty shelf, want 3:\n%s", n, empty)
 	}
 }
+
+// A reading the hardware did not report gets no series. A zero temperature
+// is a value an operator acts on, and publishing one for a sensor that said
+// nothing is the failure the whole absence model exists to prevent
+// (ROADMAP 5).
+func TestEncodeSkipsUnreportedReadings(t *testing.T) {
+	t.Parallel()
+	out := Encode(fullSnapshot(), nil, Options{})
+	if strings.Contains(out, `component="TEMP B"`) && strings.Contains(out, "jbod_sensor_temperature_celsius{enclosure=\"1:0:0:0\",enclosure_id=\"ENC1\",component=\"TEMP B\"") {
+		t.Errorf("a sensor without a value was published:\n%s", out)
+	}
+	// It is still visible as an element, with its condition.
+	if !strings.Contains(out, `component="TEMP B",component_id="3,1",type="temperature sensor",status="Unsupported",health="unknown"`) {
+		t.Errorf("the unreadable sensor lost its info series:\n%s", out)
+	}
+}
+
+// Health is a label and never a number: "unknown" has no place on a numeric
+// severity scale, and every place it could be put is wrong.
+func TestEncodeHealthLevels(t *testing.T) {
+	t.Parallel()
+	out := Encode(fullSnapshot(), nil, Options{})
+	for _, want := range []string{
+		`jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",source="hardware",level="warning"} 1`,
+		`jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",source="components",level="critical"} 1`,
+		`jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",source="hardware",level="unknown"} 1`,
+		// Every level keeps a series, so a shelf that recovers publishes a
+		// zero instead of leaving a stale critical series behind.
+		`jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",source="hardware",level="critical"} 0`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing series:\n%s\nin:\n%s", want, out)
+		}
+	}
+}
+
+// The completeness of the poll is published apart from the condition of the
+// hardware, because they are different alerts.
+func TestEncodeCollection(t *testing.T) {
+	t.Parallel()
+	out := Encode(fullSnapshot(), nil, Options{})
+	for _, want := range []string{
+		`jbod_collection_complete{enclosure="1:0:0:0",enclosure_id="ENC1"} 1`,
+		`jbod_collection_complete{enclosure="10:0:0:0",enclosure_id="10:0:0:0"} 0`,
+		`jbod_ses_page_read{enclosure="1:0:0:0",enclosure_id="ENC1",page="threshold in",required="false"} 0`,
+		`jbod_enclosure_generation_changed{enclosure="10:0:0:0",enclosure_id="10:0:0:0"} 1`,
+		`jbod_enclosure_components_missing{enclosure="1:0:0:0",enclosure_id="ENC1"} 1`,
+		"jbod_snapshot_timestamp_seconds ",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing series:\n%s\nin:\n%s", want, out)
+		}
+	}
+}
+
+// A bay with no address maps to nothing, and an empty label would join to
+// every other empty one.
+func TestEncodeMappingNeedsAnAddress(t *testing.T) {
+	t.Parallel()
+	out := Encode(fullSnapshot(), nil, Options{})
+	if !strings.Contains(out, `sas_address="0x5000cca2a0d6e2f5",device="/dev/sg1",block_device="/dev/sda"`) {
+		t.Errorf("the mapping series is missing:\n%s", out)
+	}
+	if strings.Contains(out, `jbod_slot_sas_address_info{enclosure="1:0:0:0",enclosure_id="ENC1",slot="",component_id="0,1"`) {
+		t.Errorf("a bay without an address was published:\n%s", out)
+	}
+}
+
+// A snapshot with no inspection — an old client, or a pass that failed
+// before the pages were read — renders the pre-1.2 output and nothing else.
+func TestEncodeWithoutStatus(t *testing.T) {
+	t.Parallel()
+	s := fullSnapshot()
+	s.Status = nil
+	out := Encode(s, nil, Options{})
+	for _, unwanted := range []string{"jbod_enclosure_health", "jbod_component_info", "jbod_collection_complete", "jbod_sensor_"} {
+		if strings.Contains(out, unwanted) {
+			t.Errorf("%s was published without an inspection:\n%s", unwanted, out)
+		}
+	}
+	if !strings.Contains(out, "jbod_enclosure_info") {
+		t.Errorf("the pre-1.2 series are missing:\n%s", out)
+	}
+}
