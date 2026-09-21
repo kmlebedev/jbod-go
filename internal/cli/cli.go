@@ -22,14 +22,19 @@ import (
 // Help is the top-level usage of the jbod binary.
 const Help = `jbod - Generic storage enclosure tool (Go)
 Usage:
-  jbod list [-e|--enclosure] [-d|--disks] [-f|--fan] [-s|--slots] [--json]
-  jbod capabilities [--enclosure ID] [--json]
+  jbod list [-e|--enclosure] [-d|--disks] [-f|--fan] [-s|--slots] [ENCLOSURE] [--json]
+  jbod capabilities [ENCLOSURE] [--json]
   jbod led [-l|--locate TARGET] [-f|--fault TARGET] --on|--off [--json]
   jbod prometheus [-i|--ip-address IP] [-p|--port PORT] [tuning flags]
 
-  --slots lists every bay, empty ones included; --enclosure-id narrows any
-  listing to one shelf, addressed by its logical identifier, its unit serial
-  number or its SCSI address.
+  --slots lists every bay, empty ones included.
+
+  ENCLOSURE narrows a listing to one shelf and is any of the four spellings
+  the listings print: the logical identifier, the unit serial number, the
+  SCSI address or the generic device. Two I/O modules of one chassis share
+  the identifier and the serial, so the device is what tells them apart.
+  "jbod list -e 0x5000..." and "jbod list --enclosure-id 0x5000..." are the
+  same thing, and naming a shelf without a section lists that shelf.
 
   A led TARGET is a device path as before (/dev/sda, /dev/sg1), or a slot
   written as ENCLOSURE/SLOT, or a bare SLOT together with --enclosure. A slot

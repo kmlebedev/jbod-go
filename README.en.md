@@ -108,8 +108,25 @@ the indicator on). So `sensed` is an alarm, `requested` is an operator's
 marker, and merging them would turn one into the other. A write sets only the
 requested bit, and the readback compares that bit.
 
+A shelf is selected by any of the four spellings the tables themselves
+print — the logical identifier, the serial number, the SCSI address or the
+generic device:
+
+```sh
+jbod list -e 0x5000ccab05629d00       # positionally
+jbod list -e --enclosure-id /dev/sg2  # the same, as a flag
+jbod list --slots 1:0:31:0            # this path only
+jbod list 0x5000ccab05629d00          # no section given: lists the enclosures
+jbod capabilities /dev/sg33
+```
+
+The shelf is the only positional argument `list` and `capabilities` take, so
+it needs no flag. Naming a shelf and no section implies `--enclosure`.
+
 One identifier can belong to two sysfs enclosures: it names the chassis,
-not the module. When it does, the table heading says so (`same chassis as
+not the module. Of the four spellings only the generic device (`/dev/sg2`
+against `/dev/sg33`) tells the modules apart — they share the identifier and
+the serial number. When it does, the table heading says so (`same chassis as
 1:0:31:0`), and `led` picks the path that owns the bay — through the other
 module the write would be accepted and light nothing.
 

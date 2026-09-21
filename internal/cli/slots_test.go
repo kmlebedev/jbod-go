@@ -367,3 +367,96 @@ func TestPluralFlagSpellings(t *testing.T) {
 		}
 	}
 }
+
+// TestShelfCanBeNamedEveryWayItIsPrinted covers the selector an operator
+// actually reached for. Every one of these was tried on a real shelf and
+// every one of them failed: --enclosure-id on its own answered "list
+// requires --enclosure", and the SCSI address, the serial and the device
+// pasted after -e answered "list takes no arguments".
+func TestShelfCanBeNamedEveryWayItIsPrinted(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"selector alone implies the enclosure section", []string{"--enclosure-id", "1:0:0:0"}},
+		{"selector alone, as JSON", []string{"--enclosure-id", "1:0:0:0", "--json"}},
+		{"positional alone", []string{"1:0:0:0"}},
+		{"positional after a section", []string{"-e", "1:0:0:0"}},
+		{"positional with slots", []string{"--slots", "1:0:0:0"}},
+		{"by logical identifier", []string{"-e", "naa.50050cc10c400000"}},
+		{"by unit serial", []string{"-e", "ENC00001"}},
+		{"by generic device", []string{"-e", "/dev/sg0"}},
+		{"flag and positional agreeing", []string{"-e", "--enclosure-id", "1:0:0:0", "1:0:0:0"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			var out bytes.Buffer
+			if err := cmdList(context.Background(), c.args, &out, inventory()); err != nil {
+				t.Fatalf("%v: %v", c.args, err)
+			}
+			if !strings.Contains(out.String(), "1:0:0:0") {
+				t.Errorf("%v: the selected shelf is missing:\n%s", c.args, out.String())
+			}
+			if strings.Contains(out.String(), "10:0:0:0") {
+				t.Errorf("%v: the other shelf was not filtered out:\n%s", c.args, out.String())
+			}
+		})
+	}
+}
+
+// TestShelfSelectorRejects covers what must still fail, and with a message
+// that says what to do.
+func TestShelfSelectorRejects(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"no section and no shelf", nil, "list requires"},
+		{"unknown shelf", []string{"-e", "nope"}, "no enclosure matches"},
+		{"the shelf named twice, differently", []string{"-e", "--enclosure-id", "1:0:0:0", "10:0:0:0"}, "named twice"},
+		{"two shelves", []string{"-e", "1:0:0:0", "10:0:0:0"}, "at most one enclosure"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			err := cmdList(context.Background(), c.args, &bytes.Buffer{}, inventory())
+			if err == nil {
+				t.Fatalf("%v was accepted", c.args)
+			}
+			if !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("%v: error %q, want it to mention %q", c.args, err, c.want)
+			}
+		})
+	}
+	// The message for an unknown shelf names the columns to copy from.
+	err := cmdList(context.Background(), []string{"-e", "nope"}, &bytes.Buffer{}, inventory())
+	for _, want := range []string{"SLOT", "DEVICE", "SERIAL"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the error does not say where to find a valid value: %v", err)
+		}
+	}
+}
+
+// TestCapabilitiesTakesAShelfPositionally keeps the two commands spelling
+// the selector the same way.
+func TestCapabilitiesTakesAShelfPositionally(t *testing.T) {
+	t.Parallel()
+	for _, args := range [][]string{
+		{"1:0:0:0"},
+		{"--enclosure", "1:0:0:0"},
+		{"--enclosure-id", "1:0:0:0"},
+		{"/dev/sg0"},
+	} {
+		var out bytes.Buffer
+		if err := cmdCapabilities(context.Background(), args, &out, inventory()); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		if strings.Contains(out.String(), "10:0:0:0") {
+			t.Errorf("%v did not narrow the report:\n%s", args, out.String())
+		}
+	}
+}

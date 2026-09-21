@@ -354,3 +354,35 @@ func TestCapabilitiesOnTheChassis(t *testing.T) {
 		}
 	}
 }
+
+// TestTheDeviceTellsTheModulesApart covers the one identifier that is not
+// shared by the two I/O modules. The logical identifier and the serial
+// number both name the chassis, so only the generic device selects a single
+// sysfs enclosure.
+func TestTheDeviceTellsTheModulesApart(t *testing.T) {
+	t.Parallel()
+	es, err := h4060(t).Enclosures(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, shared := range []string{chassisID, chassisSerial} {
+		selected, err := SelectEnclosures(es, shared)
+		if err != nil || len(selected) != 2 {
+			t.Errorf("%s selected %d enclosures (%v), want both modules", shared, len(selected), err)
+		}
+	}
+	for device, want := range map[string]string{"/dev/sg2": "1:0:0:0", "/dev/sg33": "1:0:31:0"} {
+		selected, err := SelectEnclosures(es, device)
+		if err != nil || len(selected) != 1 {
+			t.Fatalf("%s selected %d enclosures (%v)", device, len(selected), err)
+		}
+		if selected[0].Slot != want {
+			t.Errorf("%s selected %s, want %s", device, selected[0].Slot, want)
+		}
+	}
+	// And the SCSI address still works, for a shelf whose path is what the
+	// operator has in front of them.
+	if selected, err := SelectEnclosures(es, "1:0:31:0"); err != nil || len(selected) != 1 {
+		t.Errorf("the SCSI address selected %d enclosures (%v)", len(selected), err)
+	}
+}
