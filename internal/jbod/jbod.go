@@ -12,6 +12,7 @@
 package jbod
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
@@ -49,11 +50,13 @@ type Client struct {
 	// tools resolves and runs the external commands. It is nil when the
 	// runner was injected, which is what tells Preflight that there are no
 	// binaries to look for.
-	tools          *tools
-	sysfs          string
-	commandTimeout time.Duration
-	concurrency    int
-	logger         *slog.Logger
+	tools              *tools
+	sysfs              string
+	commandTimeout     time.Duration
+	concurrency        int
+	ledReadbackTimeout time.Duration
+	ledWriter          LEDWriter
+	logger             *slog.Logger
 }
 
 // Option configures a Client. Values that make no sense (an empty sysfs
@@ -100,6 +103,27 @@ func WithConcurrency(n int) Option {
 	}
 }
 
+// WithLEDReadbackTimeout bounds how long a LED write waits for the
+// enclosure to report the state it was asked for.
+func WithLEDReadbackTimeout(d time.Duration) Option {
+	return func(c *Client) {
+		if d >= 0 {
+			c.ledReadbackTimeout = d
+		}
+	}
+}
+
+// WithLEDWriter replaces how a LED attribute is written; for tests. The
+// readback still reads the real attribute, which is what lets a test model
+// a shelf that accepts a write and does nothing.
+func WithLEDWriter(w LEDWriter) Option {
+	return func(c *Client) {
+		if w != nil {
+			c.ledWriter = w
+		}
+	}
+}
+
 // WithLogger sets where the client reports failed commands and finished
 // collections. Without it the client stays silent, as a library should.
 func WithLogger(l *slog.Logger) Option {
@@ -115,12 +139,14 @@ func WithLogger(l *slog.Logger) Option {
 func New(opts ...Option) *Client {
 	resolved := newTools()
 	c := &Client{
-		runner:         resolved.run,
-		tools:          resolved,
-		sysfs:          DefaultSysfs,
-		commandTimeout: DefaultCommandTimeout,
-		concurrency:    DefaultConcurrency,
-		logger:         slog.New(slog.DiscardHandler),
+		runner:             resolved.run,
+		tools:              resolved,
+		sysfs:              DefaultSysfs,
+		commandTimeout:     DefaultCommandTimeout,
+		concurrency:        DefaultConcurrency,
+		ledReadbackTimeout: DefaultLEDReadbackTimeout,
+		ledWriter:          writeAttribute,
+		logger:             slog.New(slog.DiscardHandler),
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -150,36 +176,137 @@ func (c *Client) exec(ctx context.Context, name string, args ...string) (string,
 // Enclosure is one shelf. The identity fields are absent when sg_inq could
 // not be read.
 type Enclosure struct {
-	Slot, Device                    string
-	Vendor, Model, Revision, Serial Optional[string]
+	// Slot is the SCSI address, which is also the sysfs directory name. It
+	// is assigned at scan time and changes across reboots and recabling,
+	// so it is a location and not an identity.
+	Slot   string `json:"enclosure"`
+	Device string `json:"device"`
+	// ID is the enclosure logical identifier from the sysfs "id" attribute,
+	// which the SES backend fills from the enclosure descriptor. This is
+	// the identifier that survives a reboot (ROADMAP 3).
+	ID       Optional[string] `json:"id"`
+	Vendor   Optional[string] `json:"vendor"`
+	Model    Optional[string] `json:"model"`
+	Revision Optional[string] `json:"revision"`
+	Serial   Optional[string] `json:"serial"`
+	// Err is why the identity is absent, when sg_inq failed. A shelf whose
+	// vendor and model read as unknown should be able to say whether the
+	// tool is missing, the device is busy or the shelf simply answered
+	// nothing (ROADMAP 3).
+	Err Optional[string] `json:"error"`
+}
+
+// Ref returns the identifier to address this shelf by, and whether it is
+// stable. The logical identifier is preferred, the unit serial number is
+// the fallback, and the SCSI address is a last resort that callers must
+// mark as temporary rather than print as an identity (ROADMAP 3).
+func (e Enclosure) Ref() (string, bool) {
+	if id, ok := e.ID.Get(); ok {
+		return id, true
+	}
+	if serial, ok := e.Serial.Get(); ok {
+		return serial, true
+	}
+	return e.Slot, false
+}
+
+// Identifier sources, as reported by IDSource and by the id_source label of
+// jbod_enclosure_info.
+const (
+	// IDSourceLogical is the enclosure logical identifier: stable.
+	IDSourceLogical = "logical"
+	// IDSourceSerial is the unit serial number: stable.
+	IDSourceSerial = "serial"
+	// IDSourceAddress is the SCSI address: a location, reassigned on every
+	// scan, and only used when the shelf offers nothing better.
+	IDSourceAddress = "address"
+)
+
+// IDSource names where Ref took the identifier from, so a consumer can see
+// that an identity is really a temporary address (ROADMAP 3).
+func (e Enclosure) IDSource() string {
+	switch {
+	case e.ID.Present():
+		return IDSourceLogical
+	case e.Serial.Present():
+		return IDSourceSerial
+	default:
+		return IDSourceAddress
+	}
+}
+
+// Matches reports whether ref addresses this shelf. Any of the three
+// spellings is accepted so an operator can paste whichever one they have in
+// front of them; the identifier comparison is case-insensitive because NAA
+// identifiers are hex.
+func (e Enclosure) Matches(ref string) bool {
+	if ref == "" {
+		return false
+	}
+	if strings.EqualFold(ref, e.Slot) {
+		return true
+	}
+	for _, candidate := range []Optional[string]{e.ID, e.Serial} {
+		if v, ok := candidate.Get(); ok && strings.EqualFold(ref, v) {
+			return true
+		}
+	}
+	return false
+}
+
+// SelectEnclosures keeps the shelves matching ref, or all of them when ref
+// is empty. An unknown reference is an error rather than an empty listing,
+// which would read as "this shelf has nothing in it".
+func SelectEnclosures(enclosures []Enclosure, ref string) ([]Enclosure, error) {
+	if ref == "" {
+		return enclosures, nil
+	}
+	var kept []Enclosure
+	for _, e := range enclosures {
+		if e.Matches(ref) {
+			kept = append(kept, e)
+		}
+	}
+	if len(kept) == 0 {
+		return nil, fmt.Errorf("no enclosure matches %q; jbod list --enclosure lists the known identifiers", ref)
+	}
+	return kept, nil
 }
 
 // Disk is one slot with a device in it.
 type Disk struct {
-	Enclosure string
+	Enclosure string `json:"enclosure"`
+	// EnclosureID is the stable identifier of the shelf, when it has one.
+	EnclosureID Optional[string] `json:"enclosure_id"`
 	// Slot is the slot name up to the first comma, as printed.
-	Slot string
+	Slot string `json:"slot"`
+	// SlotNumber is the number the enclosure reports for this slot, which
+	// is how the slot is addressed; Slot is the cosmetic name.
+	SlotNumber Optional[int64] `json:"slot_number"`
 	// SlotLabel is the enclosure's own name for the slot ("Slot 01,
-	// front"), which is also how it appears under the sysfs root; SetLED
-	// needs it to find the LED attributes.
-	SlotLabel string
-	Device    string
+	// front"), which is also how it appears under the sysfs root; the LED
+	// commands need it to find the attributes.
+	SlotLabel string `json:"slot_label"`
+	Device    string `json:"device"`
 	// Map is the block device of this slot, when sg_map knows one.
-	Map Optional[string]
+	Map Optional[string] `json:"map"`
 	// The remaining fields are only filled in with DiskOptions.WithTelemetry
 	// and stay absent when the device did not answer.
-	Vendor, Model, Serial, Firmware Optional[string]
-	Temperature                     Optional[int64]
+	Vendor      Optional[string] `json:"vendor"`
+	Model       Optional[string] `json:"model"`
+	Serial      Optional[string] `json:"serial"`
+	Firmware    Optional[string] `json:"firmware"`
+	Temperature Optional[int64]  `json:"temperature_celsius"`
 }
 
 // Fan is one cooling element with its last reported speed.
 type Fan struct {
-	Slot        string
-	Serial      Optional[string]
-	Description string
-	Index       string
-	Comment     Optional[string]
-	Speed       int64
+	Slot        string           `json:"enclosure"`
+	Serial      Optional[string] `json:"enclosure_serial"`
+	Description string           `json:"component"`
+	Index       string           `json:"component_id"`
+	Comment     Optional[string] `json:"condition"`
+	Speed       int64            `json:"speed_rpm"`
 }
 
 // DiskOptions selects how much work Disks does.
@@ -226,14 +353,19 @@ func (c *Client) enclosures(ctx context.Context, p *problems) ([]Enclosure, erro
 	}
 	result := make([]Enclosure, len(refs))
 	for i, ref := range refs {
-		result[i] = Enclosure{Slot: ref.Slot, Device: ref.Device}
+		// The logical identifier is a sysfs read, so it is available even
+		// when sg_inq below fails or the tool is missing.
+		result[i] = Enclosure{Slot: ref.Slot, Device: ref.Device, ID: c.enclosureID(ref.Slot)}
 	}
 	// One sg_inq per shelf, in parallel: they are independent devices.
 	forEach(ctx, c.concurrency, len(result), func(i int) {
 		details, err := c.exec(ctx, "sg_inq", result[i].Device)
 		if err != nil {
 			// The identity fields stay absent, which is survivable for the
-			// exporter; the CLI would print a table of NONE.
+			// exporter; the CLI would print a table of NONE. The reason is
+			// kept on the shelf so the capability report can tell a failed
+			// probe from an unsupported one.
+			result[i].Err = Some(err.Error())
 			p.fail(CollectorEnclosures, err)
 			return
 		}
@@ -279,44 +411,41 @@ func (c *Client) disks(ctx context.Context, enclosures []Enclosure, opts DiskOpt
 	if len(enclosures) == 0 {
 		return nil
 	}
-	out, err := c.exec(ctx, "sg_map")
-	if err != nil {
-		// Without sg_map the block device of a slot is unknown, which only
-		// costs the Map column; enumeration itself comes from sysfs.
-		p.fail(CollectorDisks, err)
-	}
-	mapping := parseSgMap(out)
+	return c.disksFromSlots(ctx, c.slots(ctx, enclosures, p), opts, p)
+}
+
+// disksFromSlots projects the occupied slots onto the disk view.
+//
+// Enumeration used to start from device/scsi_generic, which is why an empty
+// bay did not exist; it starts from the slot walk now, and the disk list is
+// a view of it so the two can never disagree (ROADMAP 4).
+func (c *Client) disksFromSlots(ctx context.Context, slots []Slot, opts DiskOptions, p *problems) []Disk {
 	var result []Disk
-	for _, enc := range enclosures {
-		base := filepath.Join(c.sysfs, enc.Slot)
-		entries, err := os.ReadDir(base)
-		if err != nil {
-			// One unreadable shelf must not hide the other shelves (A6).
-			p.fail(CollectorDisks, fmt.Errorf("read enclosure sysfs: %w", err))
+	for _, s := range slots {
+		if s.Occupancy != OccupancyOccupied {
 			continue
 		}
-		for _, entry := range entries {
-			devPath := filepath.Join(base, entry.Name(), "device")
-			generic, err := os.ReadDir(filepath.Join(devPath, "scsi_generic"))
-			if os.IsNotExist(err) {
-				continue
+		// One disk per generic node, as before: a slot may expose more than
+		// one, and Slot.Device only names the first.
+		devices := genericDevices(filepath.Join(c.sysfs, s.Enclosure, s.Name))
+		if len(devices) == 0 {
+			// A device is attached but has no generic node, so there is
+			// nothing to address it by; it stays a slot and not a disk.
+			continue
+		}
+		for _, device := range devices {
+			d := Disk{
+				Enclosure:   s.Enclosure,
+				EnclosureID: s.EnclosureID,
+				Slot:        s.Label,
+				SlotNumber:  s.Number,
+				SlotLabel:   s.Name,
+				Device:      device,
 			}
-			if err != nil {
-				p.fail(CollectorDisks, err)
-				continue
+			if device == s.Device.Or("") {
+				d.Map = s.Map
 			}
-			for _, g := range generic {
-				d := Disk{
-					Enclosure: enc.Slot,
-					Slot:      strings.SplitN(entry.Name(), ",", 2)[0],
-					SlotLabel: entry.Name(),
-					Device:    "/dev/" + g.Name(),
-				}
-				if m, ok := mapping[d.Device]; ok && m != "" {
-					d.Map = Some(m)
-				}
-				result = append(result, d)
-			}
+			result = append(result, d)
 		}
 	}
 	if opts.WithTelemetry {
@@ -329,6 +458,11 @@ func (c *Client) disks(ctx context.Context, enclosures []Enclosure, opts DiskOpt
 	slices.SortStableFunc(result, func(a, b Disk) int {
 		if n := natCompare(a.Enclosure, b.Enclosure); n != 0 {
 			return n
+		}
+		an, aok := a.SlotNumber.Get()
+		bn, bok := b.SlotNumber.Get()
+		if aok && bok && an != bn {
+			return cmp.Compare(an, bn)
 		}
 		return natCompare(a.Slot, b.Slot)
 	})
@@ -439,52 +573,4 @@ func (c *Client) fans(ctx context.Context, enclosures []Enclosure, p *problems) 
 		return nil
 	}
 	return fans
-}
-
-// SetLED turns the locate or fault LED of one device on or off.
-//
-// The client resolves the sysfs attribute from its own root, so the paths
-// stay out of the domain model (C3), and it only opens an attribute that
-// already exists: it never creates a file.
-func (c *Client) SetLED(ctx context.Context, device string, kind LEDKind, on bool) error {
-	if !kind.valid() {
-		return fmt.Errorf("unknown LED kind %q", string(kind))
-	}
-	if !strings.HasPrefix(device, "/dev/") {
-		return fmt.Errorf("device %q must start with /dev/", device)
-	}
-	enclosures, err := c.Enclosures(ctx)
-	if err != nil {
-		return err
-	}
-	disks, err := c.Disks(ctx, enclosures, DiskOptions{})
-	if err != nil {
-		return err
-	}
-	for _, d := range disks {
-		// device is a /dev/ path, so a plain comparison is enough: it can
-		// never collide with a missing mapping.
-		if d.Device != device && d.Map.Or("") != device {
-			continue
-		}
-		path := filepath.Join(c.sysfs, d.Enclosure, d.SlotLabel, string(kind))
-		if _, err := os.Stat(path); err != nil {
-			return fmt.Errorf("%s does not expose the %s LED", device, kind)
-		}
-		f, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0)
-		if err != nil {
-			return err
-		}
-		value := "0"
-		if on {
-			value = "1"
-		}
-		_, err = f.WriteString(value)
-		closeErr := f.Close()
-		if err != nil {
-			return err
-		}
-		return closeErr
-	}
-	return fmt.Errorf("device %s not found in enclosures", device)
 }

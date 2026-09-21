@@ -2,7 +2,10 @@
 
 package jbod
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // Optional is a value the hardware may not report.
 //
@@ -54,4 +57,29 @@ func (o Optional[T]) String() string {
 		return "<none>"
 	}
 	return fmt.Sprint(o.value)
+}
+
+// MarshalJSON renders a present value as itself and an absent one as null,
+// so a consumer of the JSON output can tell "the shelf did not report this"
+// from "the shelf reported zero" (ROADMAP 3).
+func (o Optional[T]) MarshalJSON() ([]byte, error) {
+	if !o.present {
+		return []byte("null"), nil
+	}
+	return json.Marshal(o.value)
+}
+
+// UnmarshalJSON accepts null as absent and anything else as present, so the
+// JSON output round-trips in tests.
+func (o *Optional[T]) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		*o = Optional[T]{}
+		return nil
+	}
+	var v T
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	*o = Some(v)
+	return nil
 }
