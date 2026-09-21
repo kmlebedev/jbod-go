@@ -13,8 +13,10 @@ import (
 
 func cmdList(ctx context.Context, args []string, out io.Writer, inv Inventory) error {
 	f := flags("list", out)
-	// No enclosureAliases here: in this command --enclosure is the section
-	// switch it has always been, so the selector keeps its own name.
+	// listAliases, not enclosureAliases: in this command --enclosure is the
+	// section switch it has always been, so the selector keeps its own
+	// name and only the plural spellings are folded in.
+	f.SetNormalizeFunc(listAliases)
 	// One registration per option: pflag groups short flags itself, so
 	// "-ed" and "-ef" need no expansion of their own (E).
 	enc := f.BoolP("enclosure", "e", false, "list enclosures")

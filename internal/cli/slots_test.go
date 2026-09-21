@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -282,6 +283,87 @@ func TestJSONSectionsAreExplicit(t *testing.T) {
 	for _, name := range []string{"enclosures", "slots", "disks"} {
 		if _, ok := document[name]; ok {
 			t.Errorf("%s was emitted without being requested:\n%s", name, out.String())
+		}
+	}
+}
+
+// chassis renders the shape a WD H4060-J produces: one physical shelf, two
+// I/O modules, the same logical identifier on both, and each module
+// reporting the thirty bays it cannot reach.
+func chassis() *fake {
+	const id = "0x5000ccab05629d00"
+	noAccess := "the enclosure reports a status code the driver cannot name " +
+		"(sysfs status is \"(null)\"); SES code 8 is \"no access allowed\", which is how a bay " +
+		"owned by another I/O module of the same shelf reads"
+	f := &fake{
+		enclosures: []jbod.Enclosure{
+			{Slot: "1:0:0:0", Device: "/dev/sg2", ID: jbod.Some(id), Vendor: jbod.Some("HGST"), Model: jbod.Some("H4060-J")},
+			{Slot: "1:0:31:0", Device: "/dev/sg33", ID: jbod.Some(id), Vendor: jbod.Some("HGST"), Model: jbod.Some("H4060-J")},
+		},
+	}
+	// Each module lists every bay of the chassis and owns half of them,
+	// which is what makes the unavailable half show up twice.
+	for _, m := range []struct {
+		address          string
+		ownsFrom, ownsTo int
+	}{{"1:0:0:0", 0, 1}, {"1:0:31:0", 2, 3}} {
+		for n := range 4 {
+			s := jbod.Slot{
+				Enclosure: m.address, EnclosureID: jbod.Some(id),
+				Name:   fmt.Sprintf("SLOT %02d,SERIAL%02d", n, n),
+				Label:  fmt.Sprintf("SLOT %02d", n),
+				Number: jbod.Some(int64(n)), Type: jbod.Some("array device"),
+				Locate: jbod.Some(false),
+				Fault:  jbod.FaultState{Value: jbod.Some(int64(0)), Sensed: jbod.Some(false), Requested: jbod.Some(false)},
+				Power:  jbod.Some("on"),
+			}
+			if n >= m.ownsFrom && n <= m.ownsTo {
+				s.Status = jbod.Some("OK")
+				s.Occupancy = jbod.OccupancyOccupied
+				s.Device = jbod.Some(fmt.Sprintf("/dev/sg%d", 3+n))
+				s.Map = jbod.Some(fmt.Sprintf("/dev/sd%c", 'c'+n))
+			} else {
+				s.Occupancy = jbod.OccupancyUnavailable
+				s.Err = jbod.Some(noAccess)
+			}
+			f.slots = append(f.slots, s)
+		}
+	}
+	return f
+}
+
+// TestChassisWithTwoModulesGolden pins how one shelf reached through two
+// I/O modules is rendered: the heading names the other path, the bays a
+// module cannot reach are unavailable rather than empty, and the reason is
+// stated once instead of thirty times.
+func TestChassisWithTwoModulesGolden(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	if err := cmdList(context.Background(), []string{"--slots"}, &out, chassis()); err != nil {
+		t.Fatal(err)
+	}
+	golden(t, "list-slots-chassis.golden", out.String())
+	got := out.String()
+	if strings.Count(got, "same chassis as") != 2 {
+		t.Errorf("the shared identifier was not reported on both paths:\n%s", got)
+	}
+	if strings.Contains(got, "empty") {
+		t.Errorf("a bay behind the other module was called empty:\n%s", got)
+	}
+	// The reason is a footnote, not a column repeated on every row.
+	if n := strings.Count(got, "no access allowed"); n != 2 {
+		t.Errorf("the reason appears %d times, want once per enclosure:\n%s", n, got)
+	}
+}
+
+// TestPluralFlagSpellings covers the spellings an operator reaches for next
+// to --disks and --slots; answering "unknown flag" to --fans was a small
+// cruelty the real run ran into twice.
+func TestPluralFlagSpellings(t *testing.T) {
+	t.Parallel()
+	for _, args := range [][]string{{"--fans"}, {"--fan"}, {"--enclosures"}, {"--slot"}, {"--disk"}} {
+		if err := cmdList(context.Background(), args, &bytes.Buffer{}, inventory()); err != nil {
+			t.Errorf("%v: %v", args, err)
 		}
 	}
 }

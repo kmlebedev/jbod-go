@@ -16,7 +16,7 @@ import (
 func listFixture() *fake {
 	return &fake{
 		enclosures: []jbod.Enclosure{{Slot: "1:0:0:0", Device: "/dev/sg0"}},
-		fans:       []jbod.Fan{{Slot: "1:0:0:0", Description: "Fan A", Index: "2,0", Speed: 1200}},
+		fans:       []jbod.Fan{{Slot: "1:0:0:0", Description: "Fan A", Index: "2,0", Speed: jbod.Some(int64(1200))}},
 	}
 }
 

@@ -129,17 +129,28 @@ func ledLine(r jbod.LEDResult) string {
 	if r.Requested {
 		state = "on"
 	}
-	where := r.Target
+	// What the target resolved to is part of the line: an identifier can
+	// match two sysfs enclosures of the same chassis, and a device path
+	// does not say which bay it is in.
+	var resolved []string
+	if r.Enclosure != "" {
+		resolved = append(resolved, r.Enclosure+" slot "+r.Slot)
+	}
 	if device, ok := r.Device.Get(); ok && device != r.Target {
-		where += " (" + device + ")"
+		resolved = append(resolved, device)
+	}
+	where := ""
+	if len(resolved) > 0 {
+		where = " [" + strings.Join(resolved, ", ") + "]"
 	}
 	switch {
 	case r.Confirmed:
-		return fmt.Sprintf("%s %s: %s (confirmed)", where, r.Kind, state)
+		return fmt.Sprintf("%s %s: %s (confirmed)%s", r.Target, r.Kind, state, where)
 	case r.Observed.Present():
-		return fmt.Sprintf("%s %s: %s (NOT confirmed: reads back as %s)", where, r.Kind, state, onOff(r.Observed.Or(false)))
+		return fmt.Sprintf("%s %s: %s (NOT confirmed: reads back as %s)%s",
+			r.Target, r.Kind, state, onOff(r.Observed.Or(false)), where)
 	default:
-		return fmt.Sprintf("%s %s: %s (write accepted, no readback available)", where, r.Kind, state)
+		return fmt.Sprintf("%s %s: %s (write accepted, no readback available)%s", r.Target, r.Kind, state, where)
 	}
 }
 

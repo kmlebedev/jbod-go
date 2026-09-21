@@ -186,13 +186,24 @@ func (c *Client) SetLED(ctx context.Context, target LEDTarget, kind LEDKind, on 
 	if err != nil {
 		return LEDResult{}, err
 	}
-	for _, s := range slots {
+	// An identifier can match more than one sysfs enclosure: a chassis
+	// with two I/O modules exposes the same slot through both, and the
+	// module that does not own the bay reports no access to it. Writing
+	// through that one would be accepted and do nothing, so an occupied
+	// match wins over an unavailable one.
+	var chosen *Slot
+	for i, s := range slots {
 		if !target.matches(s, enclosures) {
 			continue
 		}
-		return c.writeLED(ctx, s, target, kind, on)
+		if chosen == nil || (chosen.Occupancy != OccupancyOccupied && s.Occupancy == OccupancyOccupied) {
+			chosen = &slots[i]
+		}
 	}
-	return LEDResult{}, fmt.Errorf("%w: %s", ErrNoSuchTarget, target.Raw)
+	if chosen == nil {
+		return LEDResult{}, fmt.Errorf("%w: %s", ErrNoSuchTarget, target.Raw)
+	}
+	return c.writeLED(ctx, *chosen, target, kind, on)
 }
 
 // writeLED performs the write and the readback for one resolved slot.
