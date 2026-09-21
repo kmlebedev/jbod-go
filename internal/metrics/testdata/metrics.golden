@@ -1,124 +1,124 @@
-# HELP number_of_enclosures Number of enclosures
-# TYPE number_of_enclosures gauge
-number_of_enclosures 2
-# HELP jbod_enclosure_info Identity of each enclosure; id_source is logical, serial or address
-# TYPE jbod_enclosure_info gauge
-jbod_enclosure_info{enclosure="1:0:0:0",enclosure_id="ENC1",id_source="serial",vendor="ACME",model="Shelf",revision="",serial="ENC1"} 1
-jbod_enclosure_info{enclosure="10:0:0:0",enclosure_id="10:0:0:0",id_source="address",vendor="",model="",revision="",serial=""} 1
-# HELP jbod_enclosure_slots Slots per enclosure by occupancy
-# TYPE jbod_enclosure_slots gauge
-jbod_enclosure_slots{enclosure="1:0:0:0",enclosure_id="ENC1",occupancy="occupied"} 0
-jbod_enclosure_slots{enclosure="1:0:0:0",enclosure_id="ENC1",occupancy="empty"} 0
-jbod_enclosure_slots{enclosure="1:0:0:0",enclosure_id="ENC1",occupancy="unavailable"} 0
-jbod_enclosure_slots{enclosure="10:0:0:0",enclosure_id="10:0:0:0",occupancy="occupied"} 0
-jbod_enclosure_slots{enclosure="10:0:0:0",enclosure_id="10:0:0:0",occupancy="empty"} 0
-jbod_enclosure_slots{enclosure="10:0:0:0",enclosure_id="10:0:0:0",occupancy="unavailable"} 0
-# HELP jbod_enclosure_health Enclosure condition; 1 marks the level the source reports
-# TYPE jbod_enclosure_health gauge
-jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",source="hardware",level="ok"} 0
-jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",source="hardware",level="warning"} 1
-jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",source="hardware",level="critical"} 0
-jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",source="hardware",level="unrecoverable"} 0
-jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",source="hardware",level="absent"} 0
-jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",source="hardware",level="unknown"} 0
-jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",source="components",level="ok"} 0
-jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",source="components",level="warning"} 0
-jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",source="components",level="critical"} 1
-jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",source="components",level="unrecoverable"} 0
-jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",source="components",level="absent"} 0
-jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",source="components",level="unknown"} 0
-jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",source="hardware",level="ok"} 0
-jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",source="hardware",level="warning"} 0
-jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",source="hardware",level="critical"} 0
-jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",source="hardware",level="unrecoverable"} 0
-jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",source="hardware",level="absent"} 0
-jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",source="hardware",level="unknown"} 1
-jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",source="components",level="ok"} 0
-jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",source="components",level="warning"} 0
-jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",source="components",level="critical"} 0
-jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",source="components",level="unrecoverable"} 0
-jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",source="components",level="absent"} 0
-jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",source="components",level="unknown"} 1
-# HELP jbod_enclosure_components Declared elements per enclosure, by type and condition
-# TYPE jbod_enclosure_components gauge
-jbod_enclosure_components{enclosure="1:0:0:0",enclosure_id="ENC1",type="array device slot",health="ok"} 1
-jbod_enclosure_components{enclosure="1:0:0:0",enclosure_id="ENC1",type="array device slot",health="unknown"} 1
-jbod_enclosure_components{enclosure="1:0:0:0",enclosure_id="ENC1",type="power supply",health="critical"} 1
-jbod_enclosure_components{enclosure="1:0:0:0",enclosure_id="ENC1",type="temperature sensor",health="ok"} 1
-jbod_enclosure_components{enclosure="1:0:0:0",enclosure_id="ENC1",type="temperature sensor",health="unknown"} 1
-jbod_enclosure_components{enclosure="1:0:0:0",enclosure_id="ENC1",type="voltage sensor",health="ok"} 1
+# HELP jbod_collection_complete Whether every required SES page answered and the pages agreed
+# TYPE jbod_collection_complete gauge
+jbod_collection_complete{enclosure="10:0:0:0",enclosure_id="10:0:0:0"} 0
+jbod_collection_complete{enclosure="1:0:0:0",enclosure_id="ENC1"} 1
 # HELP jbod_component_info Condition of one element; status is the enclosure's own spelling
 # TYPE jbod_component_info gauge
-jbod_component_info{enclosure="1:0:0:0",enclosure_id="ENC1",component="SLOT 00",component_id="0,0",type="array device slot",status="OK",health="ok"} 1
-jbod_component_info{enclosure="1:0:0:0",enclosure_id="ENC1",component="SLOT 01",component_id="0,1",type="array device slot",status="No access allowed",health="unknown"} 1
-jbod_component_info{enclosure="1:0:0:0",enclosure_id="ENC1",component="PSU A",component_id="1,0",type="power supply",status="Critical",health="critical"} 1
-jbod_component_info{enclosure="1:0:0:0",enclosure_id="ENC1",component="TEMP A",component_id="3,0",type="temperature sensor",status="OK",health="ok"} 1
-jbod_component_info{enclosure="1:0:0:0",enclosure_id="ENC1",component="TEMP B",component_id="3,1",type="temperature sensor",status="Unsupported",health="unknown"} 1
-jbod_component_info{enclosure="1:0:0:0",enclosure_id="ENC1",component="VOLT 12V",component_id="4,0",type="voltage sensor",status="OK",health="ok"} 1
-# HELP jbod_sensor_temperature_celsius Temperature reported by an enclosure element
-# TYPE jbod_sensor_temperature_celsius gauge
-jbod_sensor_temperature_celsius{enclosure="1:0:0:0",enclosure_id="ENC1",component="TEMP A",component_id="3,0",type="temperature sensor"} 35
-# HELP jbod_sensor_temperature_threshold_celsius Threshold the enclosure declares for temperature
-# TYPE jbod_sensor_temperature_threshold_celsius gauge
-jbod_sensor_temperature_threshold_celsius{enclosure="1:0:0:0",enclosure_id="ENC1",component="TEMP A",component_id="3,0",type="temperature sensor",threshold="high_critical"} 65
-jbod_sensor_temperature_threshold_celsius{enclosure="1:0:0:0",enclosure_id="ENC1",component="TEMP A",component_id="3,0",type="temperature sensor",threshold="high_warning"} 60
-jbod_sensor_temperature_threshold_celsius{enclosure="1:0:0:0",enclosure_id="ENC1",component="TEMP A",component_id="3,0",type="temperature sensor",threshold="low_warning"} 0
-jbod_sensor_temperature_threshold_celsius{enclosure="1:0:0:0",enclosure_id="ENC1",component="TEMP A",component_id="3,0",type="temperature sensor",threshold="low_critical"} -19
-# HELP jbod_sensor_voltage_volts Voltage reported by an enclosure element
-# TYPE jbod_sensor_voltage_volts gauge
-jbod_sensor_voltage_volts{enclosure="1:0:0:0",enclosure_id="ENC1",component="VOLT 12V",component_id="4,0",type="voltage sensor"} 12.01
-# HELP jbod_slot_sas_address_info Bay, SAS address and the disk the kernel sees in it
-# TYPE jbod_slot_sas_address_info gauge
-jbod_slot_sas_address_info{enclosure="1:0:0:0",enclosure_id="ENC1",slot="0",component_id="0,0",sas_address="0x5000cca2a0d6e2f5",device="/dev/sg1",block_device="/dev/sda"} 1
-# HELP jbod_slot_temperature Enclosure number, slot position and temperature
-# TYPE jbod_slot_temperature gauge
-jbod_slot_temperature{slot="Slot 01",enclosure="1:0:0:0"} 37
-jbod_slot_temperature{slot="Slot 10",enclosure="1:0:0:0"} -2
-jbod_slot_temperature{slot="Slot 03",enclosure="10:0:0:0"} 41
-# HELP jbod_fan_speed_rpm Speed of a cooling element, addressed by enclosure and component
-# TYPE jbod_fan_speed_rpm gauge
-jbod_fan_speed_rpm{enclosure="1:0:0:0",enclosure_id="ENC1",component="Fan A",component_id="2,0"} 1200
-jbod_fan_speed_rpm{enclosure="1:0:0:0",enclosure_id="ENC1",component="Fan B",component_id="2,1"} 3000
+jbod_component_info{component="PSU A",component_id="1,0",enclosure="1:0:0:0",enclosure_id="ENC1",health="critical",status="Critical",type="power supply"} 1
+jbod_component_info{component="SLOT 00",component_id="0,0",enclosure="1:0:0:0",enclosure_id="ENC1",health="ok",status="OK",type="array device slot"} 1
+jbod_component_info{component="SLOT 01",component_id="0,1",enclosure="1:0:0:0",enclosure_id="ENC1",health="unknown",status="No access allowed",type="array device slot"} 1
+jbod_component_info{component="TEMP A",component_id="3,0",enclosure="1:0:0:0",enclosure_id="ENC1",health="ok",status="OK",type="temperature sensor"} 1
+jbod_component_info{component="TEMP B",component_id="3,1",enclosure="1:0:0:0",enclosure_id="ENC1",health="unknown",status="Unsupported",type="temperature sensor"} 1
+jbod_component_info{component="VOLT 12V",component_id="4,0",enclosure="1:0:0:0",enclosure_id="ENC1",health="ok",status="OK",type="voltage sensor"} 1
+# HELP jbod_enclosure_components Declared elements per enclosure, by type and condition
+# TYPE jbod_enclosure_components gauge
+jbod_enclosure_components{enclosure="1:0:0:0",enclosure_id="ENC1",health="critical",type="power supply"} 1
+jbod_enclosure_components{enclosure="1:0:0:0",enclosure_id="ENC1",health="ok",type="array device slot"} 1
+jbod_enclosure_components{enclosure="1:0:0:0",enclosure_id="ENC1",health="ok",type="temperature sensor"} 1
+jbod_enclosure_components{enclosure="1:0:0:0",enclosure_id="ENC1",health="ok",type="voltage sensor"} 1
+jbod_enclosure_components{enclosure="1:0:0:0",enclosure_id="ENC1",health="unknown",type="array device slot"} 1
+jbod_enclosure_components{enclosure="1:0:0:0",enclosure_id="ENC1",health="unknown",type="temperature sensor"} 1
+# HELP jbod_enclosure_components_missing Elements the configuration page declares that no status page reported
+# TYPE jbod_enclosure_components_missing gauge
+jbod_enclosure_components_missing{enclosure="10:0:0:0",enclosure_id="10:0:0:0"} 0
+jbod_enclosure_components_missing{enclosure="1:0:0:0",enclosure_id="ENC1"} 1
+# HELP jbod_enclosure_generation_changed Whether the SES pages of one pass described different configurations
+# TYPE jbod_enclosure_generation_changed gauge
+jbod_enclosure_generation_changed{enclosure="10:0:0:0",enclosure_id="10:0:0:0"} 1
+jbod_enclosure_generation_changed{enclosure="1:0:0:0",enclosure_id="ENC1"} 0
+# HELP jbod_enclosure_health Enclosure condition; 1 marks the level the source reports
+# TYPE jbod_enclosure_health gauge
+jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",level="absent",source="components"} 0
+jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",level="absent",source="hardware"} 0
+jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",level="critical",source="components"} 0
+jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",level="critical",source="hardware"} 0
+jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",level="ok",source="components"} 0
+jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",level="ok",source="hardware"} 0
+jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",level="unknown",source="components"} 1
+jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",level="unknown",source="hardware"} 1
+jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",level="unrecoverable",source="components"} 0
+jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",level="unrecoverable",source="hardware"} 0
+jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",level="warning",source="components"} 0
+jbod_enclosure_health{enclosure="10:0:0:0",enclosure_id="10:0:0:0",level="warning",source="hardware"} 0
+jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",level="absent",source="components"} 0
+jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",level="absent",source="hardware"} 0
+jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",level="critical",source="components"} 1
+jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",level="critical",source="hardware"} 0
+jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",level="ok",source="components"} 0
+jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",level="ok",source="hardware"} 0
+jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",level="unknown",source="components"} 0
+jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",level="unknown",source="hardware"} 0
+jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",level="unrecoverable",source="components"} 0
+jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",level="unrecoverable",source="hardware"} 0
+jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",level="warning",source="components"} 0
+jbod_enclosure_health{enclosure="1:0:0:0",enclosure_id="ENC1",level="warning",source="hardware"} 1
+# HELP jbod_enclosure_info Identity of each enclosure; id_source is logical, serial or address
+# TYPE jbod_enclosure_info gauge
+jbod_enclosure_info{enclosure="10:0:0:0",enclosure_id="10:0:0:0",id_source="address",model="",revision="",serial="",vendor=""} 1
+jbod_enclosure_info{enclosure="1:0:0:0",enclosure_id="ENC1",id_source="serial",model="Shelf",revision="",serial="ENC1",vendor="ACME"} 1
+# HELP jbod_enclosure_slots Slots per enclosure by occupancy
+# TYPE jbod_enclosure_slots gauge
+jbod_enclosure_slots{enclosure="10:0:0:0",enclosure_id="10:0:0:0",occupancy="empty"} 0
+jbod_enclosure_slots{enclosure="10:0:0:0",enclosure_id="10:0:0:0",occupancy="occupied"} 0
+jbod_enclosure_slots{enclosure="10:0:0:0",enclosure_id="10:0:0:0",occupancy="unavailable"} 0
+jbod_enclosure_slots{enclosure="1:0:0:0",enclosure_id="ENC1",occupancy="empty"} 0
+jbod_enclosure_slots{enclosure="1:0:0:0",enclosure_id="ENC1",occupancy="occupied"} 0
+jbod_enclosure_slots{enclosure="1:0:0:0",enclosure_id="ENC1",occupancy="unavailable"} 0
 # HELP jbod_fan_rpm DEPRECATED, replaced by jbod_fan_speed_rpm: the labels omit the enclosure, so identical fans of two shelves overwrite each other. Removal is planned for 2.0.
 # TYPE jbod_fan_rpm gauge
 jbod_fan_rpm{device="Fan A",slot="2,0"} 1200
 jbod_fan_rpm{device="Fan B",slot="2,1"} 3000
-# HELP jbod_snapshot_timestamp_seconds When the collection behind this scrape started
-# TYPE jbod_snapshot_timestamp_seconds gauge
-jbod_snapshot_timestamp_seconds 1789984800.000
-# HELP jbod_collection_complete Whether every required SES page answered and the pages agreed
-# TYPE jbod_collection_complete gauge
-jbod_collection_complete{enclosure="1:0:0:0",enclosure_id="ENC1"} 1
-jbod_collection_complete{enclosure="10:0:0:0",enclosure_id="10:0:0:0"} 0
-# HELP jbod_ses_page_read Whether one SES diagnostic page answered
-# TYPE jbod_ses_page_read gauge
-jbod_ses_page_read{enclosure="1:0:0:0",enclosure_id="ENC1",page="configuration",required="true"} 1
-jbod_ses_page_read{enclosure="1:0:0:0",enclosure_id="ENC1",page="join",required="true"} 1
-jbod_ses_page_read{enclosure="1:0:0:0",enclosure_id="ENC1",page="enclosure status",required="true"} 1
-jbod_ses_page_read{enclosure="1:0:0:0",enclosure_id="ENC1",page="threshold in",required="false"} 0
-jbod_ses_page_read{enclosure="10:0:0:0",enclosure_id="10:0:0:0",page="configuration",required="true"} 0
-jbod_ses_page_read{enclosure="10:0:0:0",enclosure_id="10:0:0:0",page="join",required="true"} 0
-jbod_ses_page_read{enclosure="10:0:0:0",enclosure_id="10:0:0:0",page="enclosure status",required="true"} 0
-jbod_ses_page_read{enclosure="10:0:0:0",enclosure_id="10:0:0:0",page="threshold in",required="false"} 0
-# HELP jbod_enclosure_generation_changed Whether the SES pages of one pass described different configurations
-# TYPE jbod_enclosure_generation_changed gauge
-jbod_enclosure_generation_changed{enclosure="1:0:0:0",enclosure_id="ENC1"} 0
-jbod_enclosure_generation_changed{enclosure="10:0:0:0",enclosure_id="10:0:0:0"} 1
-# HELP jbod_enclosure_components_missing Elements the configuration page declares that no status page reported
-# TYPE jbod_enclosure_components_missing gauge
-jbod_enclosure_components_missing{enclosure="1:0:0:0",enclosure_id="ENC1"} 1
-jbod_enclosure_components_missing{enclosure="10:0:0:0",enclosure_id="10:0:0:0"} 0
-# HELP jbod_up Whether the last collection completed
-# TYPE jbod_up gauge
-jbod_up 1
+# HELP jbod_fan_speed_rpm Speed of a cooling element, addressed by enclosure and component
+# TYPE jbod_fan_speed_rpm gauge
+jbod_fan_speed_rpm{component="Fan A",component_id="2,0",enclosure="1:0:0:0",enclosure_id="ENC1"} 1200
+jbod_fan_speed_rpm{component="Fan B",component_id="2,1",enclosure="1:0:0:0",enclosure_id="ENC1"} 3000
 # HELP jbod_scrape_duration_seconds Duration of the last collection
 # TYPE jbod_scrape_duration_seconds gauge
 jbod_scrape_duration_seconds 1.234
 # HELP jbod_scrape_errors_total Failed collection operations per collector
 # TYPE jbod_scrape_errors_total counter
-jbod_scrape_errors_total{collector="enclosures"} 0
-jbod_scrape_errors_total{collector="slots"} 0
-jbod_scrape_errors_total{collector="disks"} 7
-jbod_scrape_errors_total{collector="fans"} 3
 jbod_scrape_errors_total{collector="components"} 0
+jbod_scrape_errors_total{collector="disks"} 7
+jbod_scrape_errors_total{collector="enclosures"} 0
+jbod_scrape_errors_total{collector="fans"} 3
 jbod_scrape_errors_total{collector="led"} 0
+jbod_scrape_errors_total{collector="slots"} 0
+# HELP jbod_sensor_temperature_celsius Temperature reported by an enclosure element
+# TYPE jbod_sensor_temperature_celsius gauge
+jbod_sensor_temperature_celsius{component="TEMP A",component_id="3,0",enclosure="1:0:0:0",enclosure_id="ENC1",type="temperature sensor"} 35
+# HELP jbod_sensor_temperature_threshold_celsius Threshold the enclosure declares for temperature
+# TYPE jbod_sensor_temperature_threshold_celsius gauge
+jbod_sensor_temperature_threshold_celsius{component="TEMP A",component_id="3,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="high_critical",type="temperature sensor"} 65
+jbod_sensor_temperature_threshold_celsius{component="TEMP A",component_id="3,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="high_warning",type="temperature sensor"} 60
+jbod_sensor_temperature_threshold_celsius{component="TEMP A",component_id="3,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="low_critical",type="temperature sensor"} -19
+jbod_sensor_temperature_threshold_celsius{component="TEMP A",component_id="3,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="low_warning",type="temperature sensor"} 0
+# HELP jbod_sensor_voltage_volts Voltage reported by an enclosure element
+# TYPE jbod_sensor_voltage_volts gauge
+jbod_sensor_voltage_volts{component="VOLT 12V",component_id="4,0",enclosure="1:0:0:0",enclosure_id="ENC1",type="voltage sensor"} 12.01
+# HELP jbod_ses_page_read Whether one SES diagnostic page answered
+# TYPE jbod_ses_page_read gauge
+jbod_ses_page_read{enclosure="10:0:0:0",enclosure_id="10:0:0:0",page="configuration",required="true"} 0
+jbod_ses_page_read{enclosure="10:0:0:0",enclosure_id="10:0:0:0",page="enclosure status",required="true"} 0
+jbod_ses_page_read{enclosure="10:0:0:0",enclosure_id="10:0:0:0",page="join",required="true"} 0
+jbod_ses_page_read{enclosure="10:0:0:0",enclosure_id="10:0:0:0",page="threshold in",required="false"} 0
+jbod_ses_page_read{enclosure="1:0:0:0",enclosure_id="ENC1",page="configuration",required="true"} 1
+jbod_ses_page_read{enclosure="1:0:0:0",enclosure_id="ENC1",page="enclosure status",required="true"} 1
+jbod_ses_page_read{enclosure="1:0:0:0",enclosure_id="ENC1",page="join",required="true"} 1
+jbod_ses_page_read{enclosure="1:0:0:0",enclosure_id="ENC1",page="threshold in",required="false"} 0
+# HELP jbod_slot_sas_address_info Bay, SAS address and the disk the kernel sees in it
+# TYPE jbod_slot_sas_address_info gauge
+jbod_slot_sas_address_info{block_device="/dev/sda",component_id="0,0",device="/dev/sg1",enclosure="1:0:0:0",enclosure_id="ENC1",sas_address="0x5000cca2a0d6e2f5",slot="0"} 1
+# HELP jbod_slot_temperature Enclosure number, slot position and temperature
+# TYPE jbod_slot_temperature gauge
+jbod_slot_temperature{enclosure="10:0:0:0",slot="Slot 03"} 41
+jbod_slot_temperature{enclosure="1:0:0:0",slot="Slot 01"} 37
+jbod_slot_temperature{enclosure="1:0:0:0",slot="Slot 10"} -2
+# HELP jbod_snapshot_timestamp_seconds When the collection behind this scrape started
+# TYPE jbod_snapshot_timestamp_seconds gauge
+jbod_snapshot_timestamp_seconds 1.7899848e+09
+# HELP jbod_up Whether the last collection completed
+# TYPE jbod_up gauge
+jbod_up 1
+# HELP number_of_enclosures Number of enclosures
+# TYPE number_of_enclosures gauge
+number_of_enclosures 2

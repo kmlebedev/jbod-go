@@ -3,10 +3,11 @@
 package metrics
 
 import (
-	"fmt"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/kmlebedev/jbod-go/internal/jbod"
 )
@@ -28,106 +29,78 @@ import (
 //     somebody at three in the morning because a threshold page is not
 //     implemented.
 
-// encodeEnclosureHealth publishes the condition of each shelf.
-//
-// Two sources are published separately because they answer different
-// questions: "hardware" is the enclosure's own verdict from its status
-// page, and "components" is what its elements report. A shelf that says
-// CRIT while every element reads OK is a real situation, and one series
-// could not show it.
-func encodeEnclosureHealth(b *strings.Builder, s jbod.Snapshot) {
-	if len(s.Status) == 0 {
-		return
-	}
-	b.WriteString("# HELP jbod_enclosure_health Enclosure condition; 1 marks the level the source reports\n")
-	b.WriteString("# TYPE jbod_enclosure_health gauge\n")
-	for _, status := range s.Status {
-		for _, source := range []struct {
-			name  string
-			level jbod.HealthLevel
-		}{
-			{"hardware", status.Hardware.Level},
-			{"components", status.Summary.Level},
-		} {
-			for _, level := range jbod.HealthLevels {
-				// Every level gets a series, so a shelf that recovers
-				// publishes a zero instead of leaving a stale critical
-				// series behind.
-				value := 0
-				if level == source.level {
-					value = 1
-				}
-				fmt.Fprintf(b, "jbod_enclosure_health{enclosure=\"%s\",enclosure_id=\"%s\",source=\"%s\",level=\"%s\"} %d\n",
-					label(status.Enclosure), label(status.Address), source.name, level, value)
-			}
-		}
-	}
-}
+// componentLabels is the address of one element, repeated by several series.
+var componentLabels = []string{"enclosure", "enclosure_id", "component", "component_id", "type"}
 
-// encodeComponents publishes the element roll-up and one info series per
-// element.
-//
-// The roll-up is what an alert is built on — "two power supplies, one of
-// them critical" — and the per-element series is what a dashboard drills
-// into. Counting is done per type because a shelf with a failed fan and a
-// shelf with a failed power supply need different people.
-func encodeComponents(b *strings.Builder, s jbod.Snapshot) {
-	if len(s.Status) == 0 {
-		return
-	}
-	b.WriteString("# HELP jbod_enclosure_components Declared elements per enclosure, by type and condition\n")
-	b.WriteString("# TYPE jbod_enclosure_components gauge\n")
-	type key struct {
-		enclosure, id, kind string
-		level               jbod.HealthLevel
-	}
-	counts := map[key]int{}
-	var order []key
-	for _, status := range s.Status {
-		for _, c := range status.Components {
-			k := key{status.Enclosure, status.Address, c.Type, c.Health}
-			if _, seen := counts[k]; !seen {
-				order = append(order, k)
-			}
-			counts[k]++
-		}
-	}
-	slices.SortStableFunc(order, func(a, b key) int {
-		if a.enclosure != b.enclosure {
-			return strings.Compare(a.enclosure, b.enclosure)
-		}
-		if a.kind != b.kind {
-			return strings.Compare(a.kind, b.kind)
-		}
-		return strings.Compare(string(a.level), string(b.level))
-	})
-	for _, k := range order {
-		fmt.Fprintf(b, "jbod_enclosure_components{enclosure=\"%s\",enclosure_id=\"%s\",type=\"%s\",health=\"%s\"} %d\n",
-			label(k.enclosure), label(k.id), label(k.kind), label(string(k.level)), counts[k])
-	}
-	b.WriteString("# HELP jbod_component_info Condition of one element; status is the enclosure's own spelling\n")
-	b.WriteString("# TYPE jbod_component_info gauge\n")
-	for _, status := range s.Status {
-		for _, c := range status.Components {
-			fmt.Fprintf(b, "jbod_component_info{enclosure=\"%s\",enclosure_id=\"%s\",component=\"%s\",component_id=\"%s\",type=\"%s\",status=\"%s\",health=\"%s\"} 1\n",
-				label(status.Enclosure), label(status.Address), label(c.Name), label(c.Index),
-				label(c.Type), label(c.Status.Or("")), label(string(c.Health)))
-		}
-	}
-}
+var (
+	descEnclosureHealth = prometheus.NewDesc(
+		"jbod_enclosure_health",
+		"Enclosure condition; 1 marks the level the source reports",
+		[]string{"enclosure", "enclosure_id", "source", "level"}, nil)
+	descComponents = prometheus.NewDesc(
+		"jbod_enclosure_components",
+		"Declared elements per enclosure, by type and condition",
+		[]string{"enclosure", "enclosure_id", "type", "health"}, nil)
+	descComponentInfo = prometheus.NewDesc(
+		"jbod_component_info",
+		"Condition of one element; status is the enclosure's own spelling",
+		[]string{"enclosure", "enclosure_id", "component", "component_id", "type", "status", "health"}, nil)
+	descMapping = prometheus.NewDesc(
+		"jbod_slot_sas_address_info",
+		"Bay, SAS address and the disk the kernel sees in it",
+		[]string{"enclosure", "enclosure_id", "slot", "component_id", "sas_address", "device", "block_device"}, nil)
+	descSnapshotTimestamp = prometheus.NewDesc(
+		"jbod_snapshot_timestamp_seconds",
+		"When the collection behind this scrape started",
+		nil, nil)
+	descCollectionComplete = prometheus.NewDesc(
+		"jbod_collection_complete",
+		"Whether every required SES page answered and the pages agreed",
+		[]string{"enclosure", "enclosure_id"}, nil)
+	descPageRead = prometheus.NewDesc(
+		"jbod_ses_page_read",
+		"Whether one SES diagnostic page answered",
+		[]string{"enclosure", "enclosure_id", "page", "required"}, nil)
+	descGenerationChanged = prometheus.NewDesc(
+		"jbod_enclosure_generation_changed",
+		"Whether the SES pages of one pass described different configurations",
+		[]string{"enclosure", "enclosure_id"}, nil)
+	descComponentsMissing = prometheus.NewDesc(
+		"jbod_enclosure_components_missing",
+		"Elements the configuration page declares that no status page reported",
+		[]string{"enclosure", "enclosure_id"}, nil)
+)
 
-// sensorMetric is the series name and the threshold series name of one
-// reading kind.
-var sensorMetrics = []struct {
+// sensorSeries is one reading kind with the two series it feeds.
+type sensorSeries struct {
 	kind      string
-	unit      string
-	value     string
-	threshold string
-	help      string
-}{
-	{jbod.ReadingTemperature, jbod.UnitCelsius, "jbod_sensor_temperature_celsius", "jbod_sensor_temperature_threshold_celsius", "Temperature reported by an enclosure element"},
-	{jbod.ReadingVoltage, jbod.UnitVolts, "jbod_sensor_voltage_volts", "jbod_sensor_voltage_threshold_volts", "Voltage reported by an enclosure element"},
-	{jbod.ReadingCurrent, jbod.UnitAmps, "jbod_sensor_current_amps", "jbod_sensor_current_threshold_amps", "Current reported by an enclosure element"},
+	value     *prometheus.Desc
+	threshold *prometheus.Desc
+}
+
+// newSensor builds the descriptors of one reading kind next to the kind
+// itself, so adding a kind is one entry rather than four edits.
+func newSensor(kind, value, threshold, help string) sensorSeries {
+	return sensorSeries{
+		kind:  kind,
+		value: prometheus.NewDesc(value, help, componentLabels, nil),
+		threshold: prometheus.NewDesc(threshold,
+			"Threshold the enclosure declares for "+kind,
+			append(slices.Clone(componentLabels), "threshold"), nil),
+	}
+}
+
+// sensorMetrics is every reading kind the enclosure can report.
+var sensorMetrics = []sensorSeries{
+	newSensor(jbod.ReadingTemperature,
+		"jbod_sensor_temperature_celsius", "jbod_sensor_temperature_threshold_celsius",
+		"Temperature reported by an enclosure element"),
+	newSensor(jbod.ReadingVoltage,
+		"jbod_sensor_voltage_volts", "jbod_sensor_voltage_threshold_volts",
+		"Voltage reported by an enclosure element"),
+	newSensor(jbod.ReadingCurrent,
+		"jbod_sensor_current_amps", "jbod_sensor_current_threshold_amps",
+		"Current reported by an enclosure element"),
 }
 
 // thresholdSeries are the four limits, in the order they are published.
@@ -141,29 +114,108 @@ var thresholdSeries = []struct {
 	{"low_critical", func(t jbod.Thresholds) jbod.Optional[float64] { return t.LowCritical }},
 }
 
-// encodeSensors publishes the enclosure's own sensors and the thresholds it
+// healthDescriptors is what this file can publish, for Describe.
+var healthDescriptors = func() []*prometheus.Desc {
+	descs := []*prometheus.Desc{
+		descEnclosureHealth, descComponents, descComponentInfo, descMapping,
+		descSnapshotTimestamp, descCollectionComplete, descPageRead,
+		descGenerationChanged, descComponentsMissing,
+	}
+	for _, metric := range sensorMetrics {
+		descs = append(descs, metric.value, metric.threshold)
+	}
+	return descs
+}()
+
+// collectEnclosureHealth publishes the condition of each shelf.
+//
+// Two sources are published separately because they answer different
+// questions: "hardware" is the enclosure's own verdict from its status
+// page, and "components" is what its elements report. A shelf that says
+// CRIT while every element reads OK is a real situation, and one series
+// could not show it.
+func collectEnclosureHealth(s *sink, snapshot jbod.Snapshot) {
+	for _, status := range snapshot.Status {
+		for _, source := range []struct {
+			name  string
+			level jbod.HealthLevel
+		}{
+			{"hardware", status.Hardware.Level},
+			{"components", status.Summary.Level},
+		} {
+			for _, level := range jbod.HealthLevels {
+				// Every level gets a series, so a shelf that recovers
+				// publishes a zero instead of leaving a stale critical
+				// series behind.
+				s.gauge(descEnclosureHealth, boolean(level == source.level),
+					status.Enclosure, status.Address, source.name, string(level))
+			}
+		}
+	}
+}
+
+// collectComponents publishes the element roll-up and one info series per
+// element.
+//
+// The roll-up is what an alert is built on — "two power supplies, one of
+// them critical" — and the per-element series is what a dashboard drills
+// into. Counting is done per type because a shelf with a failed fan and a
+// shelf with a failed power supply need different people.
+func collectComponents(s *sink, snapshot jbod.Snapshot) {
+	type rollup struct {
+		enclosure, id, kind string
+		level               jbod.HealthLevel
+	}
+	counts := map[rollup]int{}
+	var order []rollup
+	for _, status := range snapshot.Status {
+		for _, c := range status.Components {
+			k := rollup{status.Enclosure, status.Address, c.Type, c.Health}
+			if _, seen := counts[k]; !seen {
+				order = append(order, k)
+			}
+			counts[k]++
+		}
+	}
+	slices.SortStableFunc(order, func(a, b rollup) int {
+		if a.enclosure != b.enclosure {
+			return strings.Compare(a.enclosure, b.enclosure)
+		}
+		if a.kind != b.kind {
+			return strings.Compare(a.kind, b.kind)
+		}
+		return strings.Compare(string(a.level), string(b.level))
+	})
+	for _, k := range order {
+		s.gauge(descComponents, float64(counts[k]), k.enclosure, k.id, k.kind, string(k.level))
+	}
+	for _, status := range snapshot.Status {
+		for _, c := range status.Components {
+			s.gauge(descComponentInfo, 1,
+				status.Enclosure, status.Address, c.Name, c.Index,
+				c.Type, c.Status.Or(""), string(c.Health))
+		}
+	}
+}
+
+// collectSensors publishes the enclosure's own sensors and the thresholds it
 // declares for them.
 //
 // The thresholds are published as series of their own rather than folded
 // into an alerting rule, because they are the enclosure's numbers: a rule
 // that hard-codes 60 °C is wrong on the next shelf, and one that compares
 // against these is not.
-func encodeSensors(b *strings.Builder, s jbod.Snapshot) {
-	if len(s.Status) == 0 {
-		return
-	}
+func collectSensors(s *sink, snapshot jbod.Snapshot) {
 	for _, metric := range sensorMetrics {
-		var values, limits strings.Builder
-		for _, status := range s.Status {
+		for _, status := range snapshot.Status {
 			for _, c := range status.Components {
 				for _, r := range c.Readings {
 					if r.Kind != metric.kind {
 						continue
 					}
-					labels := fmt.Sprintf(`enclosure="%s",enclosure_id="%s",component="%s",component_id="%s",type="%s"`,
-						label(status.Enclosure), label(status.Address), label(c.Name), label(c.Index), label(c.Type))
+					labels := []string{status.Enclosure, status.Address, c.Name, c.Index, c.Type}
 					if v, ok := r.Value.Get(); ok {
-						fmt.Fprintf(&values, "%s{%s} %s\n", metric.value, labels, float(v))
+						s.gauge(metric.value, v, labels...)
 					}
 					if r.Thresholds == nil {
 						continue
@@ -173,54 +225,40 @@ func encodeSensors(b *strings.Builder, s jbod.Snapshot) {
 						if !ok {
 							continue
 						}
-						fmt.Fprintf(&limits, "%s{%s,threshold=\"%s\"} %s\n", metric.threshold, labels, limit.name, float(v))
+						s.gauge(metric.threshold, v, append(slices.Clone(labels), limit.name)...)
 					}
 				}
 			}
 		}
-		if values.Len() > 0 {
-			fmt.Fprintf(b, "# HELP %s %s\n# TYPE %s gauge\n%s", metric.value, metric.help, metric.value, values.String())
-		}
-		if limits.Len() > 0 {
-			fmt.Fprintf(b, "# HELP %s Threshold the enclosure declares for %s\n# TYPE %s gauge\n%s",
-				metric.threshold, metric.kind, metric.threshold, limits.String())
-		}
 	}
 }
 
-// encodeMapping publishes the slot → SAS address → disk mapping as an info
+// collectMapping publishes the slot → SAS address → disk mapping as an info
 // series, which is what lets a dashboard label a disk by the bay it sits in
 // (ROADMAP 5).
 //
 // Only bays with an address are published: an element with no address maps
 // to nothing, and an empty label would join to every other empty one.
-func encodeMapping(b *strings.Builder, s jbod.Snapshot) {
-	var body strings.Builder
-	for _, status := range s.Status {
+func collectMapping(s *sink, snapshot jbod.Snapshot) {
+	for _, status := range snapshot.Status {
 		for _, c := range status.Components {
 			if !c.IsBay() || len(c.SASAddresses) == 0 {
 				continue
 			}
 			slot := ""
 			if n, ok := c.SlotNumber.Get(); ok {
-				slot = strconv.FormatInt(n, 10)
+				slot = number(n)
 			}
 			for _, address := range c.SASAddresses {
-				fmt.Fprintf(&body, "jbod_slot_sas_address_info{enclosure=\"%s\",enclosure_id=\"%s\",slot=\"%s\",component_id=\"%s\",sas_address=\"%s\",device=\"%s\",block_device=\"%s\"} 1\n",
-					label(status.Enclosure), label(status.Address), label(slot), label(c.Index),
-					label(address), label(c.Device.Or("")), label(c.Map.Or("")))
+				s.gauge(descMapping, 1,
+					status.Enclosure, status.Address, slot, c.Index,
+					address, c.Device.Or(""), c.Map.Or(""))
 			}
 		}
 	}
-	if body.Len() == 0 {
-		return
-	}
-	b.WriteString("# HELP jbod_slot_sas_address_info Bay, SAS address and the disk the kernel sees in it\n")
-	b.WriteString("# TYPE jbod_slot_sas_address_info gauge\n")
-	b.WriteString(body.String())
 }
 
-// encodeCollection publishes how complete the collection was, per shelf and
+// collectCollection publishes how complete the collection was, per shelf and
 // per page.
 //
 // This is the other half of the health report: jbod_enclosure_health says
@@ -228,52 +266,17 @@ func encodeMapping(b *strings.Builder, s jbod.Snapshot) {
 // alert on a critical enclosure and an alert on a shelf that stopped
 // answering are different alerts, and they need different series
 // (ROADMAP 5).
-func encodeCollection(b *strings.Builder, s jbod.Snapshot) {
-	if !s.ReadAt.IsZero() {
-		b.WriteString("# HELP jbod_snapshot_timestamp_seconds When the collection behind this scrape started\n")
-		b.WriteString("# TYPE jbod_snapshot_timestamp_seconds gauge\n")
-		fmt.Fprintf(b, "jbod_snapshot_timestamp_seconds %s\n",
-			strconv.FormatFloat(float64(s.ReadAt.UnixNano())/1e9, 'f', 3, 64))
+func collectCollection(s *sink, snapshot jbod.Snapshot) {
+	if !snapshot.ReadAt.IsZero() {
+		s.gauge(descSnapshotTimestamp, float64(snapshot.ReadAt.UnixNano())/1e9)
 	}
-	if len(s.Status) == 0 {
-		return
-	}
-	b.WriteString("# HELP jbod_collection_complete Whether every required SES page answered and the pages agreed\n")
-	b.WriteString("# TYPE jbod_collection_complete gauge\n")
-	for _, status := range s.Status {
-		fmt.Fprintf(b, "jbod_collection_complete{enclosure=\"%s\",enclosure_id=\"%s\"} %d\n",
-			label(status.Enclosure), label(status.Address), boolean(status.Collection.Complete))
-	}
-	b.WriteString("# HELP jbod_ses_page_read Whether one SES diagnostic page answered\n")
-	b.WriteString("# TYPE jbod_ses_page_read gauge\n")
-	for _, status := range s.Status {
+	for _, status := range snapshot.Status {
+		s.gauge(descCollectionComplete, boolean(status.Collection.Complete), status.Enclosure, status.Address)
 		for _, page := range status.Collection.Pages {
-			fmt.Fprintf(b, "jbod_ses_page_read{enclosure=\"%s\",enclosure_id=\"%s\",page=\"%s\",required=\"%t\"} %d\n",
-				label(status.Enclosure), label(status.Address), label(page.Name), page.Required, boolean(page.OK))
+			s.gauge(descPageRead, boolean(page.OK),
+				status.Enclosure, status.Address, page.Name, strconv.FormatBool(page.Required))
 		}
+		s.gauge(descGenerationChanged, boolean(status.Collection.GenerationChanged), status.Enclosure, status.Address)
+		s.gauge(descComponentsMissing, float64(status.Collection.Missing), status.Enclosure, status.Address)
 	}
-	b.WriteString("# HELP jbod_enclosure_generation_changed Whether the SES pages of one pass described different configurations\n")
-	b.WriteString("# TYPE jbod_enclosure_generation_changed gauge\n")
-	for _, status := range s.Status {
-		fmt.Fprintf(b, "jbod_enclosure_generation_changed{enclosure=\"%s\",enclosure_id=\"%s\"} %d\n",
-			label(status.Enclosure), label(status.Address), boolean(status.Collection.GenerationChanged))
-	}
-	b.WriteString("# HELP jbod_enclosure_components_missing Elements the configuration page declares that no status page reported\n")
-	b.WriteString("# TYPE jbod_enclosure_components_missing gauge\n")
-	for _, status := range s.Status {
-		fmt.Fprintf(b, "jbod_enclosure_components_missing{enclosure=\"%s\",enclosure_id=\"%s\"} %d\n",
-			label(status.Enclosure), label(status.Address), status.Collection.Missing)
-	}
-}
-
-// float renders a reading without an exponent and without trailing zeros,
-// so 12.01 volts stays 12.01 and 35 degrees stays 35.
-func float(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }
-
-// boolean renders a flag as the 0 or 1 the text format expects.
-func boolean(v bool) int {
-	if v {
-		return 1
-	}
-	return 0
 }
