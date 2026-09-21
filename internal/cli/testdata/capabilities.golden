@@ -1,0 +1,11 @@
+Enclosure 1:0:0:0  address naa.50050cc10c400000 (stable)  components 3
+CAPABILITY         READ         WRITE        EVIDENCE
+slot.enumeration   supported    unsupported  sysfs: 3 component directories
+led.locate         supported    unknown      sysfs: 3/3 components expose locate, 3 readable; the attribute is writable (3/3), but a control page the enclosure ignores still returns success; only a readback after a real write confirms it
+slot.power_status  unknown      unknown      sysfs: 3/3 components expose power_status, 2 readable [error: permission denied]
+disk.temperature   unsupported  unsupported  scsi_temperature: not installed [error: scsi_temperature: not found in /usr/sbin:/usr/bin:/sbin:/bin]
+
+Enclosure 10:0:0:0  address 10:0:0:0 (temporary)  components 1
+CAPABILITY        READ         WRITE        EVIDENCE
+slot.enumeration  supported    unsupported  sysfs: 1 component directories
+led.locate        unsupported  unsupported  no component exposes locate

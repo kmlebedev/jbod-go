@@ -68,6 +68,20 @@ func TestBinary(t *testing.T) {
 			name: "bad port", args: []string{"prometheus", "--port", "70000"},
 			exitCode: 1, stderr: `invalid port "70000"`,
 		},
+		{
+			// The v1.1 commands exist and reach the hardware check, which
+			// on a machine with no enclosure is where they stop.
+			name: "capabilities without hardware", args: []string{"capabilities"},
+			exitCode: 1, stderr: "enclosure",
+		},
+		{
+			name: "slots without hardware", args: []string{"list", "--slots"},
+			exitCode: 1, stderr: "enclosure",
+		},
+		{
+			name: "led target that is neither a device nor a slot", args: []string{"led", "-l", "sda", "--on"},
+			exitCode: 1, stderr: "/dev/sda",
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

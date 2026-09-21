@@ -31,12 +31,18 @@ Tuning flags:
   --scrape-timeout DUR   timeout of one full collection (default 2m0s)
   --concurrency N        external commands allowed to run at once (default 12)
   --cache-ttl DUR        reuse the previous collection for this long (default 0s)
+  --deprecated-metrics   also export the pre-1.1 series (default true)
   --log-level LEVEL      debug, info, warn or error (default info)
   --log-format FORMAT    json or text (default json)
 
 Concurrent scrapes always share one collection pass; --cache-ttl additionally
 serves a recent result without touching the hardware. Set it to about half the
 Prometheus scrape_interval if the shelf is polled from several places.
+
+jbod_fan_rpm is deprecated: its labels omit the enclosure, so identical fans
+of two shelves overwrite each other. Use jbod_fan_speed_rpm, which carries
+enclosure and enclosure_id, and turn the old series off with
+--deprecated-metrics=false once nothing reads it. Removal is planned for 2.0.
 Logs go to stderr.
 `
 
@@ -100,6 +106,7 @@ func Prometheus(ctx context.Context, args []string, out, errOut io.Writer, c *jb
 	scrapeTimeout := f.Duration("scrape-timeout", exporter.DefaultScrapeTimeout, "timeout of one full collection")
 	cacheTTL := f.Duration("cache-ttl", 0, "reuse the previous collection for this long")
 	concurrency := f.Int("concurrency", jbod.DefaultConcurrency, "external commands allowed to run at once")
+	deprecated := f.Bool("deprecated-metrics", true, "also export the pre-1.1 series, including jbod_fan_rpm")
 	logLevel := f.String("log-level", "info", "log level: debug, info, warn or error")
 	logFormat := f.String("log-format", LogFormatJSON, "log format: json or text")
 	if err := f.Parse(args); err != nil {
@@ -166,6 +173,7 @@ func Prometheus(ctx context.Context, args []string, out, errOut io.Writer, c *jb
 		Handler: exporter.New(collector,
 			exporter.WithScrapeTimeout(*scrapeTimeout),
 			exporter.WithCacheTTL(*cacheTTL),
+			exporter.WithDeprecatedMetrics(*deprecated),
 			exporter.WithLogger(logger),
 		).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
@@ -195,7 +203,7 @@ func Prometheus(ctx context.Context, args []string, out, errOut io.Writer, c *jb
 	logger.Info("started",
 		"address", listener.Addr().String(), "version", Version(),
 		"command_timeout", *commandTimeout, "scrape_timeout", *scrapeTimeout,
-		"concurrency", *concurrency, "cache_ttl", *cacheTTL)
+		"concurrency", *concurrency, "cache_ttl", *cacheTTL, "deprecated_metrics", *deprecated)
 	err = server.Serve(listener)
 	if errors.Is(err, http.ErrServerClosed) {
 		logger.Info("stopped")
