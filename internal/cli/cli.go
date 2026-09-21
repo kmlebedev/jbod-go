@@ -69,6 +69,23 @@ func enclosureAliases(_ *pflag.FlagSet, name string) pflag.NormalizedName {
 	return pflag.NormalizedName(name)
 }
 
+// listAliases accepts the plural spellings. "--fans" is what an operator
+// types next to "--disks" and "--slots", and answering "unknown flag" to a
+// reasonable guess is a small cruelty.
+func listAliases(_ *pflag.FlagSet, name string) pflag.NormalizedName {
+	switch name {
+	case "fans":
+		return "fan"
+	case "enclosures":
+		return "enclosure"
+	case "disk":
+		return "disks"
+	case "slot":
+		return "slots"
+	}
+	return pflag.NormalizedName(name)
+}
+
 // flags returns a POSIX flag set that reports errors to the caller instead of
 // exiting, and prints its usage where the command prints everything else.
 func flags(name string, w io.Writer) *pflag.FlagSet {

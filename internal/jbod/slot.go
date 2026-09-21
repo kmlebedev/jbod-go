@@ -48,9 +48,31 @@ const (
 // table in drivers/misc/enclosure.c.
 const (
 	statusNotInstalled = "not installed"
-	statusUnavailable  = "unavailable"
-	statusUnsupported  = "unsupported"
+	// statusUnnamed is what sysfs prints when the status code has no entry
+	// in that table: enclosure.c indexes it with the raw SES element status
+	// and formats the NULL past the end of the array.
+	//
+	// In practice this is SES status 8, "no access allowed" — the code an
+	// I/O module reports for a bay it cannot reach. A WD H4060-J with two
+	// IOMs reports it for the thirty bays owned by the other module, and
+	// reading it as an empty bay is how thirty populated slots came to be
+	// listed as empty.
+	statusUnnamed = "(null)"
 )
+
+// parseStatus normalises the component status. An unnamed code is not a
+// status we can report, so it becomes an absent value plus the reason.
+func parseStatus(raw string, ok bool) (Optional[string], Optional[string]) {
+	if !ok {
+		return None[string](), None[string]()
+	}
+	if strings.TrimSpace(raw) == statusUnnamed {
+		return None[string](), Some("the enclosure reports a status code the driver cannot name " +
+			"(sysfs status is \"(null)\"); SES code 8 is \"no access allowed\", which is how a bay " +
+			"owned by another I/O module of the same shelf reads")
+	}
+	return Some(raw), None[string]()
+}
 
 // FaultState is the fault indication of a slot, split into what the
 // enclosure detected and what somebody asked for.
@@ -308,6 +330,7 @@ func compareSlots(a, b Slot) int {
 
 // readSlot fills in one component from its sysfs directory.
 func (c *Client) readSlot(enc Enclosure, id Optional[string], name, dir string, mapping map[string]string, p *problems) Slot {
+	status, note := parseStatus(readText(filepath.Join(dir, "status")))
 	s := Slot{
 		Enclosure:   enc.Slot,
 		EnclosureID: id,
@@ -315,12 +338,12 @@ func (c *Client) readSlot(enc Enclosure, id Optional[string], name, dir string, 
 		Label:       strings.SplitN(name, ",", 2)[0],
 		Number:      From(readInt(filepath.Join(dir, "slot"))),
 		Type:        From(readText(filepath.Join(dir, "type"))),
-		Status:      From(readText(filepath.Join(dir, "status"))),
+		Status:      status,
 		Locate:      From(readBool(filepath.Join(dir, "locate"))),
 		Fault:       parseFault(readText(filepath.Join(dir, "fault"))),
 		Power:       From(readText(filepath.Join(dir, "power_status"))),
 	}
-	s.Occupancy, s.Device, s.Err = c.occupancy(dir, s.Status, p)
+	s.Occupancy, s.Device, s.Err = c.occupancy(dir, status, note, p)
 	if device, ok := s.Device.Get(); ok {
 		if m, ok := mapping[device]; ok && m != "" {
 			s.Map = Some(m)
@@ -332,11 +355,18 @@ func (c *Client) readSlot(enc Enclosure, id Optional[string], name, dir string, 
 // occupancy decides what is in the slot and returns the generic device when
 // there is one.
 //
-// Reading the directory is the authority on whether something is attached;
-// the status attribute only resolves what "nothing attached" means. An error
-// other than "does not exist" is never flattened into empty: a slot we could
-// not read is unavailable and says why.
-func (c *Client) occupancy(dir string, status Optional[string], p *problems) (Occupancy, Optional[string], Optional[string]) {
+// Reading the directory is the authority on whether something is attached.
+// When nothing is, only the enclosure can say why, and the rule is
+// deliberately strict: a bay is reported empty when the enclosure says "not
+// installed", and unavailable in every other case.
+//
+// That strictness is not theoretical. A shelf with two I/O modules exposes
+// one sysfs enclosure per module, each listing all sixty bays, and each
+// reporting the thirty bays it does not own with a status the driver cannot
+// even name. Treating "no device attached and no explanation" as an empty
+// bay turned thirty populated slots into thirty empty ones — the exact
+// confusion the three states exist to prevent (ROADMAP 4).
+func (c *Client) occupancy(dir string, status, note Optional[string], p *problems) (Occupancy, Optional[string], Optional[string]) {
 	devPath := filepath.Join(dir, "device")
 	generic, err := os.ReadDir(filepath.Join(devPath, "scsi_generic"))
 	switch {
@@ -347,7 +377,7 @@ func (c *Client) occupancy(dir string, status Optional[string], p *problems) (Oc
 		return OccupancyOccupied, None[string](), None[string]()
 	case !os.IsNotExist(err):
 		// A drive pulled during the walk, or an attribute we may not read.
-		// Either way this is not an empty bay (ROADMAP 4).
+		// Either way this is not an empty bay.
 		p.note(CollectorSlots, err)
 		return OccupancyUnavailable, None[string](), Some(err.Error())
 	}
@@ -356,11 +386,21 @@ func (c *Client) occupancy(dir string, status Optional[string], p *problems) (Oc
 	if _, err := os.Stat(devPath); err == nil {
 		return OccupancyOccupied, None[string](), None[string]()
 	}
-	switch strings.ToLower(status.Or("")) {
-	case statusUnavailable, statusUnsupported:
-		return OccupancyUnavailable, None[string](), Some("enclosure reports the component as " + status.Or(""))
+	if strings.EqualFold(strings.TrimSpace(status.Or("")), statusNotInstalled) {
+		return OccupancyEmpty, None[string](), None[string]()
 	}
-	return OccupancyEmpty, None[string](), None[string]()
+	switch {
+	case note.Present():
+		return OccupancyUnavailable, None[string](), note
+	case status.Present():
+		return OccupancyUnavailable, None[string](), Some(fmt.Sprintf(
+			"no device is attached and the enclosure reports %q rather than %q",
+			status.Or(""), statusNotInstalled))
+	default:
+		return OccupancyUnavailable, None[string](), Some(
+			"no device is attached and the enclosure exposes no status attribute, " +
+				"so whether the bay is empty is unknown")
+	}
 }
 
 // genericDevices lists every generic device of one slot directory. A slot

@@ -254,6 +254,31 @@ func (e Enclosure) Matches(ref string) bool {
 	return false
 }
 
+// SiblingsOf returns the other enclosures that answer to the same
+// identifier as the one at index i.
+//
+// A chassis with two I/O modules registers one sysfs enclosure per module,
+// and both report the same enclosure logical identifier, because it
+// identifies the chassis and not the module. So an identifier does not
+// address a single sysfs enclosure, and anything that resolves one has to
+// say which path it picked.
+func SiblingsOf(enclosures []Enclosure, i int) []Enclosure {
+	if i < 0 || i >= len(enclosures) {
+		return nil
+	}
+	ref, _ := enclosures[i].Ref()
+	var siblings []Enclosure
+	for j, other := range enclosures {
+		if j == i {
+			continue
+		}
+		if otherRef, _ := other.Ref(); strings.EqualFold(ref, otherRef) {
+			siblings = append(siblings, other)
+		}
+	}
+	return siblings
+}
+
 // SelectEnclosures keeps the shelves matching ref, or all of them when ref
 // is empty. An unknown reference is an error rather than an empty listing,
 // which would read as "this shelf has nothing in it".
@@ -306,7 +331,11 @@ type Fan struct {
 	Description string           `json:"component"`
 	Index       string           `json:"component_id"`
 	Comment     Optional[string] `json:"condition"`
-	Speed       int64            `json:"speed_rpm"`
+	// Speed is absent when the element answered without an RPM reading.
+	// It used to be dropped from the listing entirely, so a cooling
+	// element that stopped reporting simply vanished from a table of
+	// eight fans and nobody could tell it had ever been there.
+	Speed Optional[int64] `json:"speed_rpm"`
 }
 
 // DiskOptions selects how much work Disks does.
@@ -515,7 +544,7 @@ func (c *Client) fans(ctx context.Context, enclosures []Enclosure, p *problems) 
 			p.fail(CollectorFans, err)
 			return
 		}
-		lists[i] = parseFanElements(out)
+		lists[i] = individual(parseFanElements(out))
 	})
 	// Deduplicate in enclosure order so the result does not depend on which
 	// goroutine finished first.
@@ -537,40 +566,33 @@ func (c *Client) fans(ctx context.Context, enclosures []Enclosure, p *problems) 
 	// Pass 2: one sg_ses per element, in parallel; results are written by
 	// index so the order above is preserved.
 	result := make([]Fan, len(found))
-	ok := make([]bool, len(found))
 	forEach(ctx, c.concurrency, len(found), func(i int) {
 		e := found[i]
-		out, err := c.exec(ctx, "sg_ses", "--index="+e.fan.Index, e.enc.Device)
-		if err != nil {
-			p.note(CollectorFans, err)
-			return
-		}
-		speed, condition, found := parseFanSpeed(out)
-		if !found {
-			// A single sensor without an RPM line used to fail the scrape
-			// and take the temperatures down with it (A6).
-			p.note(CollectorFans, fmt.Errorf("no fan RPM for %s index %s", e.enc.Device, e.fan.Index))
-			return
-		}
 		result[i] = Fan{
 			Slot:        e.enc.Slot,
 			Serial:      e.enc.Serial,
 			Description: e.fan.Description,
 			Index:       e.fan.Index,
-			Comment:     condition,
-			Speed:       speed,
 		}
-		ok[i] = true
+		out, err := c.exec(ctx, "sg_ses", "--index="+e.fan.Index, e.enc.Device)
+		if err != nil {
+			p.note(CollectorFans, err)
+			return
+		}
+		speed, condition, ok := parseFanSpeed(out)
+		result[i].Comment = condition
+		if !ok {
+			// A single sensor without an RPM line used to fail the scrape
+			// and take the temperatures down with it (A6). The element
+			// stays in the listing with its speed absent, so a fan that
+			// stopped answering is visible rather than missing.
+			p.note(CollectorFans, fmt.Errorf("no fan RPM for %s index %s", e.enc.Device, e.fan.Index))
+			return
+		}
+		result[i].Speed = Some(speed)
 	})
-	// Drop the elements whose speed could not be read.
-	fans := result[:0]
-	for i, f := range result {
-		if ok[i] {
-			fans = append(fans, f)
-		}
-	}
-	if len(fans) == 0 {
+	if len(result) == 0 {
 		return nil
 	}
-	return fans
+	return result
 }

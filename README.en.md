@@ -84,8 +84,18 @@ The three occupancy states are deliberately distinct:
 | Occupancy | Meaning |
 | --- | --- |
 | `occupied` | a device is attached to the slot |
-| `empty` | nothing is attached and the enclosure answered: `not installed`, or some other status |
-| `unavailable` | the slot could not be read, or the enclosure reports it as `unavailable`/`unsupported` |
+| `empty` | nothing is attached and the enclosure explicitly says `not installed` |
+| `unavailable` | everything else: the slot could not be read, or nothing is attached and the enclosure did not say the bay is empty |
+
+The rule is deliberately strict. A chassis with two I/O modules (verified on
+a WD H4060-J) registers one sysfs enclosure per module, each listing all 60
+bays, and reports the 30 it does not own with a status the driver cannot
+name: `enclosure.c` indexes its name table with the raw SES status, and code
+8, "no access allowed", is past the end of that table, so sysfs prints a
+literal `(null)`. Reading "nothing attached and no explanation" as an empty
+bay turns 30 populated slots into 30 empty ones — the exact confusion the
+three states exist to prevent. The reason is printed once as a footnote
+under the table rather than as a column on every row.
 
 A slot that could not be read is never rendered as an empty one. A `-` means
 "the enclosure does not expose this attribute", not zero; in JSON it is
@@ -97,6 +107,11 @@ The FAULT column is split the way SES encodes it: the driver stores
 the indicator on). So `sensed` is an alarm, `requested` is an operator's
 marker, and merging them would turn one into the other. A write sets only the
 requested bit, and the readback compares that bit.
+
+One identifier can belong to two sysfs enclosures: it names the chassis,
+not the module. When it does, the table heading says so (`same chassis as
+1:0:31:0`), and `led` picks the path that owns the bay — through the other
+module the write would be accepted and light nothing.
 
 Addressing an enclosure. In order of preference: the logical identifier
 (`/sys/class/enclosure/*/id`, filled by the SES backend), then the unit serial
@@ -117,7 +132,8 @@ sudo jbod led --locate "1:0:0:0/Slot 05, front" --on           # by component na
 sudo jbod led --locate /dev/sda --on                           # as before
 ```
 
-An empty bay can only be lit this way: it has no device path.
+An empty bay can only be lit this way: it has no device path. The result
+line says where the write actually went (`[1:0:31:0 slot 30, /dev/sg34]`).
 
 After a write the state is read back, with a bounded wait
 (`--readback-timeout`, one second by default). A system call that returned

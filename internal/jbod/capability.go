@@ -69,7 +69,12 @@ type EnclosureCapabilities struct {
 	Address     string           `json:"address"`
 	StableID    bool             `json:"stable_id"`
 	// Components is how many slots the walk found.
-	Components   int          `json:"components"`
+	Components int `json:"components"`
+	// Shared lists the other sysfs enclosures that answer to the same
+	// identifier, empty when this shelf is reached through one path only.
+	// Two I/O modules of one chassis report the same logical identifier,
+	// so a report that did not say this would read as two shelves.
+	Shared       []string     `json:"shared,omitempty"`
 	Capabilities []Capability `json:"capabilities"`
 }
 
@@ -101,6 +106,9 @@ func (c *Client) Capabilities(ctx context.Context, enclosures []Enclosure) ([]En
 			p.fail(CollectorSlots, fmt.Errorf("read enclosure sysfs: %w", err))
 		}
 		report.Components = len(dirs)
+		for _, sibling := range SiblingsOf(enclosures, i) {
+			report.Shared = append(report.Shared, sibling.Slot)
+		}
 		report.Capabilities = c.probe(ctx, enc, dirs)
 		result[i] = report
 	})

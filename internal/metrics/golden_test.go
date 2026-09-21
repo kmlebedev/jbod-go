@@ -54,8 +54,8 @@ func fullSnapshot() jbod.Snapshot {
 			{Enclosure: "10:0:0:0", Slot: "Slot 03", Temperature: jbod.Some(int64(41))},
 		},
 		Fans: []jbod.Fan{
-			{Slot: "1:0:0:0", Description: "Fan A", Index: "2,0", Comment: jbod.Some("low speed"), Speed: 1200},
-			{Slot: "1:0:0:0", Description: "Fan B", Index: "2,1", Speed: 3000},
+			{Slot: "1:0:0:0", Description: "Fan A", Index: "2,0", Comment: jbod.Some("low speed"), Speed: jbod.Some(int64(1200))},
+			{Slot: "1:0:0:0", Description: "Fan B", Index: "2,1", Speed: jbod.Some(int64(3000))},
 		},
 		Errors:   map[string]int{jbod.CollectorFans: 1, jbod.CollectorDisks: 2},
 		Duration: 1234 * time.Millisecond,

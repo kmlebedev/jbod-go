@@ -177,8 +177,8 @@ func TestInventoryAndLED(t *testing.T) {
 		if len(fs) != 1 {
 			t.Fatalf("got %d fans, want 1: %+v", len(fs), fs)
 		}
-		if fs[0].Speed != 1200 {
-			t.Errorf("speed: got %d, want 1200", fs[0].Speed)
+		if fs[0].Speed.Or(0) != 1200 {
+			t.Errorf("speed: got %s, want 1200", fs[0].Speed)
 		}
 		if got := fs[0].Comment.Or(""); got != "low speed" {
 			t.Errorf("condition: got %q, want %q", got, "low speed")
