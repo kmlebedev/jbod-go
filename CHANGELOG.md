@@ -7,10 +7,85 @@ built from a checkout.
 
 ## Unreleased
 
+### 1.1 — correct inventory and capabilities
+
+Slots and disks become separate things, enclosures get an identity that
+survives a reboot, LED writes are confirmed rather than assumed, and the
+colliding fan metric is replaced. ROADMAP section 4.
+
+#### Added
+
+- `jbod list --slots` lists every bay of an enclosure, empty ones included,
+  with the slot number, type, status, power state and both indicators. The
+  walk starts from the enclosure's components instead of
+  `device/scsi_generic`, so an empty bay exists in the model for the first
+  time. Occupancy has three states — `occupied`, `empty` and `unavailable` —
+  and a slot that could not be read is never rendered as an empty one.
+- `jbod capabilities` reports what a shelf can do, read and write judged
+  separately, with the evidence behind each verdict and `supported` /
+  `unsupported` / `unknown` as the three answers. Discovery performs no
+  writes, and it never reports a write as supported: an enclosure may accept
+  a control page and ignore it while the kernel returns success, so only a
+  readback after a real write can confirm one. A transport or permission
+  failure is reported apart from the verdict, never as `unsupported`.
+- The fault indication is split into the fault the enclosure detected and
+  the fault somebody requested, following the SES encoding the driver packs
+  into the sysfs attribute (`(status[3] & 0x60) >> 5`).
+- `Enclosure.ID` from the sysfs `id` attribute — the enclosure logical
+  identifier — with a documented fallback to the unit serial number and then
+  to the SCSI address, which is marked `temporary` wherever it is used.
+  `--enclosure-id` (also `--enclosure` where the name is free) accepts any of
+  the three spellings.
+- LED targets can now be slots: `led --locate 1:0:0:0/5`, `led --enclosure
+  <id> --locate 5`, or the component name. An empty bay can only be lit this
+  way, because it has no device path. The existing `/dev/sg*` and `/dev/sd*`
+  syntax is unchanged.
+- Every LED write is read back within `--readback-timeout` (one second by
+  default). A write the kernel accepted is reported as `confirmed` only when
+  the enclosure reports the requested state; a readback that shows the other
+  state is a failure, and an attribute that cannot be read back is reported
+  as such rather than as a success.
+- A slot that disappears during an operation is reported as exactly that
+  (`ErrSlotGone`), separately from a permission or I/O failure.
+- `--json` on `list`, `capabilities` and `led`. An absent reading is `null`,
+  never a zero; a section that was not requested is missing from the
+  document, a requested and empty one is `[]`.
+- `jbod_fan_speed_rpm{enclosure,enclosure_id,component,component_id}`, the
+  corrected fan metric.
+- `jbod_enclosure_info{enclosure,enclosure_id,id_source,vendor,model,revision,serial}`,
+  the join target for every series labelled with the SCSI address, and the
+  marker that says when that identity is only the address again.
+- `jbod_enclosure_slots{enclosure,enclosure_id,occupancy}`, the slot counts
+  per state, published for all three states so a count reaching zero stays
+  visible.
+- `--deprecated-metrics=false` for the exporter, to drop the pre-1.1 series
+  once nothing reads them.
+
+#### Changed
+
+- Disks are now a projection of the slot walk, so the disk view and the slot
+  view cannot disagree. `Disk` carries `EnclosureID` and `SlotNumber`.
+- `jbod_scrape_errors_total` gained the `slots` and `led` collectors. An
+  unreadable enclosure tree is now counted against `slots`, which is what
+  enumerates the bays; `disks` counts the per-disk telemetry only.
+- `Client.SetLED` takes a `LEDTarget` and returns an `LEDResult`
+  (internal API).
+
+#### Deprecated
+
+- `jbod_fan_rpm`. Its labels are the fan description and the sg_ses index,
+  both of which are per-shelf, so identical fans on two enclosures overwrite
+  each other. Relabelling it in place would change the meaning of a series
+  dashboards already read, so the fix is the new name above and the old
+  series stays, exported by default, until 2.0. `--deprecated-metrics=false`
+  turns it off once the migration is done; README has the steps.
+
+### Post-port review
+
 Post-port review of the Go port of [Gandi/jbod-rs](https://github.com/Gandi/jbod-rs).
 The CLI output and the original metric names are unchanged throughout.
 
-### Added
+#### Added
 
 - `jbod_up`, `jbod_scrape_duration_seconds` and
   `jbod_scrape_errors_total{collector}`: a partial collection is now an HTTP
@@ -36,7 +111,7 @@ The CLI output and the original metric names are unchanged throughout.
   postinst/prerm/postrm using `deb-systemd-helper`; goreleaser builds
   archives, a `.deb` and `SHA256SUMS` from a `v*` tag.
 
-### Changed
+#### Changed
 
 - Collection runs in parallel with a bounded worker pool (`--concurrency`,
   12 by default). A 60-slot shelf used to mean 120 sequential process starts,
@@ -64,7 +139,7 @@ The CLI output and the original metric names are unchanged throughout.
 - Go 1.25 is the minimum; CI runs 1.25 and 1.26, with a gofmt gate,
   golangci-lint, govulncheck, cross-builds and a `.deb` build.
 
-### Fixed
+#### Fixed
 
 - `jbod list -e -f` silently dropped the fan section.
 - Disks were ordered lexicographically, so `Slot 10` came before `Slot 2`.
