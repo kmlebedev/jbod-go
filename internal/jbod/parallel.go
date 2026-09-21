@@ -54,13 +54,19 @@ func forEach(ctx context.Context, limit, n int, fn func(i int)) {
 // which the metrics encoder renders them.
 const (
 	CollectorEnclosures = "enclosures"
-	CollectorDisks      = "disks"
-	CollectorFans       = "fans"
+	// CollectorSlots covers the sysfs walk that enumerates the bays. Disk
+	// enumeration is a projection of it, so an unreadable shelf is counted
+	// here and only the per-disk telemetry is counted as disks.
+	CollectorSlots = "slots"
+	CollectorDisks = "disks"
+	CollectorFans  = "fans"
+	// CollectorLED covers the LED writes and their readback.
+	CollectorLED = "led"
 )
 
 // Collectors lists every collector, so the error series exist from the first
 // scrape even when nothing failed.
-var Collectors = []string{CollectorEnclosures, CollectorDisks, CollectorFans}
+var Collectors = []string{CollectorEnclosures, CollectorSlots, CollectorDisks, CollectorFans, CollectorLED}
 
 // problems accumulates the failures of a single collection pass.
 //

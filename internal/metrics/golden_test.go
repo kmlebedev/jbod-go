@@ -68,7 +68,7 @@ func TestEncodeGolden(t *testing.T) {
 	golden(t, "metrics.golden", Encode(fullSnapshot(), map[string]int{
 		jbod.CollectorDisks: 7,
 		jbod.CollectorFans:  3,
-	}))
+	}, Options{Deprecated: true}))
 }
 
 func TestEncodeGoldenIncomplete(t *testing.T) {
@@ -76,5 +76,5 @@ func TestEncodeGoldenIncomplete(t *testing.T) {
 	s := fullSnapshot()
 	s.Up = false
 	s.Duration = 120 * time.Second
-	golden(t, "metrics-down.golden", Encode(s, s.Errors))
+	golden(t, "metrics-down.golden", Encode(s, s.Errors, Options{Deprecated: true}))
 }

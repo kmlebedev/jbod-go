@@ -12,8 +12,11 @@ import (
 // failed to read. It is what internal/metrics encodes.
 type Snapshot struct {
 	Enclosures []Enclosure
-	Disks      []Disk
-	Fans       []Fan
+	// Slots is every bay, empty ones included. Disks is the occupied
+	// subset with its telemetry filled in.
+	Slots []Slot
+	Disks []Disk
+	Fans  []Fan
 	// Errors counts failed operations per collector.
 	Errors map[string]int
 	// Duration is how long the pass took.
@@ -37,10 +40,14 @@ func (c *Client) Collect(ctx context.Context) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
-	disks := c.disks(ctx, enc, DiskOptions{WithTelemetry: true}, p)
+	// One walk feeds both views: the disks are the occupied slots, so a
+	// second walk could only disagree with the first.
+	slots := c.slots(ctx, enc, p)
+	disks := c.disksFromSlots(ctx, slots, DiskOptions{WithTelemetry: true}, p)
 	fans := c.fans(ctx, enc, p)
 	s := Snapshot{
 		Enclosures: enc,
+		Slots:      slots,
 		Disks:      disks,
 		Fans:       fans,
 		Errors:     p.snapshotCounts(),
@@ -60,7 +67,7 @@ func (c *Client) Collect(ctx context.Context) (Snapshot, error) {
 		level = slog.LevelInfo
 	}
 	c.logger.Log(ctx, level, "collection finished",
-		"duration", s.Duration, "enclosures", len(s.Enclosures), "disks", len(s.Disks),
-		"fans", len(s.Fans), "errors", failed, "up", s.Up)
+		"duration", s.Duration, "enclosures", len(s.Enclosures), "slots", len(s.Slots),
+		"disks", len(s.Disks), "fans", len(s.Fans), "errors", failed, "up", s.Up)
 	return s, nil
 }

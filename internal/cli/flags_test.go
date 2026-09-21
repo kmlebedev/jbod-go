@@ -109,8 +109,10 @@ func TestLEDFlagSemantics(t *testing.T) {
 		{name: "both kinds", args: []string{"-l", "/dev/sda", "-f", "/dev/sg1", "--on"}},
 		{name: "no state", args: []string{"-l", "/dev/sda"}, wantErr: "exactly one"},
 		{name: "both states", args: []string{"-l", "/dev/sda", "--on", "--off"}, wantErr: "exactly one"},
-		{name: "no device", args: []string{"--on"}, wantErr: "requires device"},
+		{name: "no target", args: []string{"--on"}, wantErr: "requires target"},
 		{name: "not a device", args: []string{"-l", "sda", "--on"}, wantErr: "/dev/"},
+		{name: "bare slot without a shelf", args: []string{"-l", "5", "--on"}, wantErr: "--enclosure"},
+		{name: "bare slot with a shelf", args: []string{"--enclosure", "1:0:0:0", "-l", "5", "--on"}},
 		{name: "stray argument", args: []string{"-l", "/dev/sda", "--on", "extra"}, wantErr: "takes no arguments"},
 	}
 	for _, c := range cases {

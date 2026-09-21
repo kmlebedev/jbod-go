@@ -39,13 +39,18 @@ make build
 ./bin/jbod list -ed
 ./bin/jbod list -f
 ./bin/jbod list -ef
+./bin/jbod list --slots
+./bin/jbod list --slots --enclosure-id naa.50050cc10c400000 --json
+./bin/jbod capabilities
+./bin/jbod capabilities --enclosure naa.50050cc10c400000 --json
 sudo ./bin/jbod led --locate /dev/sda --on
 sudo ./bin/jbod led --locate /dev/sda --off
 sudo ./bin/jbod led --fault /dev/sg1 --on
+sudo ./bin/jbod led --enclosure naa.50050cc10c400000 --locate 5 --on
 ./bin/jbod prometheus --ip-address 127.0.0.1 --port 9945
 ```
 
-Флаги `-e`, `-d` и `-f` независимы: каждый добавляет свою секцию вывода,
+Флаги `-e`, `-d`, `-f` и `-s` независимы: каждый добавляет свою секцию вывода,
 поэтому `list -ef` печатает и корпуса, и вентиляторы. Диски упорядочены
 натурально — `Slot 2` идёт перед `Slot 10`.
 
@@ -58,6 +63,103 @@ LED можно указывать несколько раз: `led -l /dev/sda -l
 Поддерживаются пути устройств /dev/sg* и соответствующие /dev/sd*.
 Операции выполняются по очереди; ошибка останавливает выполнение,
 предыдущие успешные записи не откатываются.
+
+## Слоты, адресация и capabilities
+
+Слот и диск — разные сущности. Обход начинается не с `device/scsi_generic`,
+а с компонентов корпуса, поэтому пустая корзина существует в модели и её
+видно в выводе:
+
+```
+$ jbod list --slots
+Enclosure 1:0:0:0  id naa.50050cc10c400000 (logical)
+SLOT  NAME            TYPE          STATUS         OCCUPANCY    DEVICE    MAP       LOCATE  FAULT             POWER
+1     Slot 01, front  array device  OK             occupied     /dev/sg1  /dev/sda  off     off               on
+2     Slot 02, front  array device  not installed  empty        -         -         on      requested         on
+3     Slot 03, front  array device  unavailable    unavailable  -         -         -       sensed+requested  -
+```
+
+Три состояния занятости различаются намеренно:
+
+| Occupancy | Значение |
+| --- | --- |
+| `occupied` | к слоту подключено устройство |
+| `empty` | устройства нет, и корпус ответил: либо `not installed`, либо другой статус |
+| `unavailable` | слот не удалось прочитать, либо корпус сообщает `unavailable`/`unsupported` |
+
+Нечитаемый слот никогда не выдаётся за пустой: колонка `-` означает
+«корпус не отдаёт такой атрибут», а не «ноль». В JSON это `null`.
+
+Колонка FAULT разделена на две половины, как их кодирует SES: драйвер
+кладёт в sysfs-атрибут `(status[3] & 0x60) >> 5`, где бит 6 — FAULT SENSED
+(корпус сам обнаружил неисправность), а бит 5 — RQST FAULT (кто-то зажёг
+индикатор). Поэтому `sensed` — это авария, `requested` — метка оператора, и
+смешивать их нельзя. Запись выставляет только `requested`, и readback
+сравнивает именно его.
+
+Адресация корпуса. Приоритет: логический идентификатор (`/sys/class/enclosure/*/id`,
+его заполняет SES-бэкенд), затем unit serial number из `sg_inq`, и только
+потом SCSI-адрес. Первые два переживают перезагрузку, третий — нет, и там,
+где используется он, вывод помечает идентификатор как `temporary`.
+`--enclosure-id` принимает любое из трёх написаний; в `capabilities` и `led`
+то же самое можно писать короче — `--enclosure`. В `list` короткое имя
+занято: там `--enclosure` — это секция вывода, как и было.
+
+Слот адресуется номером, который отдаёт корпус, или именем компонента:
+
+```sh
+sudo jbod led --locate 1:0:0:0/5 --on                          # самодостаточно
+sudo jbod led --enclosure naa.50050cc10c400000 --locate 5 --on # то же самое
+sudo jbod led --locate "1:0:0:0/Slot 05, front" --on           # по имени компонента
+sudo jbod led --locate /dev/sda --on                           # как раньше
+```
+
+Пустую корзину можно зажечь только так: у неё нет пути устройства.
+
+После записи состояние проверяется чтением с ограниченным ожиданием
+(`--readback-timeout`, по умолчанию 1s). Успешный системный вызов не
+выдаётся за подтверждённое изменение:
+
+```
+/dev/sda locate: on (confirmed)
+1:0:0:0/5 fault: on (NOT confirmed: reads back as off)
+1:0:0:0/5 locate: off (write accepted, no readback available)
+```
+
+Первая строка — подтверждено чтением. Вторая — корпус ответил и ответил
+другим состоянием: это ошибка и ненулевой код выхода. Третья — атрибут не
+читается обратно вообще; это не ошибка, но и не подтверждение. Если слот
+исчез во время операции (диск вынули), команда сообщает именно это, а не
+отказ в правах.
+
+`jbod capabilities` показывает, что корпус умеет, отдельно на чтение и на
+запись, и на чём основан вывод:
+
+```
+$ jbod capabilities
+Enclosure 1:0:0:0  address naa.50050cc10c400000 (stable)  components 24
+CAPABILITY         READ         WRITE        EVIDENCE
+slot.enumeration   supported    unsupported  sysfs: 24 component directories
+led.locate         supported    unknown      sysfs: 24/24 components expose locate, 24 readable; ...
+slot.power_status  unsupported  unsupported  no component exposes power_status
+disk.temperature   unknown      unsupported  scsi_temperature: installed; ...
+```
+
+Правила вывода:
+
+- обнаружение ничего не пишет и ничего не переключает;
+- `unsupported` на запись означает, что атрибут read-only, то есть у драйвера
+  нет обработчика записи (sysfs создаёт такой атрибут с режимом 0444);
+- `unknown` на запись — атрибут писать можно, но корпус вправе принять
+  control page и проигнорировать её, а ядро всё равно вернёт успех. Поэтому
+  обнаружение никогда не объявляет запись `supported`; это делает только
+  readback после настоящей записи;
+- ошибка транспорта или доступа показывается отдельным полем `[error: ...]`
+  и не превращается в `unsupported`.
+
+`--json` есть у `list`, `capabilities` и `led`. Отсутствующее значение — это
+`null`, а не ноль; секции, которые не запрашивали, в документе отсутствуют,
+а запрошенная и пустая — это `[]`.
 
 ## Prometheus
 
@@ -86,6 +188,7 @@ GET / возвращает пустой ответ; GET /metrics — Prometheus 
 | `--scrape-timeout` | 2m | таймаут полного сбора |
 | `--concurrency` | 12 | сколько внешних команд выполняется одновременно |
 | `--cache-ttl` | 0s | отдавать предыдущий снимок в течение этого времени |
+| `--deprecated-metrics` | true | отдавать также серии до 1.1 (`jbod_fan_rpm`) |
 | `--log-level` | info | debug, info, warn или error |
 | `--log-format` | json | json для systemd, text для терминала |
 
@@ -123,7 +226,15 @@ stderr.
 | --- | --- |
 | number_of_enclosures | нет |
 | jbod_slot_temperature | slot, enclosure |
-| jbod_fan_rpm | device, slot |
+| jbod_fan_rpm | device, slot — **deprecated**, см. ниже |
+
+Добавлены в 1.1:
+
+| Метрика | Тип | Labels | Значение |
+| --- | --- | --- | --- |
+| jbod_enclosure_info | gauge | enclosure, enclosure_id, id_source, vendor, model, revision, serial | идентичность корпуса, всегда 1 |
+| jbod_enclosure_slots | gauge | enclosure, enclosure_id, occupancy | число слотов в каждом состоянии |
+| jbod_fan_speed_rpm | gauge | enclosure, enclosure_id, component, component_id | RPM вентилятора без коллизий |
 
 Добавлены метрики состояния самого сбора:
 
@@ -131,7 +242,13 @@ stderr.
 | --- | --- | --- |
 | jbod_up | gauge | 1, если сбор завершился полностью |
 | jbod_scrape_duration_seconds | gauge | длительность последнего сбора |
-| jbod_scrape_errors_total | counter | накопленные ошибки по collector (enclosures, disks, fans) |
+| jbod_scrape_errors_total | counter | накопленные ошибки по collector (enclosures, slots, disks, fans, led) |
+
+`jbod_enclosure_info` — точка join для всех серий, у которых в labels стоит
+SCSI-адрес: адрес назначается при сканировании и меняется, поэтому дашборд,
+которому нужна устойчивая идентичность, джойнит по `enclosure` и берёт
+`enclosure_id`. Label `id_source` говорит, настоящий это идентификатор
+(`logical`, `serial`) или снова адрес (`address`).
 
 Метрики самого процесса (`process_cpu_seconds_total`,
 `process_resident_memory_bytes`, `process_virtual_memory_bytes`,
@@ -141,10 +258,28 @@ stderr.
 `/proc` (например macOS) они просто не выводятся — лучше отсутствие серии,
 чем нули.
 
-Как в исходном проекте, device у вентилятора означает описание вентилятора,
-а slot — индекс sg_ses. Если разные корпуса имеют одинаковые описания и
-индексы, они совпадут по labels: последняя запись заменяет предыдущую.
-Это ограничение схемы исходных метрик сохранено для совместимости.
+### Миграция с jbod_fan_rpm
+
+В `jbod_fan_rpm` label `device` — это описание вентилятора, а `slot` — индекс
+sg_ses. Оба значения локальны для корпуса, поэтому «Fan A» с индексом `2,0`
+совпадает по labels у каждой полки в стойке, и значение последней затирает
+предыдущие. Исправить это на месте нельзя: смена набора labels изменила бы
+смысл серии, которую уже читают дашборды.
+
+Поэтому исправленная метрика — это новое имя:
+
+```
+jbod_fan_speed_rpm{enclosure="1:0:0:0",enclosure_id="naa.5000...01",component="Fan A",component_id="2,0"} 1200
+jbod_fan_speed_rpm{enclosure="10:0:0:0",enclosure_id="naa.5000...02",component="Fan A",component_id="2,0"} 4800
+```
+
+Порядок миграции:
+
+1. обновить экспортёр: обе серии отдаются одновременно, ничего не ломается;
+2. перевести дашборды и правила на `jbod_fan_speed_rpm`;
+3. запустить экспортёр с `--deprecated-metrics=false` и убедиться, что ничего
+   не пропало;
+4. оставить так. Удаление `jbod_fan_rpm` запланировано не раньше 2.0.
 
 Каждый scrape собирает свежие значения. Исчезнувшие устройства удаляются
 из выдачи. Недоступная температура пропускается (в CLI отображается ERR);
@@ -167,11 +302,16 @@ stderr.
 - Разбор флагов на pflag, поэтому совместимость с clap буквальная, а не «на глаз».
 - Ошибки возвращаются с ненулевым кодом вместо panic или молчаливого успеха.
 - VPD page 0x80 разбирается с учётом бинарного заголовка и длины.
-- Слоты определяются по наличию device/scsi_generic, включая нестандартные имена.
-- LED не зависит от доступности scsi_temperature и sginfo.
+- Слот и диск разделены: перечисляются все корзины корпуса, включая пустые,
+  вместе с номером, типом, статусом, питанием и состоянием индикаторов.
+  Нестандартные имена компонентов поддерживаются.
+- LED не зависит от доступности scsi_temperature и sginfo; результат записи
+  проверяется чтением, и неподтверждённая запись так и называется.
+- Есть `capabilities` и `--json` у `list`, `capabilities` и `led`.
 - Требуется ровно одно состояние --on/--off. Неизвестные устройства — ошибка.
 - Совместимость метрик полная, включая `process_*`; сверх Rust-версии есть
-  `jbod_up`, `jbod_scrape_duration_seconds` и `jbod_scrape_errors_total`.
+  `jbod_up`, `jbod_scrape_duration_seconds`, `jbod_scrape_errors_total`,
+  `jbod_enclosure_info`, `jbod_enclosure_slots` и `jbod_fan_speed_rpm`.
 
 ## Установка и Debian
 

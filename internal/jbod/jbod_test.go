@@ -46,6 +46,16 @@ func (r rig) ledPath(kind LEDKind) string {
 	return filepath.Join(r.root, r.slot, r.label, string(kind))
 }
 
+// led switches an indicator addressed the way the command line does, for
+// the tests that only care about the write and its readback.
+func (r rig) led(ctx context.Context, target string, kind LEDKind, on bool) (LEDResult, error) {
+	parsed, err := ParseLEDTarget(target, "")
+	if err != nil {
+		return LEDResult{}, err
+	}
+	return r.client.SetLED(ctx, parsed, kind, on)
+}
+
 func fixture(t *testing.T) rig {
 	t.Helper()
 	root := t.TempDir()
@@ -178,8 +188,14 @@ func TestInventoryAndLED(t *testing.T) {
 	t.Run("led switches both kinds", func(t *testing.T) {
 		for _, kind := range []LEDKind{LEDLocate, LEDFault} {
 			for _, on := range []bool{true, false} {
-				if err := c.SetLED(ctx, "/dev/sda", kind, on); err != nil {
+				result, err := f.led(ctx, "/dev/sda", kind, on)
+				if err != nil {
 					t.Fatalf("%s %v: %v", kind, on, err)
+				}
+				// The fixture is a writable file that reads back what was
+				// written, so every write must come back confirmed.
+				if !result.Confirmed {
+					t.Errorf("%s %v: not confirmed: %+v", kind, on, result)
 				}
 				want := "0"
 				if on {
@@ -207,7 +223,7 @@ func TestInventoryAndLED(t *testing.T) {
 			{"unknown kind", "/dev/sg1", LEDKind("blink")},
 		}
 		for _, tc := range cases {
-			if err := c.SetLED(ctx, tc.device, tc.kind, true); err == nil {
+			if _, err := f.led(ctx, tc.device, tc.kind, true); err == nil {
 				t.Errorf("%s was accepted", tc.name)
 			}
 		}
@@ -217,7 +233,7 @@ func TestInventoryAndLED(t *testing.T) {
 		if err := os.Remove(f.ledPath(LEDLocate)); err != nil {
 			t.Fatal(err)
 		}
-		if err := c.SetLED(ctx, "/dev/sg1", LEDLocate, true); err == nil {
+		if _, err := f.led(ctx, "/dev/sg1", LEDLocate, true); err == nil {
 			t.Fatal("a missing LED attribute was recreated")
 		}
 	})
@@ -272,7 +288,7 @@ func TestLEDSkipTelemetry(t *testing.T) {
 		}
 		return old(ctx, name, args...)
 	})
-	if err := f.client.SetLED(context.Background(), "/dev/sda", LEDFault, true); err != nil {
+	if _, err := f.led(context.Background(), "/dev/sda", LEDFault, true); err != nil {
 		t.Fatal(err)
 	}
 }

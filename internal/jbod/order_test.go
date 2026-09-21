@@ -129,18 +129,18 @@ func TestSetLEDMatchesDeviceAndMap(t *testing.T) {
 		t.Fatalf("unexpected fixture disk %+v", ds[0])
 	}
 	for _, device := range []string{"/dev/sg1", "/dev/sda"} {
-		if err := f.client.SetLED(ctx, device, LEDFault, true); err != nil {
+		if _, err := f.led(ctx, device, LEDFault, true); err != nil {
 			t.Fatalf("%s: %v", device, err)
 		}
 		b, err := os.ReadFile(f.ledPath(LEDFault))
 		if err != nil || string(b) != "1" {
 			t.Fatalf("%s: %q %v", device, b, err)
 		}
-		if err := f.client.SetLED(ctx, device, LEDFault, false); err != nil {
+		if _, err := f.led(ctx, device, LEDFault, false); err != nil {
 			t.Fatalf("%s: %v", device, err)
 		}
 	}
-	if f.client.SetLED(ctx, "/dev/sdz", LEDLocate, true) == nil {
+	if _, err := f.led(ctx, "/dev/sdz", LEDLocate, true); err == nil {
 		t.Fatal("unmapped device accepted")
 	}
 }
