@@ -238,7 +238,9 @@ func TestPartialCollectionKeepsData(t *testing.T) {
 	if !s.Up || s.Duration <= 0 {
 		t.Fatalf("up=%v duration=%s", s.Up, s.Duration)
 	}
-	if s.Errors[CollectorDisks] == 0 || s.Errors[CollectorFans] == 0 {
+	// The unreadable shelf is counted against the slot walk, which is what
+	// enumerates the bays; only the per-disk telemetry is counted as disks.
+	if s.Errors[CollectorSlots] == 0 || s.Errors[CollectorFans] == 0 {
 		t.Fatalf("errors not counted: %v", s.Errors)
 	}
 	if len(s.Disks) != 1 || len(s.Fans) != 2 {

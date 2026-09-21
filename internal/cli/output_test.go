@@ -20,12 +20,17 @@ func collapse(s string) string { return columns.ReplaceAllString(s, " ") }
 // fake answers from fixed data, so these tests exercise the rendering only:
 // no lsscsi output to parse and no sysfs tree to build (C5).
 type fake struct {
-	enclosures []jbod.Enclosure
-	disks      []jbod.Disk
-	fans       []jbod.Fan
-	err        error
-	preflight  error
-	leds       []ledCall
+	enclosures   []jbod.Enclosure
+	slots        []jbod.Slot
+	disks        []jbod.Disk
+	fans         []jbod.Fan
+	capabilities []jbod.EnclosureCapabilities
+	err          error
+	preflight    error
+	leds         []ledCall
+	// ledResult shapes what SetLED reports back, so a test can exercise
+	// an unconfirmed write without a sysfs tree.
+	ledResult func(jbod.LEDTarget, jbod.LEDKind, bool) (jbod.LEDResult, error)
 }
 
 type ledCall struct {
@@ -48,9 +53,36 @@ func (f *fake) Fans(context.Context, []jbod.Enclosure) ([]jbod.Fan, error) {
 	return f.fans, f.err
 }
 
-func (f *fake) SetLED(_ context.Context, device string, kind jbod.LEDKind, on bool) error {
-	f.leds = append(f.leds, ledCall{device: device, kind: kind, on: on})
-	return f.err
+func (f *fake) Slots(context.Context, []jbod.Enclosure) ([]jbod.Slot, error) {
+	return f.slots, f.err
+}
+
+// Capabilities honours the selection it is given, the way the client does:
+// a report for a shelf the caller filtered out would hide a broken filter.
+func (f *fake) Capabilities(_ context.Context, enclosures []jbod.Enclosure) ([]jbod.EnclosureCapabilities, error) {
+	var kept []jbod.EnclosureCapabilities
+	for _, report := range f.capabilities {
+		for _, e := range enclosures {
+			if e.Slot == report.Enclosure {
+				kept = append(kept, report)
+				break
+			}
+		}
+	}
+	return kept, f.err
+}
+
+func (f *fake) SetLED(_ context.Context, target jbod.LEDTarget, kind jbod.LEDKind, on bool) (jbod.LEDResult, error) {
+	f.leds = append(f.leds, ledCall{device: target.String(), kind: kind, on: on})
+	if f.ledResult != nil {
+		return f.ledResult(target, kind, on)
+	}
+	// The default fake confirms: the tests that care about an unconfirmed
+	// write say so explicitly.
+	return jbod.LEDResult{
+		Target: target.String(), Kind: kind, Requested: on,
+		Observed: jbod.Some(on), Confirmed: true,
+	}, f.err
 }
 
 // TestListRendersAbsentReadings pins the sentinels to the output layer: the
@@ -151,7 +183,13 @@ func TestLEDDelegatesToTheClient(t *testing.T) {
 			t.Errorf("call %d: got %+v, want %+v", i, inv.leds[i], want[i])
 		}
 	}
-	for _, line := range []string{"/dev/sda locate: true", "/dev/sdb locate: true", "/dev/sg1 fault: true"} {
+	// The state is spelled on/off now, and every line says whether a
+	// readback confirmed it (ROADMAP 4).
+	for _, line := range []string{
+		"/dev/sda locate: on (confirmed)",
+		"/dev/sdb locate: on (confirmed)",
+		"/dev/sg1 fault: on (confirmed)",
+	} {
 		if !strings.Contains(out.String(), line) {
 			t.Errorf("missing %q in\n%s", line, out.String())
 		}

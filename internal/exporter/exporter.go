@@ -37,6 +37,7 @@ type Exporter struct {
 	collector     Collector
 	scrapeTimeout time.Duration
 	cacheTTL      time.Duration
+	encode        metrics.Options
 	logger        *slog.Logger
 
 	mu       sync.Mutex
@@ -80,6 +81,13 @@ func WithCacheTTL(d time.Duration) Option {
 	}
 }
 
+// WithDeprecatedMetrics keeps the pre-1.1 series in the output. It is on by
+// default so an upgrade does not blank a dashboard; an operator who has
+// finished migrating to jbod_fan_speed_rpm can turn it off.
+func WithDeprecatedMetrics(enabled bool) Option {
+	return func(e *Exporter) { e.encode.Deprecated = enabled }
+}
+
 // WithLogger sets where the exporter reports scrapes and failures. Without
 // it the exporter stays silent.
 func WithLogger(l *slog.Logger) Option {
@@ -95,6 +103,7 @@ func New(c Collector, opts ...Option) *Exporter {
 	e := &Exporter{
 		collector:     c,
 		scrapeTimeout: DefaultScrapeTimeout,
+		encode:        metrics.Options{Deprecated: true},
 		logger:        slog.New(slog.DiscardHandler),
 		totals:        map[string]int{},
 	}
@@ -182,7 +191,7 @@ func (e *Exporter) body(ctx context.Context) (string, error) {
 		for name, n := range e.totals {
 			totals[name] = n
 		}
-		current.body = metrics.Encode(snapshot, totals)
+		current.body = metrics.Encode(snapshot, totals, e.encode)
 	}
 	e.inflight = nil
 	if err == nil {

@@ -1,12 +1,28 @@
 # HELP number_of_enclosures Number of enclosures
 # TYPE number_of_enclosures gauge
 number_of_enclosures 2
+# HELP jbod_enclosure_info Identity of each enclosure; id_source is logical, serial or address
+# TYPE jbod_enclosure_info gauge
+jbod_enclosure_info{enclosure="1:0:0:0",enclosure_id="ENC1",id_source="serial",vendor="ACME",model="Shelf",revision="",serial="ENC1"} 1
+jbod_enclosure_info{enclosure="10:0:0:0",enclosure_id="10:0:0:0",id_source="address",vendor="",model="",revision="",serial=""} 1
+# HELP jbod_enclosure_slots Slots per enclosure by occupancy
+# TYPE jbod_enclosure_slots gauge
+jbod_enclosure_slots{enclosure="1:0:0:0",enclosure_id="ENC1",occupancy="occupied"} 0
+jbod_enclosure_slots{enclosure="1:0:0:0",enclosure_id="ENC1",occupancy="empty"} 0
+jbod_enclosure_slots{enclosure="1:0:0:0",enclosure_id="ENC1",occupancy="unavailable"} 0
+jbod_enclosure_slots{enclosure="10:0:0:0",enclosure_id="10:0:0:0",occupancy="occupied"} 0
+jbod_enclosure_slots{enclosure="10:0:0:0",enclosure_id="10:0:0:0",occupancy="empty"} 0
+jbod_enclosure_slots{enclosure="10:0:0:0",enclosure_id="10:0:0:0",occupancy="unavailable"} 0
 # HELP jbod_slot_temperature Enclosure number, slot position and temperature
 # TYPE jbod_slot_temperature gauge
 jbod_slot_temperature{slot="Slot 01",enclosure="1:0:0:0"} 37
 jbod_slot_temperature{slot="Slot 10",enclosure="1:0:0:0"} -2
 jbod_slot_temperature{slot="Slot 03",enclosure="10:0:0:0"} 41
-# HELP jbod_fan_rpm The RPM speed of FAN components, device and slot
+# HELP jbod_fan_speed_rpm Speed of a cooling element, addressed by enclosure and component
+# TYPE jbod_fan_speed_rpm gauge
+jbod_fan_speed_rpm{enclosure="1:0:0:0",enclosure_id="ENC1",component="Fan A",component_id="2,0"} 1200
+jbod_fan_speed_rpm{enclosure="1:0:0:0",enclosure_id="ENC1",component="Fan B",component_id="2,1"} 3000
+# HELP jbod_fan_rpm DEPRECATED, replaced by jbod_fan_speed_rpm: the labels omit the enclosure, so identical fans of two shelves overwrite each other. Removal is planned for 2.0.
 # TYPE jbod_fan_rpm gauge
 jbod_fan_rpm{device="Fan A",slot="2,0"} 1200
 jbod_fan_rpm{device="Fan B",slot="2,1"} 3000
@@ -19,5 +35,7 @@ jbod_scrape_duration_seconds 120.000
 # HELP jbod_scrape_errors_total Failed collection operations per collector
 # TYPE jbod_scrape_errors_total counter
 jbod_scrape_errors_total{collector="enclosures"} 0
+jbod_scrape_errors_total{collector="slots"} 0
 jbod_scrape_errors_total{collector="disks"} 2
 jbod_scrape_errors_total{collector="fans"} 1
+jbod_scrape_errors_total{collector="led"} 0

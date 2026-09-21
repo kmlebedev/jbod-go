@@ -1,0 +1,9 @@
+Enclosure 1:0:0:0  id naa.50050cc10c400000 (logical)
+SLOT  NAME            TYPE          STATUS         OCCUPANCY    DEVICE    MAP       LOCATE  FAULT             POWER
+1     Slot 01, front  array device  OK             occupied     /dev/sg1  /dev/sda  off     off               on
+2     Slot 02, front  array device  not installed  empty        -         -         on      requested         on
+3     Slot 03, front  array device  unavailable    unavailable  -         -         -       sensed+requested  -
+
+Enclosure 10:0:0:0  id 10:0:0:0 (temporary, the shelf reports no stable identifier)
+SLOT  NAME    TYPE  STATUS  OCCUPANCY  DEVICE    MAP  LOCATE  FAULT  POWER
+-     bay-06  -     -       occupied   /dev/sg4  -    -       -      -
