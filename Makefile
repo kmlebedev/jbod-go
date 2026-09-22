@@ -24,6 +24,11 @@ GO ?= go
 
 all: build
 
+build_linux:
+	mkdir -p bin
+	GOOS=linux GOARCH=amd64 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o bin/jbod-linux ./cmd/jbod
+	GOOS=linux GOARCH=amd64 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o bin/prometheus-jbod-exporter-linux ./cmd/prometheus-jbod-exporter
+
 build:
 	mkdir -p bin
 	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o bin/jbod ./cmd/jbod

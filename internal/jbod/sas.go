@@ -61,13 +61,21 @@ const (
 	PHYStateFailed PHYState = "failed"
 	// PHYStateSpinupHold is a SATA phy held in spin-up hold.
 	PHYStateSpinupHold PHYState = "spin-up hold"
+	// PHYStateVacant is a phy the expander declares in its phy count and
+	// reports as not present. It is only ever reported over SMP: the
+	// transport class has no spelling for it, which is why the same phy
+	// reads as "unknown" in the sysfs table.
+	PHYStateVacant PHYState = "vacant"
 	// PHYStateUnknown is a phy the transport did not describe.
 	PHYStateUnknown PHYState = "unknown"
 )
 
 // PHYStates is every state, in the order reports render them, so a state
 // that drops to zero keeps its place.
-var PHYStates = []PHYState{PHYStateUp, PHYStateDisabled, PHYStateFailed, PHYStateSpinupHold, PHYStateUnknown}
+var PHYStates = []PHYState{
+	PHYStateUp, PHYStateDisabled, PHYStateFailed, PHYStateSpinupHold,
+	PHYStateVacant, PHYStateUnknown,
+}
 
 // LinkRate is one link rate as the transport or SMP spells it, with the
 // number pulled out of it when the spelling carries one.
@@ -356,18 +364,41 @@ func (c *Client) classNames(class string) ([]string, error) {
 // the device that owns it and the port it belongs to.
 //
 // Both are taken from the path because that is where the kernel puts the
-// relationship: /sys/class/sas_phy/phy-1:0:12 points into
-// .../host1/port-1:0/expander-1:0/phy-1:0:12. A path that cannot be
-// resolved leaves both absent rather than guessing from the name.
-func phyAncestors(path string) (parent, port Optional[string]) {
+// relationship. The shape is <device>/<class>/<name>, so a host phy
+// resolves to
+//
+//	.../host1/phy-1:0/sas_phy/phy-1:0
+//
+// and an expander phy to
+//
+//	.../port-1:0/expander-1:0/phy-1:0:12/sas_phy/phy-1:0:12
+//
+// The component next to the entry is therefore the class directory and the
+// one above it is the phy's own directory, which repeats the name; the
+// device that owns the phy is the one above those. Reading the component
+// next to the entry reported "sas_phy" as the parent of every phy on a real
+// machine, which is how this was found (ROADMAP 6, hardware run).
+//
+// A path that cannot be resolved leaves both absent rather than guessing
+// from the name.
+func phyAncestors(path, class string) (parent, port Optional[string]) {
 	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return None[string](), None[string]()
 	}
 	parts := strings.Split(filepath.ToSlash(resolved), "/")
-	if len(parts) >= 2 {
-		parent = Some(parts[len(parts)-2])
+	index := len(parts) - 2
+	for i := len(parts) - 2; i >= 0; i-- {
+		if parts[i] == class {
+			index = i - 2
+			break
+		}
 	}
+	if index >= 0 && index < len(parts) {
+		parent = Some(parts[index])
+	}
+	// The port is the nearest one above the phy, which for a phy between
+	// two expanders is the port between them and not the host's.
 	for i := len(parts) - 2; i >= 0; i-- {
 		if strings.HasPrefix(parts[i], "port-") {
 			port = Some(parts[i])
@@ -380,7 +411,7 @@ func phyAncestors(path string) (parent, port Optional[string]) {
 // readPHY fills in one phy from its class directory.
 func (c *Client) readPHY(name string, readAt time.Time) PHY {
 	dir := filepath.Join(c.classDir(classSASPHY), name)
-	parent, port := phyAncestors(dir)
+	parent, port := phyAncestors(dir, classSASPHY)
 	phy := PHY{
 		Name:               name,
 		Host:               hostOfName(name),
@@ -400,20 +431,7 @@ func (c *Client) readPHY(name string, readAt time.Time) PHY {
 		Source:             "sysfs: " + dir,
 	}
 	phy.State = phyState(phy.Negotiated, phy.Enabled)
-	phy.Counters = ErrorCounters{
-		Source:                "sysfs: " + dir,
-		ReadAt:                readAt,
-		InvalidDword:          From(readInt(filepath.Join(dir, "invalid_dword_count"))),
-		RunningDisparityError: From(readInt(filepath.Join(dir, "running_disparity_error_count"))),
-		LossOfDwordSync:       From(readInt(filepath.Join(dir, "loss_of_dword_sync_count"))),
-		PhyResetProblem:       From(readInt(filepath.Join(dir, "phy_reset_problem_count"))),
-	}
-	if !phy.Counters.Present() {
-		// The four counters are one feature of the transport class: a
-		// driver either fills them in or exposes none of them. Saying so
-		// is what keeps an absent counter from being read as a clean link.
-		phy.Counters.Err = Some("this phy exposes no link error counters")
-	}
+	phy.Counters = readCounters(dir, readAt)
 	// A directory with none of the identity attributes is not a phy this
 	// package can describe, and the reason travels with it.
 	if !phy.SASAddress.Present() && !phy.Identifier.Present() && !phy.Negotiated.Text.Present() {
@@ -421,6 +439,84 @@ func (c *Client) readPHY(name string, readAt time.Time) PHY {
 			"either the driver publishes no SAS transport attributes or they could not be read")
 	}
 	return phy
+}
+
+// counterAttributes are the four link error counters of the SAS transport
+// class, in the order the reports render them.
+var counterAttributes = []struct {
+	name string
+	set  func(*ErrorCounters, Optional[int64])
+}{
+	{"invalid_dword_count", func(e *ErrorCounters, v Optional[int64]) { e.InvalidDword = v }},
+	{"running_disparity_error_count", func(e *ErrorCounters, v Optional[int64]) { e.RunningDisparityError = v }},
+	{"loss_of_dword_sync_count", func(e *ErrorCounters, v Optional[int64]) { e.LossOfDwordSync = v }},
+	{"phy_reset_problem_count", func(e *ErrorCounters, v Optional[int64]) { e.PhyResetProblem = v }},
+}
+
+// readCounter reads one link error counter and keeps the reason it could
+// not be read.
+//
+// The reason matters because the two ways it fails are different findings.
+// The attribute is created for every phy of the class, so a missing file
+// means the kernel does not have the feature at all; a file that exists and
+// fails to read means the driver tried. For an expander phy the driver
+// answers by asking the expander for that phy's error log, and that request
+// fails on its own — a phy with nothing attached commonly returns EIO —
+// which is one phy we could not ask, not a driver without counters.
+func readCounter(path string) (Optional[int64], error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return None[int64](), err
+	}
+	text := strings.TrimSpace(string(raw))
+	n, convErr := strconv.ParseInt(text, 10, 64)
+	if convErr != nil {
+		return None[int64](), fmt.Errorf("%s: %q is not a number", path, text)
+	}
+	return Some(n), nil
+}
+
+// readCounters reads all four counters of one phy and says what happened to
+// the ones that are absent.
+//
+// Nothing here is counted as a collection failure. On a 68-phy expander the
+// unattached phys answer EIO, and counting each of them every scrape would
+// turn jbod_scrape_errors_total into a number that only says how many empty
+// connectors the shelf has. The absence is already fully expressed: no
+// value, no metric series, and the reason on the phy.
+func readCounters(dir string, readAt time.Time) ErrorCounters {
+	counters := ErrorCounters{Source: "sysfs: " + dir, ReadAt: readAt}
+	var first error
+	missing, failed := 0, 0
+	for _, attribute := range counterAttributes {
+		value, err := readCounter(filepath.Join(dir, attribute.name))
+		attribute.set(&counters, value)
+		switch {
+		case err == nil:
+		case os.IsNotExist(err):
+			missing++
+		default:
+			failed++
+		}
+		if err != nil && first == nil {
+			first = err
+		}
+	}
+	switch {
+	case failed == 0 && missing == 0:
+		return counters
+	case failed > 0:
+		counters.Err = Some(fmt.Sprintf(
+			"%d of the %d link error counters exist and could not be read (%v); the driver answers "+
+				"this attribute by asking the expander for that phy's error log, which fails on its own "+
+				"for a phy with nothing attached",
+			failed, len(counterAttributes), first))
+	default:
+		counters.Err = Some(fmt.Sprintf(
+			"%d of the %d link error counters are not exposed at all (%v); this driver publishes none",
+			missing, len(counterAttributes), first))
+	}
+	return counters
 }
 
 // readSASAddress reads an address attribute and normalises it to lower case

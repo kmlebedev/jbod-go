@@ -9,6 +9,49 @@ built from a checkout.
 
 ### Changed
 
+- A phy the expander reports as vacant is counted in a note under its
+  table instead of being given a row of dashes: on a real shelf that was 192
+  of 370 rows. An empty bay is a place a disk can go and belongs in a
+  listing; a vacant phy is a number the firmware declares and calls absent.
+  The numbers are collapsed into ranges, and the phys stay in the JSON.
+- The one-line output of `smp_discover --multiple` is parsed in layers —
+  phy number, then the routing letter if there is one, then the attached
+  device if there is one, then whatever words the expander used instead.
+  It prints three shapes, not one: "inaccessible (phy vacant)",
+  "<letter>:disabled" and the attached form, and only the third was
+  recognised. A phy the expander reports as vacant is now a state of its
+  own, and its error log is not asked for: the expander already answered,
+  and on one real expander that is 24 requests per pass that would each
+  return an error whose reason is known.
+- After the second run on real hardware, this time with smp_utils
+  installed, four more things were corrected. The phy list of an expander is
+  built from the count the expander reports rather than from what
+  `smp_discover --multiple` happened to describe — it described 24 of one
+  expander's 49 phys, and the other 25 were never asked for their error log.
+  The negotiated rate is cut at the first field boundary, because this
+  expander appends the zone group after it ("12 Gbps  ZG:14"). The routing
+  attribute is passed through as the letter smp_discover prints, instead of
+  expanding three letters and leaving the fourth raw. And the parent device
+  of a phy is read past the class directory: sysfs nests a class entry as
+  <device>/sas_phy/<name>, so every phy on a real machine reported "sas_phy"
+  as its parent.
+- The evidence behind `sas.phy_error_counters` separates a counter that
+  exists from one that answers. On a populated shelf 199 of 391 phys answer
+  and the rest fail per phy, which is the driver asking the expander, not a
+  driver without counters.
+- After the first run on real hardware (a WD H4060-J behind one HBA: 391
+  phys, six expanders, no smp_utils installed), four things in the phy
+  report were corrected. A counter that is absent now says which of the two
+  things happened — the driver publishes none, or the attribute exists and
+  the read failed, which is what an expander phy with nothing attached does.
+  The SMP note groups identical reasons instead of repeating one sentence
+  once per expander. The "not found" message reads the same whether the tool
+  lookup was cached or not, and names the package to install. The note about
+  the visibility boundary no longer says "the named shelf" when no shelf was
+  named.
+- The expanders of a host are rendered as a table, and a per-expander phy
+  table appears only for an expander that answered over SMP. Six expanders
+  used to take six one-line stanzas with a blank line before each.
 - The exposition is now built with
   [prometheus/client_golang](https://github.com/prometheus/client_golang)
   v1.24.1 instead of a hand-written text encoder. `internal/metrics` is a

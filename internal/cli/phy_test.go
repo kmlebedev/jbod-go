@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -59,7 +60,8 @@ func links(smp bool) []jbod.SASReport {
 				Identifier: jbod.Some(int64(0)), State: jbod.PHYStateDisabled,
 				Negotiated: jbod.LinkRate{Text: jbod.Some("Phy disabled")},
 				Counters: jbod.ErrorCounters{
-					Source: "sysfs", Err: jbod.Some("this phy exposes no link error counters"),
+					Source: "sysfs", Err: jbod.Some(
+						"4 of the 4 link error counters are not exposed at all; this driver publishes none"),
 				},
 			},
 		},
@@ -79,11 +81,12 @@ func links(smp bool) []jbod.SASReport {
 		},
 	}
 	if smp {
+		expander.NumPhys = jbod.Some(int64(4))
 		expander.SMP = jbod.SMPStatus{Requested: true, Available: true, OK: true, Phys: 2,
 			Command: "smp_rep_general /dev/bsg/expander-1:0"}
 		expander.Phys = []jbod.SMPPhy{
 			{
-				Identifier: 0, Routing: jbod.Some("subtractive"), State: jbod.PHYStateUp,
+				Identifier: 0, Routing: jbod.Some("S"), State: jbod.PHYStateUp,
 				Negotiated:      jbod.LinkRate{Text: jbod.Some("12 Gbps"), Gbps: jbod.Some(12.0)},
 				AttachedAddress: jbod.Some("0x500605b00b1e2f40"), AttachedPhy: jbod.Some(int64(0)),
 				AttachedProtocols: jbod.Some("i(SSP+STP+SMP)"),
@@ -93,12 +96,40 @@ func links(smp bool) []jbod.SASReport {
 				},
 			},
 			{
-				// An unattached phy: no address, and the counters are the
-				// only thing this row can say.
-				Identifier: 1, Routing: jbod.Some("table"), State: jbod.PHYStateUnknown,
+				// A phy smp_discover did not describe: no address, no
+				// rate, and the counters are the only thing this row can
+				// say. On real hardware discover skipped half an
+				// expander's phys, and they are listed because the
+				// expander said how many it has.
+				Identifier: 1, State: jbod.PHYStateUnknown,
+				Source: "smp_discover --multiple /dev/bsg/expander-1:0: " +
+					"this phy was not among the ones it described",
 				Counters: jbod.ErrorCounters{
 					Source: "smp", InvalidDword: jbod.Some(int64(3)), RunningDisparityError: jbod.Some(int64(0)),
 					LossOfDwordSync: jbod.Some(int64(1)), PhyResetProblem: jbod.Some(int64(0)),
+				},
+			},
+			{
+				// A phy the expander declares and reports as not there.
+				// Its error log is not asked for, and it gets a note
+				// rather than a row of dashes; the JSON keeps it.
+				Identifier: 2, State: jbod.PHYStateVacant,
+				Detail: jbod.Some("inaccessible (phy vacant)"),
+				Counters: jbod.ErrorCounters{
+					Source: "smp_rep_general /dev/bsg/expander-1:0",
+					Err: jbod.Some("the expander reports this phy as vacant, " +
+						"so its error log was not asked for"),
+				},
+			},
+			{
+				// The second half of a run, so the note has a range to
+				// print rather than two numbers.
+				Identifier: 3, State: jbod.PHYStateVacant,
+				Detail: jbod.Some("inaccessible (phy vacant)"),
+				Counters: jbod.ErrorCounters{
+					Source: "smp_rep_general /dev/bsg/expander-1:0",
+					Err: jbod.Some("the expander reports this phy as vacant, " +
+						"so its error log was not asked for"),
 				},
 			},
 		}
@@ -108,6 +139,33 @@ func links(smp bool) []jbod.SASReport {
 	}
 	host.Expanders = []jbod.Expander{expander}
 	return []jbod.SASReport{host, bare}
+}
+
+// noSMPTools is the shape a real six-expander shelf produced when
+// smp_utils was not installed: the sysfs half intact, every expander
+// listed, and one grouped reason instead of six copies of it.
+func noSMPTools() []jbod.SASReport {
+	reports := links(false)
+	reason := "smp_rep_general: not found in /usr/sbin:/usr/bin:/sbin:/bin or PATH " +
+		"(install the smp-utils package)"
+	template := reports[0].Expanders[0]
+	var expanders []jbod.Expander
+	for i := range 6 {
+		expander := template
+		expander.Name = fmt.Sprintf("expander-1:%d", i)
+		expander.SASAddress = jbod.Some(fmt.Sprintf("0x5000ccab05629d%02x", 0x3d+2*i))
+		expander.SMPDevice = jbod.Some(fmt.Sprintf("/dev/bsg/expander-1:%d", i))
+		expander.NumPhys = jbod.None[int64]()
+		expander.SMP = jbod.SMPStatus{Requested: true, Err: jbod.Some(reason)}
+		expanders = append(expanders, expander)
+	}
+	reports[0].Expanders = expanders
+	reports[0].Collection.Complete = false
+	reports[0].Collection.SMP = jbod.SMPStatus{
+		Requested: true,
+		Err:       jbod.Some("6 expanders: " + reason),
+	}
+	return reports[:1]
 }
 
 // shelfLinks is the inventory of shelf() with the transport fixture behind
@@ -141,6 +199,27 @@ func TestPHYGolden(t *testing.T) {
 			}
 			golden(t, c.file, out.String())
 		})
+	}
+}
+
+// TestPHYWithoutSMPTools is the shape of the first hardware run: six
+// expanders and no smp_utils. The sysfs table must survive it, and the
+// reason must be said once.
+func TestPHYWithoutSMPTools(t *testing.T) {
+	t.Parallel()
+	inv := shelf()
+	inv.sas = noSMPTools()
+	var out bytes.Buffer
+	if err := cmdPHY(context.Background(), []string{"--smp"}, &out, inv); err != nil {
+		t.Fatal(err)
+	}
+	golden(t, "phy-no-smp-tools.golden", out.String())
+	got := out.String()
+	if strings.Count(got, "not found in") != 1 {
+		t.Errorf("the reason is repeated:\n%s", got)
+	}
+	if !strings.Contains(got, "phy-1:1") {
+		t.Errorf("the sysfs table was lost with SMP:\n%s", got)
 	}
 }
 
@@ -227,8 +306,30 @@ func TestPHYJSON(t *testing.T) {
 	if phys[0].Counters.InvalidDword == nil || *phys[0].Counters.InvalidDword != 0 {
 		t.Errorf("a counter that really is zero must stay zero: %+v", phys[0].Counters)
 	}
+	// The vacant phys are in the document even though the table shows a
+	// note instead of their rows: the JSON is the whole model.
 	smp := document.Hosts[0].Expanders[0].Phys
-	if len(smp) != 2 || smp[1].Attached != nil {
+	if len(smp) != 4 || smp[1].Attached != nil {
 		t.Errorf("smp phys %+v", smp)
+	}
+}
+
+// TestNumberRanges covers the note the vacant phys are collapsed into.
+func TestNumberRanges(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		numbers []int64
+		want    string
+	}{
+		{nil, ""},
+		{[]int64{7}, "7"},
+		{[]int64{0, 1, 2, 3}, "0-3"},
+		{[]int64{0, 2}, "0, 2"},
+		// The two runs a real 68-phy expander produced.
+		{[]int64{21, 22, 23, 61, 62, 63}, "21-23, 61-63"},
+	} {
+		if got := numberRanges(c.numbers); got != c.want {
+			t.Errorf("%v: %q, want %q", c.numbers, got, c.want)
+		}
 	}
 }

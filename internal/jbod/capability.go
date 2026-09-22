@@ -362,7 +362,7 @@ func (x Capability) String() string {
 func (c *Client) sasCapabilities(enc Enclosure) []Capability {
 	host, known := hostOfAddress(enc.Slot).Get()
 	names, err := c.classNames(classSASPHY)
-	var phys, addressable, counted int
+	var phys, addressable, exposed, counted int
 	for _, name := range names {
 		if known && hostOfName(name).Or(-1) != host {
 			continue
@@ -372,13 +372,22 @@ func (c *Client) sasCapabilities(enc Enclosure) []Capability {
 		if _, ok := readText(filepath.Join(dir, "sas_address")); ok {
 			addressable++
 		}
-		if _, ok := readText(filepath.Join(dir, "invalid_dword_count")); ok {
+		// Having the attribute and being able to read it are different
+		// facts here: the driver answers a counter by asking the expander
+		// for that phy's error log, and a phy with nothing attached fails
+		// on its own (ROADMAP 6, hardware run).
+		counter := filepath.Join(dir, "invalid_dword_count")
+		if _, statErr := os.Stat(counter); statErr != nil {
+			continue
+		}
+		exposed++
+		if _, ok := readText(counter); ok {
 			counted++
 		}
 	}
 	return []Capability{
 		sasPHYCapability(c.classDir(classSASPHY), host, known, phys, addressable, err),
-		sasCounterCapability(host, known, phys, counted, err),
+		sasCounterCapability(host, known, phys, exposed, counted, err),
 		c.smpCapability(enc, host, known),
 	}
 }
@@ -419,7 +428,7 @@ func sasPHYCapability(root string, host int64, known bool, phys, addressable int
 
 // sasCounterCapability reports whether the transport keeps link error
 // counters for these phys.
-func sasCounterCapability(host int64, known bool, phys, counted int, err error) Capability {
+func sasCounterCapability(host int64, known bool, phys, exposed, counted int, err error) Capability {
 	entry := Capability{
 		Name:    "sas.phy_error_counters",
 		Summary: "link error counters from the SAS transport",
@@ -440,21 +449,35 @@ func sasCounterCapability(host int64, known bool, phys, counted int, err error) 
 		entry.Read = SupportUnsupported
 		entry.Evidence = "no phy of " + hostLabel(host, known) + " to read counters from"
 		return entry
-	case counted == 0:
+	case exposed == 0:
 		entry.Read = SupportUnsupported
 		entry.Evidence = fmt.Sprintf("none of the %d phys of %s exposes invalid_dword_count; "+
 			"this driver publishes no link error counters", phys, hostLabel(host, known))
 		return entry
-	case counted < phys:
-		// Some phys answer and some do not, which is a different situation
-		// from a driver that has no counters at all.
+	case counted == 0:
+		// The attributes are there and not one of them answered, which is
+		// not the same as a driver without counters.
 		entry.Read = SupportUnknown
-		entry.Evidence = fmt.Sprintf("sysfs: %d of %d phys of %s expose link error counters",
-			counted, phys, hostLabel(host, known))
+		entry.Evidence = fmt.Sprintf("sysfs: all %d phys of %s expose link error counters and none of them "+
+			"answered a read", exposed, hostLabel(host, known))
+		return entry
+	case counted < exposed:
+		// The usual shape on a populated shelf: the driver asks the
+		// expander per phy, and an unattached phy fails on its own.
+		entry.Read = SupportUnknown
+		entry.Evidence = fmt.Sprintf("sysfs: %d of the %d phys of %s expose link error counters and %d of "+
+			"those answer; the rest are asked from the expander and fail per phy",
+			exposed, phys, hostLabel(host, known), counted)
+		return entry
+	case exposed < phys:
+		entry.Read = SupportUnknown
+		entry.Evidence = fmt.Sprintf("sysfs: %d of the %d phys of %s expose link error counters, all of "+
+			"them readable", exposed, phys, hostLabel(host, known))
 		return entry
 	}
 	entry.Read = SupportSupported
-	entry.Evidence = fmt.Sprintf("sysfs: all %d phys of %s expose link error counters", phys, hostLabel(host, known))
+	entry.Evidence = fmt.Sprintf("sysfs: all %d phys of %s expose link error counters and answer",
+		phys, hostLabel(host, known))
 	return entry
 }
 

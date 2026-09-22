@@ -200,12 +200,17 @@ func TestSASCapabilities(t *testing.T) {
 	if !strings.Contains(phy.Evidence, "host 1") {
 		t.Errorf("the evidence does not name the host: %s", phy.Evidence)
 	}
-	// One of the five phys of host 1 publishes no counters and one has no
-	// attributes at all, so the counters are readable on some and not on
-	// others: that is unknown, not supported and not unsupported.
+	// The phys of host 1 cover all three shapes: counters that answer,
+	// counters that exist and fail, and no counters at all. That is
+	// unknown, and the evidence has to say which is which — a phy the
+	// driver could not ask is not a driver without counters (ROADMAP 6,
+	// hardware run).
 	counters := caps["sas.phy_error_counters"]
 	if counters.Read != SupportUnknown || counters.Write != SupportUnsupported {
 		t.Errorf("sas.phy_error_counters %s", counters)
+	}
+	if !strings.Contains(counters.Evidence, "answer") {
+		t.Errorf("the evidence does not separate exposing from answering: %s", counters.Evidence)
 	}
 	// smp_utils is not installed in this fixture's PATH, and the client
 	// runs an injected runner, so whether it is there is not knowable.

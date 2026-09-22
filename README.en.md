@@ -336,8 +336,9 @@ phy-1:0    port-1:0  end device     0x500605b00b1e2f40  0   up        12.0 Gbit 
 phy-1:1    port-1:0  end device     0x500605b00b1e2f41  1   up        6.0 Gbit      12.0 Gbit  1274    7     31    2
 phy-1:0:0  -         edge expander  0x5000ccab05629d3f  0   disabled  Phy disabled  -          -       -     -     -
 
-Expander expander-1:0  address 0x5000ccab05629d3f  HGST H4060-J 4013  smp /dev/bsg/expander-1:0
-note: these are the phys of the HBA the named shelf is attached through; which phy carries which shelf is topology and is not reported here
+EXPANDER      SAS ADDRESS         IDENTITY           LEVEL  PHYS  SMP DEVICE
+expander-1:0  0x5000ccab05629d3f  HGST H4060-J 4013  1      -     /dev/bsg/expander-1:0
+note: these are the phys of host 1, the HBA the listed enclosures are attached through; which phy carries which shelf is topology and is not reported here
 ```
 
 The last four columns are the standard SAS link error counters: invalid
@@ -346,6 +347,14 @@ phy resets. The first grows on a marginal cable or connector, the third on a
 link that keeps dropping — the second row above is exactly such a link, and
 it is answering and counted as `up`.
 
+The absolute value of a counter is not a diagnosis on its own. On a real
+H4060-J nearly every 12 Gbit/s link shows on the order of 60-75 invalid
+dwords and as many disparity errors with two synchronisation losses,
+uniformly across all six expanders. That is link training noise from the
+links coming up, not six hundred bad cables. What matters is the growth: in
+Prometheus that is `rate()`, and in the CLI it is two runs and the
+difference between them.
+
 There are two sources, and they cost very different things:
 
 | Source | What it gives | What it costs |
@@ -353,10 +362,31 @@ There are two sources, and they cost very different things:
 | `/sys/class/sas_phy` | address, rate, state and the four counters of every phy | nothing: attribute reads, no external command |
 | SMP, with `--smp` | the same for expander phys, plus the address at the far end | one `smp_rep_phy_err_log` per phy, needs smp_utils |
 
-That is why SMP is a flag and not the default: a 38-phy expander is 38
+That is why SMP is a flag and not the default: a 68-phy expander is 68
 requests through one SMP processor. For a command an operator typed that is
 fine; for a scrape every fifteen seconds it is not, and the exporter does
 not use SMP at all.
+
+The phy list of an expander is built from the count the expander itself
+reports (`smp_rep_general`), with `smp_discover --multiple` laid over it.
+That is not pedantry: on a WD H4060-J discover described 24 of 49 phys, and
+treating its output as the phy list means the other 25 are never asked for
+their error log. A phy discover did not describe gets a row with its
+counters read and the reason it carries no address at the far end.
+
+The ROUTING column is the letter `smp_discover` prints for the routing
+attribute: `D` direct, `S` subtractive, `T` table. A letter that is not one
+of those is passed through as it came — on an H4060-J that is `U` for 146 of
+148 phys, and inventing a meaning for it would be a claim nobody made.
+
+The `vacant` state only ever comes from SMP: the expander declares the phy
+in its own count and reports that it is not there. Such a phy gets a note
+with the number ranges rather than a row: its row could only ever be dashes,
+and on an H4060-J that is 192 rows of 370. The JSON keeps them. Such a phy is not asked
+for its error log — the expander has already answered, and the request would
+cost one SMP per phy (24 of 49 on an H4060-J) to return an error whose reason
+is known in advance. The sysfs transport has no spelling for `vacant`, so the
+same phy reads as `unknown` in the table above.
 
 The counters are only read. `smp_rep_phy_err_log` has a `--zero` option that
 clears what it prints; jbod-go never passes it — a diagnostic that destroys

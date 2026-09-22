@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -15,11 +16,14 @@ import (
 //	phy-1:0:0  an expander phy whose driver publishes no error counters
 //	phy-1:0:1  an expander phy with no rate: unknown, not down
 //	phy-1:0:2  a directory with none of the attributes at all
+//	phy-1:0:3  a phy whose counter attributes exist and cannot be read
 //	phy-2:0    a phy of another HBA, which host selection must not return
 //
 // The phys are created under a devices tree and symlinked into the class
-// directory, the way sysfs does it, because the parent and the port are
-// read from the resolved path and a flat fixture would not exercise that.
+// directory the way sysfs really does it — <device>/phy-X/sas_phy/phy-X —
+// because the parent and the port are read from the resolved path. A
+// fixture that skipped the class directory hid a bug that reported
+// "sas_phy" as the parent of every phy on real hardware.
 func links(t *testing.T) *Client {
 	t.Helper()
 	root := t.TempDir()
@@ -61,6 +65,15 @@ func links(t *testing.T) *Client {
 		"invalid_dword_count": "0", "running_disparity_error_count": "0",
 		"loss_of_dword_sync_count": "0", "phy_reset_problem_count": "0",
 	}
+	// An expander phy whose counters exist and answer with an error. The
+	// driver serves them by asking the expander for that phy's error log,
+	// and on a real 68-phy expander every unattached phy answers EIO; a
+	// directory in place of the file reproduces a read that fails without
+	// the file being absent.
+	unreadable := map[string]string{
+		"sas_address": "0x5000ccab05629d3f", "device_type": "edge expander", "phy_identifier": "3",
+		"enable": "1", "negotiated_linkrate": "Unknown",
+	}
 	expanderDir := "host1/port-1:0/expander-1:0"
 	phys := []phySpec{
 		{"phy-1:0", "host1/port-1:0", up},
@@ -68,14 +81,23 @@ func links(t *testing.T) *Client {
 		{"phy-1:0:0", expanderDir, noCounters},
 		{"phy-1:0:1", expanderDir, noRate},
 		{"phy-1:0:2", expanderDir, map[string]string{}},
+		{"phy-1:0:3", expanderDir, unreadable},
 		{"phy-2:0", "host2", other},
 	}
 	mkdir(t, filepath.Join(class, "sas_phy"))
 	for _, spec := range phys {
-		dir := filepath.Join(devices, spec.path, spec.name)
+		dir := filepath.Join(devices, spec.path, spec.name, classSASPHY, spec.name)
 		mkdir(t, dir)
 		for name, value := range spec.attributes {
 			write(t, filepath.Join(dir, name), value, 0o444)
+		}
+		if spec.name == "phy-1:0:3" {
+			for _, name := range []string{
+				"invalid_dword_count", "running_disparity_error_count",
+				"loss_of_dword_sync_count", "phy_reset_problem_count",
+			} {
+				mkdir(t, filepath.Join(dir, name))
+			}
 		}
 		symlink(t, dir, filepath.Join(class, "sas_phy", spec.name))
 	}
@@ -134,8 +156,8 @@ func TestSASPHYs(t *testing.T) {
 	}
 	report := reports[0]
 	// The phy of host 2 belongs to another HBA and must not appear.
-	if len(report.PHYs) != 5 {
-		t.Fatalf("got %d phys, want the 5 of host 1: %+v", len(report.PHYs), report.PHYs)
+	if len(report.PHYs) != 6 {
+		t.Fatalf("got %d phys, want the 6 of host 1: %+v", len(report.PHYs), report.PHYs)
 	}
 	byName := map[string]PHY{}
 	for _, phy := range report.PHYs {
@@ -180,8 +202,23 @@ func TestSASPHYs(t *testing.T) {
 	if _, ok := bare.Counters.Total(); ok {
 		t.Error("phy-1:0:0 produced a total from no counters")
 	}
-	if !bare.Counters.Err.Present() {
-		t.Error("phy-1:0:0 does not say why its counters are absent")
+	// The two ways a counter goes missing are different findings, and the
+	// reason has to tell them apart: a driver that publishes none, and a
+	// phy the driver could not ask (ROADMAP 6, hardware run).
+	reason, _ := bare.Counters.Err.Get()
+	if !strings.Contains(reason, "not exposed at all") {
+		t.Errorf("phy-1:0:0 counters: %q", reason)
+	}
+	unreadable := byName["phy-1:0:3"]
+	if unreadable.Counters.Present() {
+		t.Errorf("phy-1:0:3 produced counters from a failed read: %+v", unreadable.Counters)
+	}
+	failed, _ := unreadable.Counters.Err.Get()
+	if !strings.Contains(failed, "could not be read") {
+		t.Errorf("phy-1:0:3 counters: %q", failed)
+	}
+	if strings.Contains(failed, "publishes none") {
+		t.Errorf("a failed read was reported as a driver without counters: %q", failed)
 	}
 	if parent, _ := bare.Parent.Get(); parent != "expander-1:0" {
 		t.Errorf("phy-1:0:0 parent %s, want expander-1:0", bare.Parent)
@@ -205,7 +242,7 @@ func TestSASPHYs(t *testing.T) {
 	// Two links up, one disabled, and two the transport did not describe:
 	// the unknown pair is the point, a phy without a rate is counted and
 	// never folded into the healthy ones.
-	if report.States[PHYStateUp] != 2 || report.States[PHYStateDisabled] != 1 || report.States[PHYStateUnknown] != 2 {
+	if report.States[PHYStateUp] != 2 || report.States[PHYStateDisabled] != 1 || report.States[PHYStateUnknown] != 3 {
 		t.Errorf("state counts %v", report.States)
 	}
 	if len(report.Expanders) != 1 || report.Expanders[0].Name != "expander-1:0" {

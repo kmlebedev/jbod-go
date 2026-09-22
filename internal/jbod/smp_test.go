@@ -23,10 +23,13 @@ const smpGeneralOut = `Report general response:
   enclosure logical identifier (hex): 5000ccab05629d3f
 `
 
-const smpDiscoverOut = `  phy   0:S:attached:[500605b00b1e2f40:00  i(SSP+STP+SMP)]  12 Gbps
+// The zone group on the first line is not decoration: a real WD expander
+// appends it after the rate, and reading the whole tail as the rate made it
+// "12 Gbps  ZG:14".
+const smpDiscoverOut = `  phy   0:S:attached:[500605b00b1e2f40:00  i(SSP+STP+SMP)]  12 Gbps  ZG:14
   phy   1:T:attached:[5000cca25de1c2ed:00  t(SSP)]  6 Gbps
   phy   2:D:attached:[0000000000000000:00]
-  phy   3:D:attached:[5000cca25de1c2f1:00  t(SATA)]  phy enabled; unknown rate
+  phy   3:U:attached:[5000cca25de1c2f1:00  t(SATA)]  phy enabled; unknown rate
 `
 
 // errorLog is the answer for one phy, with the counters scaled by the phy
@@ -134,8 +137,13 @@ func TestSMPErrorCounters(t *testing.T) {
 		t.Fatalf("got %d phys: %+v", len(expander.Phys), expander.Phys)
 	}
 	first := expander.Phys[0]
-	if routing, _ := first.Routing.Get(); routing != "subtractive" {
+	// The routing letter is passed through as smp_discover prints it; see
+	// parseSMPDiscoverList.
+	if routing, _ := first.Routing.Get(); routing != "S" {
 		t.Errorf("phy 0 routing %v", first.Routing)
+	}
+	if text, _ := first.Negotiated.Text.Get(); text != "12 Gbps" {
+		t.Errorf("phy 0 rate %q, want the rate without the zone group", text)
 	}
 	if address, _ := first.AttachedAddress.Get(); address != "0x500605b00b1e2f40" {
 		t.Errorf("phy 0 attached %v", first.AttachedAddress)
@@ -247,7 +255,7 @@ func TestSMPUnavailable(t *testing.T) {
 	report := smpReport(t, &smpRunner{general: func() (string, error) {
 		return "", fmt.Errorf("smp_rep_general: not found in /usr/sbin:/usr/bin:/sbin:/bin")
 	}})
-	if len(report.PHYs) != 5 {
+	if len(report.PHYs) != 6 {
 		t.Errorf("the sysfs phys were lost with SMP: %d", len(report.PHYs))
 	}
 	if report.Collection.SMP.Available || report.Collection.SMP.OK {
@@ -312,16 +320,18 @@ func TestSMPParsers(t *testing.T) {
 	if len(phys) != 4 {
 		t.Fatalf("got %d phys", len(phys))
 	}
-	for i, want := range []string{"subtractive", "table", "direct", "direct"} {
+	for i, want := range []string{"S", "T", "D", "U"} {
 		if routing, _ := phys[i].Routing.Get(); routing != want {
 			t.Errorf("phy %d routing %v, want %s", i, phys[i].Routing, want)
 		}
 	}
-	// A routing letter this package does not know keeps its raw form
-	// rather than being folded into one of the three it does.
-	odd := parseSMPDiscoverList("  phy   0:V:attached:[5000cca25de1c2ed:00  t(SSP)]  12 Gbps\n", "source")
-	if routing, _ := odd[0].Routing.Get(); routing != "V" {
-		t.Errorf("unknown routing %v, want the raw letter", odd[0].Routing)
+	// The rate is the first field after the bracket; a zone group or
+	// anything else after it belongs to another column.
+	if text, _ := phys[0].Negotiated.Text.Get(); text != "12 Gbps" {
+		t.Errorf("phy 0 rate %q", text)
+	}
+	if gbps, _ := phys[0].Negotiated.Gbps.Get(); gbps != 12 {
+		t.Errorf("phy 0 gbps %v", phys[0].Negotiated.Gbps)
 	}
 	// A duplicate phy line must not produce a second phy: the error log
 	// would then be read twice and reported twice for one link.
@@ -345,5 +355,238 @@ func TestSMPParsers(t *testing.T) {
 	empty, _ := parseSMPPhyErrorLog("Report phy error log response:\n  phy identifier: 0\n")
 	if empty.Present() {
 		t.Errorf("counters were invented from a response that carried none: %+v", empty)
+	}
+}
+
+// TestSMPFailuresAreGrouped covers what a real six-expander shelf without
+// smp_utils produced: one note that repeated the same sentence six times.
+//
+// The same reason is counted once with the number of expanders behind it,
+// and a reason that belongs to a single expander still names it.
+func TestSMPFailuresAreGrouped(t *testing.T) {
+	t.Parallel()
+	missing := "smp_rep_general: not found in /usr/sbin:/usr/bin:/sbin:/bin or PATH (install the smp-utils package)"
+	expanders := make([]Expander, 6)
+	for i := range expanders {
+		expanders[i] = Expander{
+			Name: fmt.Sprintf("expander-1:%d", i),
+			SMP:  SMPStatus{Requested: true, Err: Some(missing)},
+		}
+	}
+	status := summarizeSMP(expanders)
+	reason, ok := status.Err.Get()
+	if !ok {
+		t.Fatal("six failed expanders produced no reason")
+	}
+	if strings.Count(reason, missing) != 1 {
+		t.Errorf("the reason is repeated:\n%s", reason)
+	}
+	if !strings.HasPrefix(reason, "6 expanders: ") {
+		t.Errorf("the count is missing: %s", reason)
+	}
+	if status.Available || status.OK {
+		t.Errorf("status %+v", status)
+	}
+	// One expander failing on its own is still named, because then the
+	// name is the useful half of the sentence.
+	alone := summarizeSMP([]Expander{
+		{Name: "expander-1:0", SMP: SMPStatus{Requested: true, OK: true, Available: true, Phys: 4}},
+		{Name: "expander-1:1", SMP: SMPStatus{Requested: true, Err: Some("device or resource busy")}},
+	})
+	single, _ := alone.Err.Get()
+	if single != "expander-1:1: device or resource busy" {
+		t.Errorf("single failure: %q", single)
+	}
+	if !alone.OK || alone.Phys != 4 {
+		t.Errorf("one expander answered, so the host did: %+v", alone)
+	}
+}
+
+// TestToolNotFoundReadsTheSameEveryTime covers the other half of that note:
+// the lookup is cached, and the first miss used to be worded differently
+// from the ones after it.
+func TestToolNotFoundReadsTheSameEveryTime(t *testing.T) {
+	t.Parallel()
+	tools := newTools()
+	first, err := tools.path("smp_rep_general")
+	if err == nil {
+		t.Skipf("smp_utils is installed here (%s)", first)
+	}
+	_, again := tools.path("smp_rep_general")
+	if again == nil {
+		t.Fatal("the second lookup found what the first did not")
+	}
+	if err.Error() != again.Error() {
+		t.Errorf("cached miss reads differently:\n%s\n%s", err, again)
+	}
+	if !strings.Contains(err.Error(), "smp-utils") {
+		t.Errorf("the message does not name the package to install: %s", err)
+	}
+}
+
+// TestSMPDiscoverDescribesFewerPhys is the finding of the second hardware
+// run: "smp_discover --multiple" described 24 of an expander's 49 phys and
+// said nothing about the rest, so those 25 were never asked for their error
+// log — the half of this feature that does not need discover at all.
+//
+// The phy count the expander itself reports is the authority, and every phy
+// in it gets a row and a read.
+func TestSMPDiscoverDescribesFewerPhys(t *testing.T) {
+	t.Parallel()
+	report := smpReport(t, &smpRunner{discover: func() (string, error) {
+		return "  phy   0:S:attached:[500605b00b1e2f40:00  i(SSP+STP+SMP)]  12 Gbps\n" +
+			"  phy   3:U:attached:[5000cca25de1c2f1:00  t(SATA)]  6 Gbps\n", nil
+	}})
+	expander := report.Expanders[0]
+	if len(expander.Phys) != 4 {
+		t.Fatalf("got %d phys, want the 4 the expander reported: %+v", len(expander.Phys), expander.Phys)
+	}
+	for i, phy := range expander.Phys {
+		if phy.Identifier != int64(i) {
+			t.Fatalf("phy %d is numbered %d", i, phy.Identifier)
+		}
+	}
+	// The two discover did not describe carry no attached address and say
+	// why, and their counters were still read.
+	for _, i := range []int{1, 2} {
+		phy := expander.Phys[i]
+		if phy.AttachedAddress.Present() {
+			t.Errorf("phy %d got an address nobody reported: %+v", i, phy)
+		}
+		if !strings.Contains(phy.Source, "not among the ones it described") {
+			t.Errorf("phy %d does not say why it is bare: %q", i, phy.Source)
+		}
+		if n, ok := phy.Counters.InvalidDword.Get(); !ok || n != int64(i*10) {
+			t.Errorf("phy %d counters were not read: %+v", i, phy.Counters)
+		}
+	}
+	if expander.SMP.Phys != 4 || report.Collection.SMP.Phys != 4 {
+		t.Errorf("read %d phy error logs, want all 4", expander.SMP.Phys)
+	}
+	// The described ones keep what discover said about them.
+	if address, _ := expander.Phys[3].AttachedAddress.Get(); address != "0x5000cca25de1c2f1" {
+		t.Errorf("phy 3 lost its address: %+v", expander.Phys[3])
+	}
+}
+
+// realDiscoverOut is verbatim "smp_discover --multiple" output from a WD
+// H4060-J expander, trimmed to one of each shape it prints.
+//
+// It is here rather than paraphrased because all three shapes were found
+// by running the tool, not by reading its source, and the two this parser
+// originally missed cost 25 of that expander's 49 phys (ROADMAP 6).
+const realDiscoverOut = `  phy   0: inaccessible (phy vacant)
+  phy   1: inaccessible (phy vacant)
+  phy  24:U:attached:[5000ccab05629d3f:60 exp i(SMP) t(SMP)]  12 Gbps
+  phy  44:U:attached:[0000000000000000:00]
+  phy  47:U:disabled
+  phy  48:D:attached:[5000ccab05629d3c:48  V i(SSP) t(SSP)]  12 Gbps
+`
+
+// TestSMPDiscoverShapes pins every line shape the tool actually printed.
+func TestSMPDiscoverShapes(t *testing.T) {
+	t.Parallel()
+	phys := parseSMPDiscoverList(realDiscoverOut, "source")
+	if len(phys) != 6 {
+		t.Fatalf("got %d phys, want one per line: %+v", len(phys), phys)
+	}
+	byID := map[int64]SMPPhy{}
+	for _, phy := range phys {
+		byID[phy.Identifier] = phy
+	}
+	// A vacant phy is the expander saying the phy is not there. It has no
+	// routing letter, no far end and nothing to ask for.
+	vacant := byID[0]
+	if vacant.State != PHYStateVacant {
+		t.Errorf("phy 0 state %s, want vacant", vacant.State)
+	}
+	if vacant.Routing.Present() || vacant.AttachedAddress.Present() {
+		t.Errorf("phy 0 invented fields: %+v", vacant)
+	}
+	if detail, _ := vacant.Detail.Get(); detail != "inaccessible (phy vacant)" {
+		t.Errorf("phy 0 detail %q", detail)
+	}
+	// A disabled phy carries a routing letter and no far end.
+	off := byID[47]
+	if off.State != PHYStateDisabled {
+		t.Errorf("phy 47 state %s, want disabled", off.State)
+	}
+	if routing, _ := off.Routing.Get(); routing != "U" {
+		t.Errorf("phy 47 routing %v", off.Routing)
+	}
+	if detail, _ := off.Detail.Get(); detail != "disabled" {
+		t.Errorf("phy 47 detail %q", detail)
+	}
+	// An expander-to-expander link: one space between the attached phy
+	// identifier and the protocols, which is not the two the other shape
+	// uses.
+	link := byID[24]
+	if address, _ := link.AttachedAddress.Get(); address != "0x5000ccab05629d3f" {
+		t.Errorf("phy 24 attached %v", link.AttachedAddress)
+	}
+	if n, _ := link.AttachedPhy.Get(); n != 60 {
+		t.Errorf("phy 24 attached id %v", link.AttachedPhy)
+	}
+	if protocols, _ := link.AttachedProtocols.Get(); protocols != "exp i(SMP) t(SMP)" {
+		t.Errorf("phy 24 protocols %q", protocols)
+	}
+	if text, _ := link.Negotiated.Text.Get(); text != "12 Gbps" {
+		t.Errorf("phy 24 rate %q", text)
+	}
+	if link.State != PHYStateUp {
+		t.Errorf("phy 24 state %s", link.State)
+	}
+	// The null address is not an identity, and the phy identifier next to
+	// it is not one either.
+	if byID[44].AttachedAddress.Present() || byID[44].AttachedPhy.Present() {
+		t.Errorf("phy 44 published the null address: %+v", byID[44])
+	}
+	// Two spaces before the protocols, and a virtual phy behind it.
+	virtual := byID[48]
+	if routing, _ := virtual.Routing.Get(); routing != "D" {
+		t.Errorf("phy 48 routing %v", virtual.Routing)
+	}
+	if protocols, _ := virtual.AttachedProtocols.Get(); protocols != "V i(SSP) t(SSP)" {
+		t.Errorf("phy 48 protocols %q", protocols)
+	}
+}
+
+// TestSMPVacantPhysAreNotAsked covers the cost side of the same finding:
+// the expander said the phy is not there, so its error log is not asked
+// for. On one real expander that is 24 SMP requests per pass saved, and
+// the answer they would return is one this report already has.
+func TestSMPVacantPhysAreNotAsked(t *testing.T) {
+	t.Parallel()
+	runner := &smpRunner{discover: func() (string, error) { return realDiscoverOut, nil }}
+	report := smpReport(t, runner)
+	expander := report.Expanders[0]
+	// smp_rep_general reports four phys; discover described six, four of
+	// them numbered beyond that count. The list is the union: phys 2 and 3
+	// the count implies and discover skipped, plus 24, 44, 47 and 48 it
+	// described. Neither half is dropped to fit the other.
+	if len(expander.Phys) != 8 {
+		t.Fatalf("got %d phys: %+v", len(expander.Phys), expander.Phys)
+	}
+	for _, phy := range expander.Phys {
+		asked := runner.ran(fmt.Sprintf("--phy=%d ", phy.Identifier))
+		if phy.State == PHYStateVacant {
+			if asked {
+				t.Errorf("phy %d is vacant and was asked anyway: %v", phy.Identifier, runner.commands)
+			}
+			if phy.Counters.Present() {
+				t.Errorf("phy %d reports counters nobody read: %+v", phy.Identifier, phy.Counters)
+			}
+			if reason, _ := phy.Counters.Err.Get(); !strings.Contains(reason, "vacant") {
+				t.Errorf("phy %d gives no reason: %q", phy.Identifier, reason)
+			}
+			continue
+		}
+		if !asked {
+			t.Errorf("phy %d was not asked for its error log: %v", phy.Identifier, runner.commands)
+		}
+	}
+	// Six phys are not vacant, and every one of them answered.
+	if expander.SMP.Phys != 6 {
+		t.Errorf("read %d error logs, want 6", expander.SMP.Phys)
 	}
 }

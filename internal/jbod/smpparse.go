@@ -44,24 +44,48 @@ func parseSMPGeneral(out string) Optional[int64] {
 	return None[int64]()
 }
 
-// smpDiscoverLine matches one line of "smp_discover --multiple" output:
+// The three shapes "smp_discover --multiple" prints, one line per phy:
 //
-//	phy   0:D:attached:[5000cca25de1c2ed:00  t(SSP)]  12 Gbps
-//	phy  12:U:attached:[0000000000000000:00]
+//	phy   0: inaccessible (phy vacant)
+//	phy  47:U:disabled
+//	phy  24:U:attached:[5000ccab05629d3f:60 exp i(SMP) t(SMP)]  12 Gbps
 //
-// The trailing text is the negotiated logical link rate as smp_utils
-// spells it, which is sometimes a rate and sometimes a reason there is
-// none ("disabled", "phy enabled; unknown rate").
-var smpDiscoverLine = regexp.MustCompile(
-	`(?i)^\s*phy\s+(\d+)\s*:\s*([A-Za-z])\s*:\s*attached\s*:\s*\[\s*([0-9a-fA-F]+)\s*:\s*(\d+)([^\]]*)\]\s*(.*)$`)
+// They are matched in layers rather than by one pattern, because only the
+// phy number is common to all three. Reading the line as "phy number, then
+// whatever the expander had to say" is also what keeps a fourth shape from
+// costing the phy: it keeps its number and its error counters, and the
+// words go into Detail (ROADMAP 6, hardware run).
+var (
+	smpPhyLine = regexp.MustCompile(`(?i)^\s*phy\s+(\d+)\s*:\s*(.*)$`)
+	// smpRouting is the single routing-attribute letter, when the line has
+	// one. It must be a single letter followed by a colon, so the "i" of
+	// "inaccessible" cannot be read as one.
+	smpRouting = regexp.MustCompile(`^([A-Za-z])\s*:\s*(.*)$`)
+	// smpAttached is the far end: its address, its phy identifier, what it
+	// announced, and then the negotiated rate.
+	smpAttached = regexp.MustCompile(`(?i)^attached\s*:\s*\[\s*([0-9a-fA-F]+)\s*:\s*(\d+)([^\]]*)\]\s*(.*)$`)
+)
 
-// routingAttributes are the routing attribute letters smp_discover prints.
-// A letter that is not one of them keeps its raw form: inventing a meaning
-// for it would be a claim about the topology nobody made.
-var routingAttributes = map[string]string{
-	"D": "direct",
-	"S": "subtractive",
-	"T": "table",
+// smpPhyStateOf reads the state out of the words a line carries in place of
+// an attached device.
+//
+// "Vacant" is the one that matters: the expander declares 49 phys and says
+// 24 of them are not there, and that is an answer, not a gap. It is also
+// why those phys have no error log to ask for.
+func smpPhyStateOf(text string) PHYState {
+	lower := strings.ToLower(text)
+	switch {
+	case strings.Contains(lower, "vacant"):
+		return PHYStateVacant
+	case strings.Contains(lower, "disabled"):
+		return PHYStateDisabled
+	case strings.Contains(lower, "failed"), strings.Contains(lower, "reset problem"):
+		return PHYStateFailed
+	case strings.Contains(lower, "spin"):
+		return PHYStateSpinupHold
+	default:
+		return PHYStateUnknown
+	}
 }
 
 // parseSMPDiscoverList reads "smp_discover --multiple" output into phys.
@@ -74,10 +98,10 @@ func parseSMPDiscoverList(out, source string) []SMPPhy {
 	var phys []SMPPhy
 	seen := map[int64]bool{}
 	for line := range strings.Lines(out) {
-		// The line separator is stripped first: the pattern anchors at the
+		// The line separator is stripped first: the patterns anchor at the
 		// end of the text, so a trailing newline would leave every line
 		// that carries a rate unmatched and only the bare ones parsed.
-		m := smpDiscoverLine.FindStringSubmatch(strings.TrimRight(line, "\r\n"))
+		m := smpPhyLine.FindStringSubmatch(strings.TrimRight(line, "\r\n"))
 		if m == nil {
 			continue
 		}
@@ -86,26 +110,50 @@ func parseSMPDiscoverList(out, source string) []SMPPhy {
 			continue
 		}
 		seen[identifier] = true
-		phy := SMPPhy{Identifier: identifier, Source: source}
-		if routing := strings.ToUpper(strings.TrimSpace(m[2])); routing != "" {
-			phy.Routing = Some(routingAttributes[routing])
-			if routingAttributes[routing] == "" {
-				phy.Routing = Some(routing)
-			}
+		phy := SMPPhy{Identifier: identifier, State: PHYStateUnknown, Source: source}
+		rest := strings.TrimSpace(m[2])
+		// The routing letter is kept exactly as smp_discover prints it.
+		// Three of them are documented — D direct, S subtractive, T table
+		// — and a real WD expander printed a fourth, "U", for 146 of its
+		// 148 phys. Expanding the three and passing the fourth through put
+		// two vocabularies in one column, and the one that mattered was
+		// the one this package cannot name.
+		if routing := smpRouting.FindStringSubmatch(rest); routing != nil {
+			phy.Routing = Some(strings.ToUpper(routing[1]))
+			rest = strings.TrimSpace(routing[2])
 		}
-		if address, ok := smpAddress(m[3]); ok {
+		attached := smpAttached.FindStringSubmatch(rest)
+		if attached == nil {
+			// No far end: the words are the expander's answer about this
+			// phy, and they are kept as they came.
+			phy.State = smpPhyStateOf(rest)
+			if rest != "" {
+				phy.Detail = Some(rest)
+			}
+			phys = append(phys, phy)
+			continue
+		}
+		if address, ok := smpAddress(attached[1]); ok {
 			phy.AttachedAddress = Some(address)
 			// The attached phy identifier only means something next to an
 			// address: printed on its own for an empty connector it would
 			// read as phy 0 of some device.
-			if n, err := strconv.ParseInt(strings.TrimSpace(m[4]), 10, 64); err == nil {
+			if n, err := strconv.ParseInt(strings.TrimSpace(attached[2]), 10, 64); err == nil {
 				phy.AttachedPhy = Some(n)
 			}
 		}
-		if protocols := strings.TrimSpace(m[5]); protocols != "" {
+		if protocols := strings.TrimSpace(attached[3]); protocols != "" {
 			phy.AttachedProtocols = Some(protocols)
 		}
-		rate := strings.TrimSpace(m[6])
+		// The text after the bracket starts with the negotiated rate and
+		// may carry more fields after it: this expander appends the zone
+		// group ("12 Gbps  ZG:14"). Fields are separated by a run of two
+		// spaces, the same way sg_ses separates them, so the rate ends
+		// there. Without this the rate reads "12 Gbps  ZG:14".
+		rate := strings.TrimSpace(attached[4])
+		if loc := twoSpaces.FindStringIndex(rate); loc != nil {
+			rate = strings.TrimSpace(rate[:loc[0]])
+		}
 		phy.Negotiated = parseLinkRate(rate, rate != "")
 		phy.State = phyState(phy.Negotiated, None[bool]())
 		phys = append(phys, phy)
