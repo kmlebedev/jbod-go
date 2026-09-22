@@ -64,13 +64,21 @@ const (
 	// component and sensor reports: a page that did not answer is counted
 	// here, and the readings it would have carried stay absent.
 	CollectorComponents = "components"
+	// CollectorSAS covers the SAS transport: the sysfs phy attributes and,
+	// when it was asked for, the SMP requests behind the error counters. A
+	// host with no SAS transport at all is not counted here — that is the
+	// normal state of a SATA shelf, not a failed read (ROADMAP 6).
+	CollectorSAS = "sas"
 	// CollectorLED covers the LED writes and their readback.
 	CollectorLED = "led"
 )
 
 // Collectors lists every collector, so the error series exist from the first
 // scrape even when nothing failed.
-var Collectors = []string{CollectorEnclosures, CollectorSlots, CollectorDisks, CollectorFans, CollectorComponents, CollectorLED}
+var Collectors = []string{
+	CollectorEnclosures, CollectorSlots, CollectorDisks, CollectorFans,
+	CollectorComponents, CollectorSAS, CollectorLED,
+}
 
 // problems accumulates the failures of a single collection pass.
 //

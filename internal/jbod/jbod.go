@@ -50,8 +50,14 @@ type Client struct {
 	// tools resolves and runs the external commands. It is nil when the
 	// runner was injected, which is what tells Preflight that there are no
 	// binaries to look for.
-	tools              *tools
-	sysfs              string
+	tools *tools
+	sysfs string
+	// sysClass is the class root the SAS transport is read from, which is
+	// a different tree from the enclosure one and is optional: a host with
+	// no SAS hardware simply has no sas_phy class (ROADMAP 6).
+	sysClass string
+	// bsgDir is where the bsg nodes SMP requests are addressed to live.
+	bsgDir             string
 	commandTimeout     time.Duration
 	concurrency        int
 	ledReadbackTimeout time.Duration
@@ -72,6 +78,28 @@ func WithRunner(r Runner) Option {
 		if r != nil {
 			c.runner = r
 			c.tools = nil
+		}
+	}
+}
+
+// WithSysClass sets the sysfs class root the SAS transport is read from.
+// It is separate from WithSysfs because the two trees are separate: one
+// shelf can be present without any SAS phy, and one host can have phys
+// without any enclosure.
+func WithSysClass(path string) Option {
+	return func(c *Client) {
+		if path != "" {
+			c.sysClass = path
+		}
+	}
+}
+
+// WithBSGDir sets where the bsg device nodes SMP requests are addressed to
+// live. Only the SMP half of the phy report uses it.
+func WithBSGDir(path string) Option {
+	return func(c *Client) {
+		if path != "" {
+			c.bsgDir = path
 		}
 	}
 }
@@ -142,6 +170,8 @@ func New(opts ...Option) *Client {
 		runner:             resolved.run,
 		tools:              resolved,
 		sysfs:              DefaultSysfs,
+		sysClass:           DefaultSysClass,
+		bsgDir:             DefaultBSGDir,
 		commandTimeout:     DefaultCommandTimeout,
 		concurrency:        DefaultConcurrency,
 		ledReadbackTimeout: DefaultLEDReadbackTimeout,
