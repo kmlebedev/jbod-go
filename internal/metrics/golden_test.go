@@ -58,10 +58,57 @@ func fullSnapshot() jbod.Snapshot {
 			{Slot: "1:0:0:0", Description: "Fan B", Index: "2,1", Speed: jbod.Some(int64(3000))},
 		},
 		Status:   shelfStatus(),
+		PHYs:     shelfPHYs(),
 		Errors:   map[string]int{jbod.CollectorFans: 1, jbod.CollectorDisks: 2},
 		Duration: 1234 * time.Millisecond,
 		ReadAt:   readAt,
 		Up:       true,
+	}
+}
+
+// shelfPHYs is the SAS transport half of the snapshot: a link that is up
+// with clean counters, a link that is up and counting errors, and a phy the
+// transport described without any counter at all (ROADMAP 6).
+//
+// The third one is the case the encoder has to get right: it gets an info
+// series and no counter series, because a zero would be a claim that the
+// link is clean and nobody made it.
+func shelfPHYs() []jbod.PHY {
+	clean := jbod.ErrorCounters{
+		Source: "sysfs", ReadAt: readAt,
+		InvalidDword: jbod.Some(int64(0)), RunningDisparityError: jbod.Some(int64(0)),
+		LossOfDwordSync: jbod.Some(int64(0)), PhyResetProblem: jbod.Some(int64(0)),
+	}
+	noisy := jbod.ErrorCounters{
+		Source: "sysfs", ReadAt: readAt,
+		InvalidDword: jbod.Some(int64(1274)), RunningDisparityError: jbod.Some(int64(7)),
+		LossOfDwordSync: jbod.Some(int64(31)), PhyResetProblem: jbod.Some(int64(2)),
+	}
+	return []jbod.PHY{
+		{
+			Name: "phy-1:0", Host: jbod.Some(int64(1)), Port: jbod.Some("port-1:0"),
+			SASAddress: jbod.Some("0x500605b00b1e2f40"), DeviceType: jbod.Some("end device"),
+			Identifier: jbod.Some(int64(0)), State: jbod.PHYStateUp,
+			Negotiated: jbod.LinkRate{Text: jbod.Some("12.0 Gbit"), Gbps: jbod.Some(12.0)},
+			Counters:   clean,
+		},
+		{
+			Name: "phy-1:1", Host: jbod.Some(int64(1)), Port: jbod.Some("port-1:0"),
+			SASAddress: jbod.Some("0x500605b00b1e2f41"), DeviceType: jbod.Some("end device"),
+			Identifier: jbod.Some(int64(1)), State: jbod.PHYStateUp,
+			Negotiated: jbod.LinkRate{Text: jbod.Some("6.0 Gbit"), Gbps: jbod.Some(6.0)},
+			Counters:   noisy,
+		},
+		{
+			Name: "phy-1:0:0", Host: jbod.Some(int64(1)),
+			SASAddress: jbod.Some("0x5000ccab05629d3f"), DeviceType: jbod.Some("edge expander"),
+			Identifier: jbod.Some(int64(0)), State: jbod.PHYStateDisabled,
+			Negotiated: jbod.LinkRate{Text: jbod.Some("Phy disabled")},
+			Counters: jbod.ErrorCounters{
+				Source: "sysfs", ReadAt: readAt,
+				Err: jbod.Some("this phy exposes no link error counters"),
+			},
+		},
 	}
 }
 
