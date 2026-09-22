@@ -707,12 +707,11 @@ func numberRanges(numbers []int64) string {
 	var parts []string
 	start, previous := numbers[0], numbers[0]
 	flush := func() {
-		switch {
-		case start == previous:
+		if start == previous {
 			parts = append(parts, strconv.FormatInt(start, 10))
-		default:
-			parts = append(parts, strconv.FormatInt(start, 10)+"-"+strconv.FormatInt(previous, 10))
+			return
 		}
+		parts = append(parts, strconv.FormatInt(start, 10)+"-"+strconv.FormatInt(previous, 10))
 	}
 	for _, n := range numbers[1:] {
 		if n == previous+1 {
@@ -747,15 +746,6 @@ func expanderIdentity(expander jbod.Expander) string {
 		return "identity " + noAttribute
 	}
 	return strings.Join(parts, " ")
-}
-
-// smpTarget says how the expander can be reached over SMP, which is also
-// the answer to why it was not.
-func smpTarget(expander jbod.Expander) string {
-	if device, ok := expander.SMPDevice.Get(); ok {
-		return "smp " + device
-	}
-	return "smp " + noAttribute
 }
 
 // phyNotes lists what the report did not get, and the one boundary a table
