@@ -90,7 +90,7 @@ var (
 var descriptors = append([]*prometheus.Desc{
 	descEnclosureCount, descEnclosureInfo, descSlots, descSlotTemperature,
 	descFanSpeed, descFanRPM, descUp, descScrapeDuration, descScrapeErrors,
-}, healthDescriptors...)
+}, append(healthDescriptors, sasDescriptors...)...)
 
 // Collector publishes one snapshot.
 //
@@ -131,6 +131,7 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 	collectMapping(s, c.snapshot)
 	collectTemperatures(s, c.snapshot)
 	collectFans(s, c.snapshot, c.opts)
+	collectPHYs(s, c.snapshot)
 	collectCollection(s, c.snapshot)
 	collectHealth(s, c.snapshot, c.errorTotals)
 }

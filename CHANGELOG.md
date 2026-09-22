@@ -29,6 +29,37 @@ built from a checkout.
 
 ### Added
 
+- `jbod phy [ENCLOSURE] [--smp] [--json]`: the SAS links behind a shelf.
+  For every phy of the host it reports the SAS address, the negotiated,
+  minimum and maximum link rate, the state and the four SAS link error
+  counters, read from `/sys/class/sas_phy` without running a single
+  external command. Expanders are listed from `/sys/class/sas_expander`
+  with their identity and the bsg node SMP can be addressed to
+  (ROADMAP 6, first two items).
+- `--smp` additionally asks every expander over SMP: `smp_rep_general` for
+  the phy count, `smp_discover --multiple` for the address at the far end of
+  each link, and one `smp_rep_phy_err_log` per phy for its error counters.
+  It is opt-in because that is one request per phy through one SMP
+  processor. `smp_utils` is needed only by this flag, so it is not a
+  dependency and the preflight check does not look for it.
+  The `--zero` option, which clears the counters it reports, is never
+  passed.
+- Capabilities `sas.phy`, `sas.phy_error_counters` and
+  `smp.phy_error_counters`, with the evidence behind each verdict. None of
+  them ever reports write support: a link rate and a state are reports of
+  what the link did, not settings.
+- Metrics `jbod_sas_phy_info`, `jbod_sas_phy_up`,
+  `jbod_sas_phy_negotiated_link_rate_gbps` and the counters
+  `jbod_sas_phy_invalid_dword_total`,
+  `jbod_sas_phy_running_disparity_error_total`,
+  `jbod_sas_phy_loss_of_dword_sync_total` and
+  `jbod_sas_phy_reset_problem_total`. They carry the hardware's own running
+  total as a Prometheus counter, so a hardware reset reads as a counter
+  reset and never as a negative increase; accumulating them in the exporter
+  would be wrong across a restart. The labels are the host and the phy, not
+  the enclosure, because a phy belongs to the HBA.
+- A `sas` collector in `jbod_scrape_errors_total`, and the phys in the
+  snapshot the exporter publishes. The scrape reads sysfs only.
 - `jbod_build_info` with the version and the toolchain of the running
   binary, and `promhttp_metric_handler_requests_total` with the /metrics
   responses by status code.
@@ -41,7 +72,6 @@ built from a checkout.
   series are now published by client_golang's process collector, which is
   where they came from in the Rust original (A9). The series and their
   meanings are the same.
-
 
 ### 1.2 — enclosure health and sensors
 

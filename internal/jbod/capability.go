@@ -132,7 +132,7 @@ func (c *Client) probe(ctx context.Context, enc Enclosure, dirs []string) []Capa
 		c.toolCapability("disk.temperature", "per-disk temperature", "scsi_temperature", false),
 		c.toolCapability("disk.firmware", "per-disk firmware revision", "sginfo", false),
 	}
-	return caps
+	return append(caps, c.sasCapabilities(enc)...)
 }
 
 // slotEnumeration reports whether the shelf exposes slots at all. It is the
@@ -347,4 +347,176 @@ func (x Capability) String() string {
 		fmt.Fprintf(&b, " err=%s", err)
 	}
 	return b.String()
+}
+
+// The SAS transport capabilities (ROADMAP 6).
+//
+// They are reported per shelf like everything else here, but what they
+// describe is the HBA the shelf is attached through: a phy belongs to the
+// host, not to the enclosure. The evidence line says so, because a
+// capability report that implied otherwise would be claiming a topology
+// nobody established.
+
+// sasCapabilities reports what the SAS transport and SMP can answer for the
+// host this shelf is attached through.
+func (c *Client) sasCapabilities(enc Enclosure) []Capability {
+	host, known := hostOfAddress(enc.Slot).Get()
+	names, err := c.classNames(classSASPHY)
+	var phys, addressable, counted int
+	for _, name := range names {
+		if known && hostOfName(name).Or(-1) != host {
+			continue
+		}
+		phys++
+		dir := filepath.Join(c.classDir(classSASPHY), name)
+		if _, ok := readText(filepath.Join(dir, "sas_address")); ok {
+			addressable++
+		}
+		if _, ok := readText(filepath.Join(dir, "invalid_dword_count")); ok {
+			counted++
+		}
+	}
+	return []Capability{
+		sasPHYCapability(c.classDir(classSASPHY), host, known, phys, addressable, err),
+		sasCounterCapability(host, known, phys, counted, err),
+		c.smpCapability(enc, host, known),
+	}
+}
+
+// sasPHYCapability reports whether the phys of this host can be read at all.
+func sasPHYCapability(root string, host int64, known bool, phys, addressable int, err error) Capability {
+	entry := Capability{
+		Name:    "sas.phy",
+		Summary: "SAS address, negotiated link rate and state per phy",
+		// Nothing here writes: the negotiated rate and the state are
+		// reports of what the link did, not settings.
+		Write: SupportUnsupported,
+	}
+	switch {
+	case err != nil && os.IsNotExist(err):
+		entry.Read = SupportUnsupported
+		entry.Evidence = root + " does not exist: this host exposes no SAS transport"
+		return entry
+	case err != nil:
+		entry.Read = SupportUnknown
+		entry.Evidence = "sysfs: " + root
+		entry.Err = Some(err.Error())
+		return entry
+	case phys == 0:
+		entry.Read = SupportUnsupported
+		entry.Evidence = "no phy of " + hostLabel(host, known) + " is registered under " + root
+		return entry
+	case addressable == 0:
+		entry.Read = SupportUnknown
+		entry.Evidence = fmt.Sprintf("sysfs: %d phys of %s, none of which exposes a SAS address",
+			phys, hostLabel(host, known))
+		return entry
+	}
+	entry.Read = SupportSupported
+	entry.Evidence = fmt.Sprintf("sysfs: %d phys of %s, %d with a SAS address", phys, hostLabel(host, known), addressable)
+	return entry
+}
+
+// sasCounterCapability reports whether the transport keeps link error
+// counters for these phys.
+func sasCounterCapability(host int64, known bool, phys, counted int, err error) Capability {
+	entry := Capability{
+		Name:    "sas.phy_error_counters",
+		Summary: "link error counters from the SAS transport",
+		// The transport exposes these read-only; clearing them is an SMP
+		// function this tool never issues.
+		Write: SupportUnsupported,
+	}
+	switch {
+	case err != nil:
+		entry.Read = SupportUnsupported
+		if !os.IsNotExist(err) {
+			entry.Read = SupportUnknown
+			entry.Err = Some(err.Error())
+		}
+		entry.Evidence = "this host exposes no SAS transport"
+		return entry
+	case phys == 0:
+		entry.Read = SupportUnsupported
+		entry.Evidence = "no phy of " + hostLabel(host, known) + " to read counters from"
+		return entry
+	case counted == 0:
+		entry.Read = SupportUnsupported
+		entry.Evidence = fmt.Sprintf("none of the %d phys of %s exposes invalid_dword_count; "+
+			"this driver publishes no link error counters", phys, hostLabel(host, known))
+		return entry
+	case counted < phys:
+		// Some phys answer and some do not, which is a different situation
+		// from a driver that has no counters at all.
+		entry.Read = SupportUnknown
+		entry.Evidence = fmt.Sprintf("sysfs: %d of %d phys of %s expose link error counters",
+			counted, phys, hostLabel(host, known))
+		return entry
+	}
+	entry.Read = SupportSupported
+	entry.Evidence = fmt.Sprintf("sysfs: all %d phys of %s expose link error counters", phys, hostLabel(host, known))
+	return entry
+}
+
+// smpCapability reports whether the error counters can also be asked for
+// over SMP, which is what reaches an expander phy the host does not own.
+func (c *Client) smpCapability(enc Enclosure, host int64, known bool) Capability {
+	entry := Capability{
+		Name:    "smp.phy_error_counters",
+		Summary: "expander phy error counters over SMP",
+		// smp_rep_phy_err_log can clear the counters it reports; this tool
+		// never passes that option, so the capability is read-only by
+		// construction (ROADMAP 6).
+		Write: SupportUnsupported,
+	}
+	names, err := c.classNames(classSASExpander)
+	if err != nil && !os.IsNotExist(err) {
+		entry.Read = SupportUnknown
+		entry.Evidence = "sysfs: " + c.classDir(classSASExpander)
+		entry.Err = Some(err.Error())
+		return entry
+	}
+	expanders, targets := 0, 0
+	for _, name := range names {
+		if known && hostOfName(name).Or(-1) != host {
+			continue
+		}
+		expanders++
+		if c.smpDevice(name).Present() {
+			targets++
+		}
+	}
+	if expanders == 0 {
+		entry.Read = SupportUnsupported
+		entry.Evidence = "no SAS expander is registered for " + hostLabel(host, known) +
+			"; a directly attached shelf has none"
+		return entry
+	}
+	if targets == 0 {
+		entry.Read = SupportUnknown
+		entry.Evidence = fmt.Sprintf("%d expander(s) of %s, none with a bsg node to address SMP to",
+			expanders, hostLabel(host, known))
+		return entry
+	}
+	tool := c.toolCapability(entry.Name, entry.Summary, smpPhyErrorLog, false)
+	if tool.Read == SupportUnsupported || tool.Err.Present() {
+		return tool
+	}
+	// smp_utils is installed and there is something to address, but whether
+	// this expander answers an SMP request is only known once one is sent,
+	// and sending one is what "jbod phy --smp" is for.
+	entry.Read = SupportUnknown
+	entry.Evidence = fmt.Sprintf("%s: installed; %d of %d expander(s) of %s expose a bsg node; "+
+		"whether they answer is reported by \"jbod phy --smp\"",
+		smpPhyErrorLog, targets, expanders, hostLabel(host, known))
+	return entry
+}
+
+// hostLabel names the SCSI host a capability is about, or says that the
+// shelf's address did not name one.
+func hostLabel(host int64, known bool) string {
+	if !known {
+		return "any host (the shelf address names none)"
+	}
+	return fmt.Sprintf("host %d", host)
 }

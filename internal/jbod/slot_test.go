@@ -26,6 +26,16 @@ type shelfOption func(*shelfSpec)
 type shelfSpec struct {
 	id       string
 	readOnly map[string]bool
+	// sasClass is the /sys/class root the SAS transport is read from. It
+	// points at nothing by default, so a fixture shelf is a shelf without
+	// SAS transport and the capability report does not depend on whether
+	// the machine running the tests happens to have an HBA.
+	sasClass string
+}
+
+// withSASClass gives the fixture shelf a SAS transport to report on.
+func withSASClass(path string) shelfOption {
+	return func(s *shelfSpec) { s.sasClass = path }
 }
 
 // withoutID builds a shelf that reports no logical identifier, so the
@@ -122,7 +132,11 @@ func bays(t *testing.T, opts ...shelfOption) *Client {
 			write(t, filepath.Join(dir, "device", "scsi_generic"), "", 0o644)
 		}
 	}
-	return New(WithSysfs(root), WithRunner(func(_ context.Context, name string, args ...string) (string, error) {
+	sasClass := spec.sasClass
+	if sasClass == "" {
+		sasClass = filepath.Join(root, "no-sas-transport")
+	}
+	return New(WithSysfs(root), WithSysClass(sasClass), WithRunner(func(_ context.Context, name string, args ...string) (string, error) {
 		switch name {
 		case "lsscsi":
 			return "[1:0:0:0] enclosu ACME Shelf 1 - /dev/sg0\n", nil

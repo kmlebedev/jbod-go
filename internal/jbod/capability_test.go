@@ -182,3 +182,57 @@ func TestSupportedChecksNamedCapabilities(t *testing.T) {
 		t.Error("Supported() accepted a name that is not in the report")
 	}
 }
+
+// TestSASCapabilities covers the capability report of the transport half of
+// v1.3 (ROADMAP 6).
+//
+// It is reported per shelf and it is about the HBA the shelf is attached
+// through, which is why the evidence names the host: a phy belongs to the
+// host, and a report that implied it belonged to the enclosure would be
+// claiming a topology nobody established.
+func TestSASCapabilities(t *testing.T) {
+	t.Parallel()
+	_, caps := report(t, bays(t, withSASClass(links(t).sysClass)))
+	phy := caps["sas.phy"]
+	if phy.Read != SupportSupported || phy.Write != SupportUnsupported {
+		t.Errorf("sas.phy %s", phy)
+	}
+	if !strings.Contains(phy.Evidence, "host 1") {
+		t.Errorf("the evidence does not name the host: %s", phy.Evidence)
+	}
+	// One of the five phys of host 1 publishes no counters and one has no
+	// attributes at all, so the counters are readable on some and not on
+	// others: that is unknown, not supported and not unsupported.
+	counters := caps["sas.phy_error_counters"]
+	if counters.Read != SupportUnknown || counters.Write != SupportUnsupported {
+		t.Errorf("sas.phy_error_counters %s", counters)
+	}
+	// smp_utils is not installed in this fixture's PATH, and the client
+	// runs an injected runner, so whether it is there is not knowable.
+	smp := caps["smp.phy_error_counters"]
+	if smp.Read == SupportSupported {
+		t.Errorf("SMP support was claimed without sending a request: %s", smp)
+	}
+	if smp.Write != SupportUnsupported {
+		t.Errorf("smp.phy_error_counters must never report a write: %s", smp)
+	}
+}
+
+// TestSASCapabilitiesWithoutTransport covers the common shelf that is not
+// behind SAS at all: unsupported, with a reason, and not an error.
+func TestSASCapabilitiesWithoutTransport(t *testing.T) {
+	t.Parallel()
+	_, caps := report(t, bays(t))
+	for _, name := range []string{"sas.phy", "sas.phy_error_counters", "smp.phy_error_counters"} {
+		entry := caps[name]
+		if entry.Read != SupportUnsupported {
+			t.Errorf("%s: read %s, want unsupported", name, entry.Read)
+		}
+		if entry.Evidence == "" {
+			t.Errorf("%s: no evidence", name)
+		}
+		if entry.Err.Present() {
+			t.Errorf("%s: a missing transport is not a probe failure: %s", name, entry.Err)
+		}
+	}
+}

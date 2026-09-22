@@ -527,3 +527,184 @@ func addresses(c jbod.Component) string {
 	}
 	return strings.Join(c.SASAddresses, ",")
 }
+
+// The v1.3 connection report (ROADMAP 6).
+//
+// Two things it must not do. It must not print a zero for a counter that
+// was never read: a link nobody could ask about is not a clean link. And it
+// must not imply that a phy of the host belongs to the shelf that was
+// named — which phy carries which shelf is topology, and the note under the
+// table says so rather than the table pretending otherwise.
+
+// linkRateCell renders a link rate. A rate that carries no number keeps its
+// spelling, because "Phy disabled" is the answer and 0 Gbit/s is not.
+func linkRateCell(rate jbod.LinkRate) string {
+	if text, ok := rate.Text.Get(); ok {
+		return text
+	}
+	return noAttribute
+}
+
+// counterCell renders one error counter. An absent counter is a dash: zero
+// is a claim that the link is clean, and nobody made it.
+func counterCell(v jbod.Optional[int64]) string {
+	n, ok := v.Get()
+	if !ok {
+		return noAttribute
+	}
+	return strconv.FormatInt(n, 10)
+}
+
+// phyStateCounts renders the roll-up as "6 up, 2 unknown", in the fixed
+// order of the states so two hosts read the same way.
+func phyStateCounts(counts map[jbod.PHYState]int, total int) string {
+	var parts []string
+	for _, state := range jbod.PHYStates {
+		if n := counts[state]; n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", n, state))
+		}
+	}
+	if len(parts) == 0 {
+		return "no phy reported"
+	}
+	return fmt.Sprintf("%d phys: %s", total, strings.Join(parts, ", "))
+}
+
+// phyHeading names one host and what is reached through it.
+func phyHeading(report jbod.SASReport) string {
+	heading := fmt.Sprintf("Host %d  %s", report.Host, phyStateCounts(report.States, len(report.PHYs)))
+	if len(report.Enclosures) > 0 {
+		heading += "  (enclosures " + strings.Join(report.Enclosures, ", ") + ")"
+	}
+	return heading
+}
+
+// printPHYs renders the SAS phys of each host, with the error counters the
+// hardware keeps for them.
+func printPHYs(out io.Writer, reports []jbod.SASReport) error {
+	for i, report := range reports {
+		if i > 0 {
+			fmt.Fprintln(out)
+		}
+		fmt.Fprintln(out, phyHeading(report))
+		if len(report.PHYs) == 0 {
+			fmt.Fprintln(out, "no SAS phy is registered for this host")
+		} else if err := printPHYTable(out, report.PHYs); err != nil {
+			return err
+		}
+		if err := printExpanders(out, report.Expanders); err != nil {
+			return err
+		}
+		for _, note := range phyNotes(report) {
+			fmt.Fprintln(out, "note: "+note)
+		}
+	}
+	return nil
+}
+
+// printPHYTable renders one host's phys.
+//
+// The four counter columns are the shortened names of the SAS link error
+// counters: invalid dwords, running disparity errors, losses of dword
+// synchronisation and phy reset problems.
+func printPHYTable(out io.Writer, phys []jbod.PHY) error {
+	w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "PHY\tPORT\tTYPE\tSAS ADDRESS\tID\tSTATE\tNEGOTIATED\tMAX\tINV DW\tDISP\tSYNC\tRESET")
+	for _, phy := range phys {
+		id := noAttribute
+		if n, ok := phy.Identifier.Get(); ok {
+			id = strconv.FormatInt(n, 10)
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			phy.Name, phy.Port.Or(noAttribute), phy.DeviceType.Or(noAttribute),
+			phy.SASAddress.Or(noAttribute), id, phy.State,
+			linkRateCell(phy.Negotiated), linkRateCell(phy.Maximum),
+			counterCell(phy.Counters.InvalidDword), counterCell(phy.Counters.RunningDisparityError),
+			counterCell(phy.Counters.LossOfDwordSync), counterCell(phy.Counters.PhyResetProblem))
+	}
+	return w.Flush()
+}
+
+// printExpanders renders the expanders of one host and, when SMP answered,
+// the phys they reported.
+func printExpanders(out io.Writer, expanders []jbod.Expander) error {
+	for _, expander := range expanders {
+		fmt.Fprintf(out, "\nExpander %s  address %s  %s  %s\n",
+			expander.Name, expander.SASAddress.Or(noAttribute),
+			expanderIdentity(expander), smpTarget(expander))
+		if len(expander.Phys) == 0 {
+			continue
+		}
+		w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(w, "ID\tROUTING\tSTATE\tNEGOTIATED\tATTACHED\tATTACHED ID\tPROTOCOLS\tINV DW\tDISP\tSYNC\tRESET")
+		for _, phy := range expander.Phys {
+			attachedID := noAttribute
+			if n, ok := phy.AttachedPhy.Get(); ok {
+				attachedID = strconv.FormatInt(n, 10)
+			}
+			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				phy.Identifier, phy.Routing.Or(noAttribute), phy.State,
+				linkRateCell(phy.Negotiated), phy.AttachedAddress.Or(noAttribute), attachedID,
+				phy.AttachedProtocols.Or(noAttribute),
+				counterCell(phy.Counters.InvalidDword), counterCell(phy.Counters.RunningDisparityError),
+				counterCell(phy.Counters.LossOfDwordSync), counterCell(phy.Counters.PhyResetProblem))
+		}
+		if err := w.Flush(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// expanderIdentity renders what the expander says it is.
+func expanderIdentity(expander jbod.Expander) string {
+	parts := make([]string, 0, 3)
+	for _, field := range []jbod.Optional[string]{expander.Vendor, expander.Product, expander.Revision} {
+		if v, ok := field.Get(); ok && strings.TrimSpace(v) != "" {
+			parts = append(parts, v)
+		}
+	}
+	if len(parts) == 0 {
+		return "identity " + noAttribute
+	}
+	return strings.Join(parts, " ")
+}
+
+// smpTarget says how the expander can be reached over SMP, which is also
+// the answer to why it was not.
+func smpTarget(expander jbod.Expander) string {
+	if device, ok := expander.SMPDevice.Get(); ok {
+		return "smp " + device
+	}
+	return "smp " + noAttribute
+}
+
+// phyNotes lists what the report did not get, and the one boundary a table
+// of phys cannot show by itself.
+func phyNotes(report jbod.SASReport) []string {
+	var notes []string
+	if err, ok := report.Collection.Err.Get(); ok {
+		notes = append(notes, err)
+	}
+	if n := report.Collection.Unreadable; n > 0 {
+		notes = append(notes, fmt.Sprintf(
+			"%d phy(s) exposed no SAS transport attribute and are listed without one", n))
+	}
+	if len(report.Enclosures) > 0 && len(report.PHYs) > 0 {
+		// The table is the links of the HBA, not the links of the shelf.
+		// Saying so is the difference between a report and a guess: tying
+		// a phy to an enclosure is topology (ROADMAP 6).
+		notes = append(notes, "these are the phys of the HBA the named shelf is attached through; "+
+			"which phy carries which shelf is topology and is not reported here")
+	}
+	if report.Collection.SMP.Requested {
+		if err, ok := report.Collection.SMP.Err.Get(); ok {
+			notes = append(notes, "SMP: "+err)
+		}
+		if report.Collection.SMP.Available {
+			notes = append(notes, fmt.Sprintf(
+				"SMP read the error log of %d phy(s); no counter was cleared", report.Collection.SMP.Phys))
+		}
+	}
+	return notes
+}

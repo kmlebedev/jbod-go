@@ -27,6 +27,7 @@ Usage:
   jbod capabilities [ENCLOSURE] [--json]
   jbod health [ENCLOSURE] [--json]
   jbod sensors [ENCLOSURE] [--json]
+  jbod phy [ENCLOSURE] [--smp] [--json]
   jbod led [-l|--locate TARGET] [-f|--fault TARGET] --on|--off [--json]
   jbod prometheus [-i|--ip-address IP] [-p|--port PORT] [tuning flags]
 
@@ -38,6 +39,12 @@ Usage:
   Both separate what the enclosure reports from what could not be read: a
   page that did not answer is shown as a gap in the poll and never as a
   healthy component.
+
+  phy reports the SAS links of the HBA a shelf is attached through: the
+  address, the negotiated rate and the state of every phy, with the error
+  counters the hardware keeps for it. Naming a shelf picks its host. --smp
+  additionally asks each expander over SMP, which needs smp_utils and costs
+  one request per phy; no counter is ever cleared.
 
   ENCLOSURE narrows a listing to one shelf and is any of the four spellings
   the listings print: the logical identifier, the unit serial number, the
@@ -69,6 +76,9 @@ type Inventory interface {
 	// Inspect reads the SES pages behind the health, component and sensor
 	// reports: one pass per command, shared by all three (ROADMAP 5).
 	Inspect(ctx context.Context, enclosures []jbod.Enclosure) ([]jbod.EnclosureStatus, error)
+	// SAS reads the transport behind the shelves: the phys of their hosts
+	// and the error counters of each (ROADMAP 6).
+	SAS(ctx context.Context, enclosures []jbod.Enclosure, opts jbod.SASOptions) ([]jbod.SASReport, error)
 	SetLED(ctx context.Context, target jbod.LEDTarget, kind jbod.LEDKind, on bool) (jbod.LEDResult, error)
 }
 
@@ -155,6 +165,8 @@ func Run(ctx context.Context, args []string, out, errOut io.Writer, c *jbod.Clie
 		return cmdHealth(ctx, args[1:], out, c)
 	case "sensors":
 		return cmdSensors(ctx, args[1:], out, c)
+	case "phy", "phys":
+		return cmdPHY(ctx, args[1:], out, c)
 	case "led":
 		return cmdLED(ctx, args[1:], out, c)
 	case "prometheus":

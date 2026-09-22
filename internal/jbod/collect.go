@@ -21,6 +21,11 @@ type Snapshot struct {
 	// itself, its components and their sensors, and how much of that this
 	// pass managed to read (ROADMAP 5).
 	Status []EnclosureStatus
+	// PHYs is the SAS transport view of the host: one entry per phy, with
+	// its address, its negotiated rate and the error counters the hardware
+	// keeps for it. It is read from sysfs only — SMP costs one request per
+	// phy and is not something a scrape should do (ROADMAP 6).
+	PHYs []PHY
 	// Errors counts failed operations per collector.
 	Errors map[string]int
 	// Duration is how long the pass took.
@@ -56,12 +61,17 @@ func (c *Client) Collect(ctx context.Context) (Snapshot, error) {
 	// report and the metrics are two renderings of the same collection,
 	// not two collections (ROADMAP 3).
 	status := c.inspect(ctx, enc, slots, p)
+	// The SAS transport is attribute reads and runs no external command,
+	// so it costs a scrape nothing worth budgeting for. The SMP half is
+	// left out on purpose; see SASOptions.
+	phys, _ := c.sasPHYs(start, p)
 	s := Snapshot{
 		Enclosures: enc,
 		Slots:      slots,
 		Disks:      disks,
 		Fans:       fans,
 		Status:     status,
+		PHYs:       phys,
 		ReadAt:     start,
 		Errors:     p.snapshotCounts(),
 		Duration:   time.Since(start),
@@ -82,7 +92,7 @@ func (c *Client) Collect(ctx context.Context) (Snapshot, error) {
 	c.logger.Log(ctx, level, "collection finished",
 		"duration", s.Duration, "enclosures", len(s.Enclosures), "slots", len(s.Slots),
 		"disks", len(s.Disks), "fans", len(s.Fans), "components", components(s),
-		"errors", failed, "up", s.Up)
+		"phys", len(s.PHYs), "errors", failed, "up", s.Up)
 	return s, nil
 }
 

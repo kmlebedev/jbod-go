@@ -15,7 +15,11 @@ official Prometheus client the exporter publishes through, and
 Talking to hardware needs Linux, the enclosure
 driver, a readable /sys/class/enclosure and the lsscsi, sg_inq, sg_map,
 sg_ses, sginfo and scsi_temperature tools. On Debian and Ubuntu install the
-lsscsi and sg3-utils packages. Reading /dev/sg* and writing LEDs need the
+lsscsi and sg3-utils packages. Reading the SAS links (`jbod phy`) needs
+nothing beyond /sys/class/sas_phy; its SMP half (`jbod phy --smp`) needs
+smp_utils and is the only thing that does, so that package is not a
+dependency and the preflight check does not look for it.
+Reading /dev/sg* and writing LEDs need the
 matching privileges (usually root). Help and the test suite work without any
 hardware, macOS included.
 
@@ -50,6 +54,9 @@ make build
 ./bin/jbod health naa.50050cc10c400000 --json
 ./bin/jbod sensors
 ./bin/jbod list --components naa.50050cc10c400000
+./bin/jbod phy
+./bin/jbod phy naa.50050cc10c400000 --json
+sudo ./bin/jbod phy naa.50050cc10c400000 --smp
 sudo ./bin/jbod led --locate /dev/sda --on
 sudo ./bin/jbod led --locate /dev/sda --off
 sudo ./bin/jbod led --fault /dev/sg1 --on
@@ -312,6 +319,74 @@ instead.
 commands decide nothing for the operator: `jbod health` prints the condition
 and exits 0 unless the collection itself failed.
 
+## SAS connections and error counters
+
+`jbod phy` reports the links a shelf is attached by rather than the shelf:
+the SAS address of every phy, the rate the link came up at, its state and
+the error counters the hardware itself keeps. It answers the situation
+`health` and `sensors` cannot show: every element of the enclosure reads
+`OK` and the disks keep timing out. That is a cable, and this is the only
+place it is visible.
+
+```
+$ jbod phy 0x5000ccab05629d00
+Host 1  3 phys: 2 up, 1 disabled  (enclosures 1:0:0:0)
+PHY        PORT      TYPE           SAS ADDRESS         ID  STATE     NEGOTIATED    MAX        INV DW  DISP  SYNC  RESET
+phy-1:0    port-1:0  end device     0x500605b00b1e2f40  0   up        12.0 Gbit     12.0 Gbit  0       0     0     0
+phy-1:1    port-1:0  end device     0x500605b00b1e2f41  1   up        6.0 Gbit      12.0 Gbit  1274    7     31    2
+phy-1:0:0  -         edge expander  0x5000ccab05629d3f  0   disabled  Phy disabled  -          -       -     -     -
+
+Expander expander-1:0  address 0x5000ccab05629d3f  HGST H4060-J 4013  smp /dev/bsg/expander-1:0
+note: these are the phys of the HBA the named shelf is attached through; which phy carries which shelf is topology and is not reported here
+```
+
+The last four columns are the standard SAS link error counters: invalid
+dwords, running disparity errors, losses of dword synchronisation and failed
+phy resets. The first grows on a marginal cable or connector, the third on a
+link that keeps dropping — the second row above is exactly such a link, and
+it is answering and counted as `up`.
+
+There are two sources, and they cost very different things:
+
+| Source | What it gives | What it costs |
+| --- | --- | --- |
+| `/sys/class/sas_phy` | address, rate, state and the four counters of every phy | nothing: attribute reads, no external command |
+| SMP, with `--smp` | the same for expander phys, plus the address at the far end | one `smp_rep_phy_err_log` per phy, needs smp_utils |
+
+That is why SMP is a flag and not the default: a 38-phy expander is 38
+requests through one SMP processor. For a command an operator typed that is
+fine; for a scrape every fifteen seconds it is not, and the exporter does
+not use SMP at all.
+
+The counters are only read. `smp_rep_phy_err_log` has a `--zero` option that
+clears what it prints; jbod-go never passes it — a diagnostic that destroys
+the history of a suspect cable is worse than no diagnostic.
+
+What the report does not claim:
+
+- **`unknown` is not "the link is down".** The transport prints `Unknown`
+  both for an empty connector and for a field the driver did not fill in,
+  and sysfs offers nothing to tell them apart, so the column says `unknown`
+  and not `down`. `disabled` (the transport said so) and `failed` (rate
+  negotiation failed) are separate states, because they are diagnoses and
+  not just "not up".
+- **A counter that is not there prints as `-`.** A driver that publishes no
+  link error counters has not said the link is clean. A zero would say
+  exactly that.
+- **A phy belongs to the HBA, not to the shelf.** Naming a shelf narrows the
+  report to its host, and the note under the table says it plainly: tying a
+  particular phy to a particular shelf is topology, which is the rest of
+  1.3.
+
+`capabilities` answers the same question in advance: `sas.phy`,
+`sas.phy_error_counters` and `smp.phy_error_counters`, with the evidence —
+how many phys this host has, how many of them publish counters, and whether
+there is a bsg node to address SMP to. None of the three ever reports write
+support: a rate and a state are reports of what the link did, not settings.
+
+`--json` is available here too. A counter that is absent is `null` with the
+reason next to it, and never a zero.
+
 ## Prometheus
 
 Both ways of starting it run the same exporter:
@@ -408,6 +483,30 @@ Added in 1.2:
 | jbod_sensor_*_threshold_* | gauge | the same plus threshold | the enclosure's own limit: high_critical, high_warning, low_warning, low_critical |
 | jbod_slot_sas_address_info | gauge | enclosure, enclosure_id, slot, component_id, sas_address, device, block_device | the slot → SAS address → disk mapping, always 1 |
 
+Added in 1.3:
+
+| Metric | Type | Labels | Meaning |
+| --- | --- | --- | --- |
+| jbod_sas_phy_info | gauge | host, phy, port, sas_address, device_type, state, negotiated_link_rate | one phy, always 1 |
+| jbod_sas_phy_up | gauge | host, phy, port, sas_address, device_type | 1 when the link negotiated a rate |
+| jbod_sas_phy_negotiated_link_rate_gbps | gauge | the same | the rate; no series when there is none |
+| jbod_sas_phy_invalid_dword_total | counter | the same | invalid dwords |
+| jbod_sas_phy_running_disparity_error_total | counter | the same | running disparity errors |
+| jbod_sas_phy_loss_of_dword_sync_total | counter | the same | losses of dword synchronisation |
+| jbod_sas_phy_reset_problem_total | counter | the same | failed phy resets |
+
+The counters are published as counters, carrying the hardware's own running
+total. They restart on a phy reset, a driver reload and a reboot, and that
+is precisely what Prometheus knows how to read: `rate()` and `increase()`
+treat a drop as a reset and never produce a negative increase. Accumulating
+them in the exporter would be wrong — it restarts too, and does not remember
+the previous total.
+
+The labels are the host and the phy, not the enclosure: a phy belongs to the
+HBA. A counter the transport did not expose gets no series at all, because a
+zero here would mean a clean link. The exporter reads sysfs only: SMP costs
+one request per phy and stays out of the scrape.
+
 Health is a label and never a number: a numeric scale would have to put
 `unknown` somewhere, and every place is wrong. Next to `ok` it hides a shelf
 nobody could read; next to `critical` it wakes somebody up over a threshold
@@ -421,7 +520,7 @@ The health of the collection itself was added:
 | --- | --- | --- |
 | jbod_up | gauge | 1 when the collection completed |
 | jbod_scrape_duration_seconds | gauge | duration of the last collection |
-| jbod_scrape_errors_total | counter | cumulative failures per collector (enclosures, slots, disks, fans, components, led) |
+| jbod_scrape_errors_total | counter | cumulative failures per collector (enclosures, slots, disks, fans, components, sas, led) |
 | jbod_snapshot_timestamp_seconds | gauge | when the collection behind this response started |
 | jbod_collection_complete | gauge | 1 when every required SES page of a shelf answered and the pages agreed |
 | jbod_ses_page_read | gauge | whether one SES page answered (labels: page, required) |

@@ -15,6 +15,10 @@ Go 1.25+ и две зависимости: [prometheus/client_golang](https://gi
 драйвера enclosure, доступного /sys/class/enclosure и утилит
 lsscsi, sg_inq, sg_map, sg_ses, sginfo, scsi_temperature.
 На Debian/Ubuntu установите пакеты lsscsi и sg3-utils.
+Чтение SAS-линков (`jbod phy`) обходится `/sys/class/sas_phy` и никаких
+дополнительных пакетов не требует; SMP-половина (`jbod phy --smp`) нужна
+только ей самой и требует smp_utils, поэтому в обязательные зависимости
+этот пакет не входит и preflight его не ищет.
 Доступ к устройствам /dev/sg* и запись LED требуют соответствующих прав
 (обычно root). Справка и тесты работают без оборудования, в том числе на macOS.
 
@@ -49,6 +53,9 @@ make build
 ./bin/jbod health naa.50050cc10c400000 --json
 ./bin/jbod sensors
 ./bin/jbod list --components naa.50050cc10c400000
+./bin/jbod phy
+./bin/jbod phy naa.50050cc10c400000 --json
+sudo ./bin/jbod phy naa.50050cc10c400000 --smp
 sudo ./bin/jbod led --locate /dev/sda --on
 sudo ./bin/jbod led --locate /dev/sda --off
 sudo ./bin/jbod led --fault /dev/sg1 --on
@@ -306,6 +313,73 @@ Generation code читается со всех страниц. Если они �
 решают за оператора: `jbod health` печатает состояние и всегда завершается
 с кодом 0, если сам сбор не сломался.
 
+## SAS-соединения и счётчики ошибок
+
+`jbod phy` показывает не полку, а линки, по которым она подключена: SAS-адрес
+каждого phy, скорость, на которой согласовался линк, состояние и счётчики
+ошибок, которые ведёт само железо. Это ответ на ситуацию, которую `health` и
+`sensors` показать не могут: все элементы корпуса отвечают `OK`, а диски
+отваливаются по таймауту — это кабель, и виден он только здесь.
+
+```
+$ jbod phy 0x5000ccab05629d00
+Host 1  3 phys: 2 up, 1 disabled  (enclosures 1:0:0:0)
+PHY        PORT      TYPE           SAS ADDRESS         ID  STATE     NEGOTIATED    MAX        INV DW  DISP  SYNC  RESET
+phy-1:0    port-1:0  end device     0x500605b00b1e2f40  0   up        12.0 Gbit     12.0 Gbit  0       0     0     0
+phy-1:1    port-1:0  end device     0x500605b00b1e2f41  1   up        6.0 Gbit      12.0 Gbit  1274    7     31    2
+phy-1:0:0  -         edge expander  0x5000ccab05629d3f  0   disabled  Phy disabled  -          -       -     -     -
+
+Expander expander-1:0  address 0x5000ccab05629d3f  HGST H4060-J 4013  smp /dev/bsg/expander-1:0
+note: these are the phys of the HBA the named shelf is attached through; which phy carries which shelf is topology and is not reported here
+```
+
+Четыре последние колонки — стандартные счётчики ошибок линка SAS: невалидные
+dword, ошибки running disparity, потери синхронизации dword и неудавшиеся
+сбросы phy. Первая растёт на плохом кабеле или разъёме, третья — на линке,
+который падает и поднимается; вторая строка примера — это именно такой линк,
+который при этом отвечает и числится `up`.
+
+Источников два, и они стоят по-разному:
+
+| Источник | Что даёт | Чего стоит |
+| --- | --- | --- |
+| `/sys/class/sas_phy` | адрес, скорость, состояние и четыре счётчика каждого phy | ничего: это чтение атрибутов, внешних команд нет |
+| SMP, флаг `--smp` | то же для phy экспандера, плюс адрес на другом конце линка | по одному `smp_rep_phy_err_log` на phy, нужен smp_utils |
+
+Поэтому SMP включается флагом, а не по умолчанию: тридцать восемь phy
+экспандера — это тридцать восемь запросов через один SMP-процессор. Для
+команды, которую набрал оператор, это нормально; для scrape раз в пятнадцать
+секунд — нет, и экспортёр SMP не использует вообще.
+
+Счётчики только читаются. У `smp_rep_phy_err_log` есть опция `--zero`,
+которая обнуляет то, что печатает; jbod-go её не передаёт никогда — сбор
+диагностики, уничтожающий историю подозрительного кабеля, хуже отсутствия
+диагностики.
+
+Чего этот отчёт не утверждает:
+
+- **`unknown` — это не «линк лежит».** Транспорт печатает `Unknown` и для
+  пустого разъёма, и для поля, которое драйвер не заполнил; различить их
+  средствами sysfs нечем, поэтому в колонке стоит `unknown`, а не `down`.
+  Отдельно существуют `disabled` (так сказал транспорт) и `failed`
+  (согласование скорости не удалось) — это диагнозы, и они не сводятся
+  к «не up».
+- **Счётчик, которого нет, печатается как `-`.** Драйвер, не публикующий
+  счётчики ошибок, не сообщил, что линк чистый. Ноль сказал бы именно это.
+- **Phy принадлежит HBA, а не полке.** Имя корпуса сужает отчёт до его хоста,
+  и сноска под таблицей говорит прямо: связать конкретный phy с конкретной
+  полкой — это топология, то есть следующие пункты версии 1.3.
+
+`capabilities` отвечает на тот же вопрос заранее: `sas.phy`,
+`sas.phy_error_counters` и `smp.phy_error_counters` — с доказательством,
+сколько phy у этого хоста, сколько из них публикуют счётчики и есть ли
+bsg-узел, которому можно адресовать SMP. Ни одна из трёх никогда не сообщает
+поддержку записи: скорость и состояние — это отчёт о том, что сделал линк,
+а не настройка.
+
+`--json` есть и здесь. Отсутствующий счётчик — это `null` с причиной рядом,
+а не ноль.
+
 ## Prometheus
 
 Оба способа запуска используют один экспортёр:
@@ -400,6 +474,29 @@ stderr.
 | jbod_sensor_*_threshold_* | gauge | те же + threshold | порог корпуса: high_critical, high_warning, low_warning, low_critical |
 | jbod_slot_sas_address_info | gauge | enclosure, enclosure_id, slot, component_id, sas_address, device, block_device | отображение slot → SAS address → disk, всегда 1 |
 
+Добавлено в 1.3:
+
+| Метрика | Тип | Labels | Значение |
+| --- | --- | --- | --- |
+| jbod_sas_phy_info | gauge | host, phy, port, sas_address, device_type, state, negotiated_link_rate | один phy, всегда 1 |
+| jbod_sas_phy_up | gauge | host, phy, port, sas_address, device_type | 1, если линк согласовал скорость |
+| jbod_sas_phy_negotiated_link_rate_gbps | gauge | те же | скорость линка; серии нет, если скорости нет |
+| jbod_sas_phy_invalid_dword_total | counter | те же | невалидные dword |
+| jbod_sas_phy_running_disparity_error_total | counter | те же | ошибки running disparity |
+| jbod_sas_phy_loss_of_dword_sync_total | counter | те же | потери синхронизации dword |
+| jbod_sas_phy_reset_problem_total | counter | те же | неудавшиеся сбросы phy |
+
+Счётчики отдаются как counter со значением самого железа. Они обнуляются при
+сбросе phy, перезагрузке драйвера и ребуте — и это ровно то, что Prometheus
+умеет читать: `rate()` и `increase()` видят падение как reset и никогда не
+дают отрицательный прирост. Накапливать их в экспортёре было бы неверно, он
+сам перезапускается и прошлую сумму не помнит.
+
+Labels — хост и phy, а не корпус: phy принадлежит HBA. Счётчик, которого
+транспорт не отдал, серии не получает вовсе — ноль здесь означал бы чистый
+линк. Экспортёр читает только sysfs: SMP стоит по запросу на phy и в scrape
+не ходит.
+
 Состояние — это label, а не число: числовой шкале пришлось бы куда-то
 поместить `unknown`, и любое место неверно. Рядом с `ok` он прячет полку,
 которую не удалось прочитать, рядом с `critical` — будит дежурного из-за
@@ -414,7 +511,7 @@ stderr.
 | --- | --- | --- |
 | jbod_up | gauge | 1, если сбор завершился полностью |
 | jbod_scrape_duration_seconds | gauge | длительность последнего сбора |
-| jbod_scrape_errors_total | counter | накопленные ошибки по collector (enclosures, slots, disks, fans, components, led) |
+| jbod_scrape_errors_total | counter | накопленные ошибки по collector (enclosures, slots, disks, fans, components, sas, led) |
 | jbod_snapshot_timestamp_seconds | gauge | когда начался сбор, стоящий за этим ответом |
 | jbod_collection_complete | gauge | 1, если у корпуса ответили все обязательные страницы и совпал generation code |
 | jbod_ses_page_read | gauge | ответила ли конкретная страница SES (labels: page, required) |

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -26,9 +27,12 @@ type fake struct {
 	fans         []jbod.Fan
 	capabilities []jbod.EnclosureCapabilities
 	statuses     []jbod.EnclosureStatus
-	err          error
-	preflight    error
-	leds         []ledCall
+	sas          []jbod.SASReport
+	// smp records whether the phy command asked for the SMP half.
+	smp       bool
+	err       error
+	preflight error
+	leds      []ledCall
 	// ledResult shapes what SetLED reports back, so a test can exercise
 	// an unconfirmed write without a sysfs tree.
 	ledResult func(jbod.LEDTarget, jbod.LEDKind, bool) (jbod.LEDResult, error)
@@ -82,6 +86,25 @@ func (f *fake) Inspect(_ context.Context, enclosures []jbod.Enclosure) ([]jbod.E
 				kept = append(kept, status)
 				break
 			}
+		}
+	}
+	return kept, f.err
+}
+
+// SAS honours the selection by host, the way the client does: a report for
+// a host none of the selected shelves sits behind would hide a broken
+// filter.
+func (f *fake) SAS(_ context.Context, enclosures []jbod.Enclosure, opts jbod.SASOptions) ([]jbod.SASReport, error) {
+	f.smp = opts.WithSMP
+	hosts := map[string]bool{}
+	for _, e := range enclosures {
+		host, _, _ := strings.Cut(e.Slot, ":")
+		hosts[host] = true
+	}
+	var kept []jbod.SASReport
+	for _, report := range f.sas {
+		if hosts[strconv.FormatInt(report.Host, 10)] {
+			kept = append(kept, report)
 		}
 	}
 	return kept, f.err

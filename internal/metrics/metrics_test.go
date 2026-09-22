@@ -303,3 +303,42 @@ func TestEncodeWithoutStatus(t *testing.T) {
 		t.Errorf("the pre-1.2 series are missing:\n%s", out)
 	}
 }
+
+// TestPHYSeries covers the rule the SAS series exist for: a counter the
+// transport did not expose gets no series at all (ROADMAP 6).
+//
+// The alternative is a zero, and a zero here says the link is clean. On a
+// driver that publishes no link error counters that would be a claim made
+// by this exporter and by nobody else.
+func TestPHYSeries(t *testing.T) {
+	t.Parallel()
+	out := encode(t, fullSnapshot(), nil, Options{})
+	for _, want := range []string{
+		`jbod_sas_phy_invalid_dword_total{device_type="end device",host="1",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41"} 1274`,
+		`jbod_sas_phy_negotiated_link_rate_gbps{device_type="end device",host="1",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40"} 12`,
+		`jbod_sas_phy_up{device_type="edge expander",host="1",phy="phy-1:0:0",port="",sas_address="0x5000ccab05629d3f"} 0`,
+		// The counters are counters: a phy reset or an HBA reload restarts
+		// the hardware's total, and that is a reset Prometheus already
+		// knows how to read.
+		"# TYPE jbod_sas_phy_invalid_dword_total counter",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing:\n%s", want)
+		}
+	}
+	for _, unwanted := range []string{
+		// The phy with no counters, and the one with no rate.
+		`jbod_sas_phy_invalid_dword_total{device_type="edge expander"`,
+		`jbod_sas_phy_negotiated_link_rate_gbps{device_type="edge expander"`,
+	} {
+		if strings.Contains(out, unwanted) {
+			t.Errorf("a value was published for something nobody read:\n%s", unwanted)
+		}
+	}
+	// The SAS collector has its own error counter, so a transport that
+	// could not be read is visible next to the other collectors.
+	if !strings.Contains(encode(t, fullSnapshot(), map[string]int{jbod.CollectorSAS: 3}, Options{}),
+		`jbod_scrape_errors_total{collector="sas"} 3`) {
+		t.Error("the sas collector has no error series")
+	}
+}
