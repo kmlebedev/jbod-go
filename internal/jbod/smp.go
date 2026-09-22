@@ -3,8 +3,10 @@
 package jbod
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -221,31 +223,60 @@ func (c *Client) smpExpander(ctx context.Context, expander *Expander, p *problem
 		// enumerated from the count it gave, because the error counters
 		// are the other half of this feature and do not need discover.
 		p.note(CollectorSAS, fmt.Errorf("%s: %w", discover, err))
-		expander.Phys = smpPhyPlaceholders(expander.NumPhys, discover+": "+err.Error())
+		expander.Phys = mergeSMPPhys(expander.NumPhys, nil, discover+": "+err.Error())
 		return
 	}
-	expander.Phys = parseSMPDiscoverList(list, discover)
-	if len(expander.Phys) == 0 {
+	described := parseSMPDiscoverList(list, discover)
+	reason := discover + ": this phy was not among the ones it described"
+	if len(described) == 0 {
 		// smp_discover answered in a shape this parser does not know. The
 		// phy list is rebuilt from the reported count rather than left
 		// empty, so an unparsed line costs the attached addresses and not
 		// the error counters as well.
-		expander.Phys = smpPhyPlaceholders(expander.NumPhys,
-			discover+": the output carried no phy this parser recognises")
+		reason = discover + ": the output carried no phy this parser recognises"
 	}
+	expander.Phys = mergeSMPPhys(expander.NumPhys, described, reason)
 }
 
-// smpPhyPlaceholders enumerates phys 0..n-1 with nothing known about them
-// but their number, so their error logs can still be read.
-func smpPhyPlaceholders(count Optional[int64], reason string) []SMPPhy {
+// mergeSMPPhys puts the phys smp_discover described into the list the
+// expander itself says it has.
+//
+// The phy count from smp_rep_general is the authority, and this is why: on
+// a WD H4060-J, "smp_discover --multiple" described 24 of one expander's 49
+// phys and said nothing about the other 25. Taking its list as the phy list
+// meant those 25 were never asked for their error log — the half of this
+// feature that does not depend on discover at all. They are listed instead,
+// with whatever their error log says and with the reason they carry no
+// attached address.
+//
+// A phy numbered past the reported count is kept as well: the expander
+// answered about it, and dropping an observation to fit a count is the
+// wrong way round.
+func mergeSMPPhys(count Optional[int64], described []SMPPhy, reason string) []SMPPhy {
 	n, ok := count.Get()
 	if !ok || n <= 0 || n > smpPhyLimit {
-		return nil
+		return described
 	}
-	phys := make([]SMPPhy, 0, n)
+	byID := make(map[int64]SMPPhy, len(described))
+	for _, phy := range described {
+		byID[phy.Identifier] = phy
+	}
+	phys := make([]SMPPhy, 0, max(int(n), len(described)))
 	for i := range n {
+		if phy, found := byID[i]; found {
+			phys = append(phys, phy)
+			delete(byID, i)
+			continue
+		}
 		phys = append(phys, SMPPhy{Identifier: i, State: PHYStateUnknown, Source: reason})
 	}
+	for _, phy := range described {
+		if _, beyond := byID[phy.Identifier]; beyond {
+			phys = append(phys, phy)
+			delete(byID, phy.Identifier)
+		}
+	}
+	slices.SortStableFunc(phys, func(a, b SMPPhy) int { return cmp.Compare(a.Identifier, b.Identifier) })
 	return phys
 }
 

@@ -9,6 +9,22 @@ built from a checkout.
 
 ### Changed
 
+- After the second run on real hardware, this time with smp_utils
+  installed, four more things were corrected. The phy list of an expander is
+  built from the count the expander reports rather than from what
+  `smp_discover --multiple` happened to describe — it described 24 of one
+  expander's 49 phys, and the other 25 were never asked for their error log.
+  The negotiated rate is cut at the first field boundary, because this
+  expander appends the zone group after it ("12 Gbps  ZG:14"). The routing
+  attribute is passed through as the letter smp_discover prints, instead of
+  expanding three letters and leaving the fourth raw. And the parent device
+  of a phy is read past the class directory: sysfs nests a class entry as
+  <device>/sas_phy/<name>, so every phy on a real machine reported "sas_phy"
+  as its parent.
+- The evidence behind `sas.phy_error_counters` separates a counter that
+  exists from one that answers. On a populated shelf 199 of 391 phys answer
+  and the rest fail per phy, which is the driver asking the expander, not a
+  driver without counters.
 - After the first run on real hardware (a WD H4060-J behind one HBA: 391
   phys, six expanders, no smp_utils installed), four things in the phy
   report were corrected. A counter that is absent now says which of the two

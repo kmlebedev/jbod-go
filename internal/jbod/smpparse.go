@@ -55,15 +55,6 @@ func parseSMPGeneral(out string) Optional[int64] {
 var smpDiscoverLine = regexp.MustCompile(
 	`(?i)^\s*phy\s+(\d+)\s*:\s*([A-Za-z])\s*:\s*attached\s*:\s*\[\s*([0-9a-fA-F]+)\s*:\s*(\d+)([^\]]*)\]\s*(.*)$`)
 
-// routingAttributes are the routing attribute letters smp_discover prints.
-// A letter that is not one of them keeps its raw form: inventing a meaning
-// for it would be a claim about the topology nobody made.
-var routingAttributes = map[string]string{
-	"D": "direct",
-	"S": "subtractive",
-	"T": "table",
-}
-
 // parseSMPDiscoverList reads "smp_discover --multiple" output into phys.
 //
 // It is deliberately forgiving about everything but the phy number: this
@@ -87,11 +78,14 @@ func parseSMPDiscoverList(out, source string) []SMPPhy {
 		}
 		seen[identifier] = true
 		phy := SMPPhy{Identifier: identifier, Source: source}
+		// The routing letter is kept exactly as smp_discover prints it.
+		// Three of them are documented — D direct, S subtractive, T table
+		// — and a real WD expander printed a fourth, "U", for 146 of its
+		// 148 phys. Expanding the three and passing the fourth through put
+		// two vocabularies in one column, and the one that mattered was
+		// the one this package cannot name.
 		if routing := strings.ToUpper(strings.TrimSpace(m[2])); routing != "" {
-			phy.Routing = Some(routingAttributes[routing])
-			if routingAttributes[routing] == "" {
-				phy.Routing = Some(routing)
-			}
+			phy.Routing = Some(routing)
 		}
 		if address, ok := smpAddress(m[3]); ok {
 			phy.AttachedAddress = Some(address)
@@ -105,7 +99,15 @@ func parseSMPDiscoverList(out, source string) []SMPPhy {
 		if protocols := strings.TrimSpace(m[5]); protocols != "" {
 			phy.AttachedProtocols = Some(protocols)
 		}
+		// The text after the bracket starts with the negotiated rate and
+		// may carry more fields after it: this expander appends the zone
+		// group ("12 Gbps  ZG:14"). Fields are separated by a run of two
+		// spaces, the same way sg_ses separates them, so the rate ends
+		// there. Without this the rate reads "12 Gbps  ZG:14".
 		rate := strings.TrimSpace(m[6])
+		if loc := twoSpaces.FindStringIndex(rate); loc != nil {
+			rate = strings.TrimSpace(rate[:loc[0]])
+		}
 		phy.Negotiated = parseLinkRate(rate, rate != "")
 		phy.State = phyState(phy.Negotiated, None[bool]())
 		phys = append(phys, phy)

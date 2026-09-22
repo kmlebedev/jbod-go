@@ -8,9 +8,9 @@ EXPANDER      SAS ADDRESS         IDENTITY           LEVEL  PHYS  SMP DEVICE
 expander-1:0  0x5000ccab05629d3f  HGST H4060-J 4013  1      2     /dev/bsg/expander-1:0
 
 Expander expander-1:0 over SMP (/dev/bsg/expander-1:0)
-ID  ROUTING      STATE    NEGOTIATED  ATTACHED            ATTACHED ID  PROTOCOLS       INV DW  DISP  SYNC  RESET
-0   subtractive  up       12 Gbps     0x500605b00b1e2f40  0            i(SSP+STP+SMP)  0       0     0     0
-1   table        unknown  -           -                   -            -               3       0     1     0
+ID  ROUTING  STATE    NEGOTIATED  ATTACHED            ATTACHED ID  PROTOCOLS       INV DW  DISP  SYNC  RESET
+0   S        up       12 Gbps     0x500605b00b1e2f40  0            i(SSP+STP+SMP)  0       0     0     0
+1   -        unknown  -           -                   -            -               3       0     1     0
 note: these are the phys of host 1, the HBA the listed enclosures are attached through; which phy carries which shelf is topology and is not reported here
 note: SMP read the error log of 2 phy(s); no counter was cleared
 

@@ -23,10 +23,13 @@ const smpGeneralOut = `Report general response:
   enclosure logical identifier (hex): 5000ccab05629d3f
 `
 
-const smpDiscoverOut = `  phy   0:S:attached:[500605b00b1e2f40:00  i(SSP+STP+SMP)]  12 Gbps
+// The zone group on the first line is not decoration: a real WD expander
+// appends it after the rate, and reading the whole tail as the rate made it
+// "12 Gbps  ZG:14".
+const smpDiscoverOut = `  phy   0:S:attached:[500605b00b1e2f40:00  i(SSP+STP+SMP)]  12 Gbps  ZG:14
   phy   1:T:attached:[5000cca25de1c2ed:00  t(SSP)]  6 Gbps
   phy   2:D:attached:[0000000000000000:00]
-  phy   3:D:attached:[5000cca25de1c2f1:00  t(SATA)]  phy enabled; unknown rate
+  phy   3:U:attached:[5000cca25de1c2f1:00  t(SATA)]  phy enabled; unknown rate
 `
 
 // errorLog is the answer for one phy, with the counters scaled by the phy
@@ -134,8 +137,13 @@ func TestSMPErrorCounters(t *testing.T) {
 		t.Fatalf("got %d phys: %+v", len(expander.Phys), expander.Phys)
 	}
 	first := expander.Phys[0]
-	if routing, _ := first.Routing.Get(); routing != "subtractive" {
+	// The routing letter is passed through as smp_discover prints it; see
+	// parseSMPDiscoverList.
+	if routing, _ := first.Routing.Get(); routing != "S" {
 		t.Errorf("phy 0 routing %v", first.Routing)
+	}
+	if text, _ := first.Negotiated.Text.Get(); text != "12 Gbps" {
+		t.Errorf("phy 0 rate %q, want the rate without the zone group", text)
 	}
 	if address, _ := first.AttachedAddress.Get(); address != "0x500605b00b1e2f40" {
 		t.Errorf("phy 0 attached %v", first.AttachedAddress)
@@ -312,16 +320,18 @@ func TestSMPParsers(t *testing.T) {
 	if len(phys) != 4 {
 		t.Fatalf("got %d phys", len(phys))
 	}
-	for i, want := range []string{"subtractive", "table", "direct", "direct"} {
+	for i, want := range []string{"S", "T", "D", "U"} {
 		if routing, _ := phys[i].Routing.Get(); routing != want {
 			t.Errorf("phy %d routing %v, want %s", i, phys[i].Routing, want)
 		}
 	}
-	// A routing letter this package does not know keeps its raw form
-	// rather than being folded into one of the three it does.
-	odd := parseSMPDiscoverList("  phy   0:V:attached:[5000cca25de1c2ed:00  t(SSP)]  12 Gbps\n", "source")
-	if routing, _ := odd[0].Routing.Get(); routing != "V" {
-		t.Errorf("unknown routing %v, want the raw letter", odd[0].Routing)
+	// The rate is the first field after the bracket; a zone group or
+	// anything else after it belongs to another column.
+	if text, _ := phys[0].Negotiated.Text.Get(); text != "12 Gbps" {
+		t.Errorf("phy 0 rate %q", text)
+	}
+	if gbps, _ := phys[0].Negotiated.Gbps.Get(); gbps != 12 {
+		t.Errorf("phy 0 gbps %v", phys[0].Negotiated.Gbps)
 	}
 	// A duplicate phy line must not produce a second phy: the error log
 	// would then be read twice and reported twice for one link.
@@ -411,5 +421,50 @@ func TestToolNotFoundReadsTheSameEveryTime(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "smp-utils") {
 		t.Errorf("the message does not name the package to install: %s", err)
+	}
+}
+
+// TestSMPDiscoverDescribesFewerPhys is the finding of the second hardware
+// run: "smp_discover --multiple" described 24 of an expander's 49 phys and
+// said nothing about the rest, so those 25 were never asked for their error
+// log — the half of this feature that does not need discover at all.
+//
+// The phy count the expander itself reports is the authority, and every phy
+// in it gets a row and a read.
+func TestSMPDiscoverDescribesFewerPhys(t *testing.T) {
+	t.Parallel()
+	report := smpReport(t, &smpRunner{discover: func() (string, error) {
+		return "  phy   0:S:attached:[500605b00b1e2f40:00  i(SSP+STP+SMP)]  12 Gbps\n" +
+			"  phy   3:U:attached:[5000cca25de1c2f1:00  t(SATA)]  6 Gbps\n", nil
+	}})
+	expander := report.Expanders[0]
+	if len(expander.Phys) != 4 {
+		t.Fatalf("got %d phys, want the 4 the expander reported: %+v", len(expander.Phys), expander.Phys)
+	}
+	for i, phy := range expander.Phys {
+		if phy.Identifier != int64(i) {
+			t.Fatalf("phy %d is numbered %d", i, phy.Identifier)
+		}
+	}
+	// The two discover did not describe carry no attached address and say
+	// why, and their counters were still read.
+	for _, i := range []int{1, 2} {
+		phy := expander.Phys[i]
+		if phy.AttachedAddress.Present() {
+			t.Errorf("phy %d got an address nobody reported: %+v", i, phy)
+		}
+		if !strings.Contains(phy.Source, "not among the ones it described") {
+			t.Errorf("phy %d does not say why it is bare: %q", i, phy.Source)
+		}
+		if n, ok := phy.Counters.InvalidDword.Get(); !ok || n != int64(i*10) {
+			t.Errorf("phy %d counters were not read: %+v", i, phy.Counters)
+		}
+	}
+	if expander.SMP.Phys != 4 || report.Collection.SMP.Phys != 4 {
+		t.Errorf("read %d phy error logs, want all 4", expander.SMP.Phys)
+	}
+	// The described ones keep what discover said about them.
+	if address, _ := expander.Phys[3].AttachedAddress.Get(); address != "0x5000cca25de1c2f1" {
+		t.Errorf("phy 3 lost its address: %+v", expander.Phys[3])
 	}
 }

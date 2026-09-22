@@ -362,10 +362,22 @@ There are two sources, and they cost very different things:
 | `/sys/class/sas_phy` | address, rate, state and the four counters of every phy | nothing: attribute reads, no external command |
 | SMP, with `--smp` | the same for expander phys, plus the address at the far end | one `smp_rep_phy_err_log` per phy, needs smp_utils |
 
-That is why SMP is a flag and not the default: a 38-phy expander is 38
+That is why SMP is a flag and not the default: a 68-phy expander is 68
 requests through one SMP processor. For a command an operator typed that is
 fine; for a scrape every fifteen seconds it is not, and the exporter does
 not use SMP at all.
+
+The phy list of an expander is built from the count the expander itself
+reports (`smp_rep_general`), with `smp_discover --multiple` laid over it.
+That is not pedantry: on a WD H4060-J discover described 24 of 49 phys, and
+treating its output as the phy list means the other 25 are never asked for
+their error log. A phy discover did not describe gets a row with its
+counters read and the reason it carries no address at the far end.
+
+The ROUTING column is the letter `smp_discover` prints for the routing
+attribute: `D` direct, `S` subtractive, `T` table. A letter that is not one
+of those is passed through as it came — on an H4060-J that is `U` for 146 of
+148 phys, and inventing a meaning for it would be a claim nobody made.
 
 The counters are only read. `smp_rep_phy_err_log` has a `--zero` option that
 clears what it prints; jbod-go never passes it — a diagnostic that destroys

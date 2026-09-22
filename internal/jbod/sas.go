@@ -356,18 +356,41 @@ func (c *Client) classNames(class string) ([]string, error) {
 // the device that owns it and the port it belongs to.
 //
 // Both are taken from the path because that is where the kernel puts the
-// relationship: /sys/class/sas_phy/phy-1:0:12 points into
-// .../host1/port-1:0/expander-1:0/phy-1:0:12. A path that cannot be
-// resolved leaves both absent rather than guessing from the name.
-func phyAncestors(path string) (parent, port Optional[string]) {
+// relationship. The shape is <device>/<class>/<name>, so a host phy
+// resolves to
+//
+//	.../host1/phy-1:0/sas_phy/phy-1:0
+//
+// and an expander phy to
+//
+//	.../port-1:0/expander-1:0/phy-1:0:12/sas_phy/phy-1:0:12
+//
+// The component next to the entry is therefore the class directory and the
+// one above it is the phy's own directory, which repeats the name; the
+// device that owns the phy is the one above those. Reading the component
+// next to the entry reported "sas_phy" as the parent of every phy on a real
+// machine, which is how this was found (ROADMAP 6, hardware run).
+//
+// A path that cannot be resolved leaves both absent rather than guessing
+// from the name.
+func phyAncestors(path, class string) (parent, port Optional[string]) {
 	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return None[string](), None[string]()
 	}
 	parts := strings.Split(filepath.ToSlash(resolved), "/")
-	if len(parts) >= 2 {
-		parent = Some(parts[len(parts)-2])
+	index := len(parts) - 2
+	for i := len(parts) - 2; i >= 0; i-- {
+		if parts[i] == class {
+			index = i - 2
+			break
+		}
 	}
+	if index >= 0 && index < len(parts) {
+		parent = Some(parts[index])
+	}
+	// The port is the nearest one above the phy, which for a phy between
+	// two expanders is the port between them and not the host's.
 	for i := len(parts) - 2; i >= 0; i-- {
 		if strings.HasPrefix(parts[i], "port-") {
 			port = Some(parts[i])
@@ -380,7 +403,7 @@ func phyAncestors(path string) (parent, port Optional[string]) {
 // readPHY fills in one phy from its class directory.
 func (c *Client) readPHY(name string, readAt time.Time) PHY {
 	dir := filepath.Join(c.classDir(classSASPHY), name)
-	parent, port := phyAncestors(dir)
+	parent, port := phyAncestors(dir, classSASPHY)
 	phy := PHY{
 		Name:               name,
 		Host:               hostOfName(name),

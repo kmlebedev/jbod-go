@@ -85,7 +85,7 @@ func links(smp bool) []jbod.SASReport {
 			Command: "smp_rep_general /dev/bsg/expander-1:0"}
 		expander.Phys = []jbod.SMPPhy{
 			{
-				Identifier: 0, Routing: jbod.Some("subtractive"), State: jbod.PHYStateUp,
+				Identifier: 0, Routing: jbod.Some("S"), State: jbod.PHYStateUp,
 				Negotiated:      jbod.LinkRate{Text: jbod.Some("12 Gbps"), Gbps: jbod.Some(12.0)},
 				AttachedAddress: jbod.Some("0x500605b00b1e2f40"), AttachedPhy: jbod.Some(int64(0)),
 				AttachedProtocols: jbod.Some("i(SSP+STP+SMP)"),
@@ -95,9 +95,14 @@ func links(smp bool) []jbod.SASReport {
 				},
 			},
 			{
-				// An unattached phy: no address, and the counters are the
-				// only thing this row can say.
-				Identifier: 1, Routing: jbod.Some("table"), State: jbod.PHYStateUnknown,
+				// A phy smp_discover did not describe: no address, no
+				// rate, and the counters are the only thing this row can
+				// say. On real hardware discover skipped half an
+				// expander's phys, and they are listed because the
+				// expander said how many it has.
+				Identifier: 1, State: jbod.PHYStateUnknown,
+				Source: "smp_discover --multiple /dev/bsg/expander-1:0: " +
+					"this phy was not among the ones it described",
 				Counters: jbod.ErrorCounters{
 					Source: "smp", InvalidDword: jbod.Some(int64(3)), RunningDisparityError: jbod.Some(int64(0)),
 					LossOfDwordSync: jbod.Some(int64(1)), PhyResetProblem: jbod.Some(int64(0)),

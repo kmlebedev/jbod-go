@@ -20,8 +20,10 @@ import (
 //	phy-2:0    a phy of another HBA, which host selection must not return
 //
 // The phys are created under a devices tree and symlinked into the class
-// directory, the way sysfs does it, because the parent and the port are
-// read from the resolved path and a flat fixture would not exercise that.
+// directory the way sysfs really does it — <device>/phy-X/sas_phy/phy-X —
+// because the parent and the port are read from the resolved path. A
+// fixture that skipped the class directory hid a bug that reported
+// "sas_phy" as the parent of every phy on real hardware.
 func links(t *testing.T) *Client {
 	t.Helper()
 	root := t.TempDir()
@@ -84,7 +86,7 @@ func links(t *testing.T) *Client {
 	}
 	mkdir(t, filepath.Join(class, "sas_phy"))
 	for _, spec := range phys {
-		dir := filepath.Join(devices, spec.path, spec.name)
+		dir := filepath.Join(devices, spec.path, spec.name, classSASPHY, spec.name)
 		mkdir(t, dir)
 		for name, value := range spec.attributes {
 			write(t, filepath.Join(dir, name), value, 0o444)
