@@ -148,7 +148,16 @@ func summarizeSMP(expanders []Expander) SMPStatus {
 			"a directly attached shelf has no expander and this is not a failure")
 		return status
 	}
-	var failures []string
+	// The reasons are grouped rather than listed per expander. A shelf
+	// with six expanders and no smp_utils produced one note that repeated
+	// the same sentence six times, which is the same mistake the slot
+	// listing made with thirty unreadable bays (ROADMAP 4).
+	type failure struct {
+		expander string
+		count    int
+	}
+	failures := map[string]*failure{}
+	var order []string
 	for _, expander := range expanders {
 		if expander.SMP.Available {
 			status.Available = true
@@ -158,12 +167,26 @@ func summarizeSMP(expanders []Expander) SMPStatus {
 			status.Phys += expander.SMP.Phys
 			continue
 		}
-		if err, ok := expander.SMP.Err.Get(); ok {
-			failures = append(failures, expander.Name+": "+err)
+		reason, ok := expander.SMP.Err.Get()
+		if !ok {
+			continue
 		}
+		if failures[reason] == nil {
+			failures[reason] = &failure{expander: expander.Name}
+			order = append(order, reason)
+		}
+		failures[reason].count++
 	}
-	if len(failures) > 0 {
-		status.Err = Some(strings.Join(failures, "; "))
+	var parts []string
+	for _, reason := range order {
+		if n := failures[reason].count; n > 1 {
+			parts = append(parts, fmt.Sprintf("%d expanders: %s", n, reason))
+			continue
+		}
+		parts = append(parts, failures[reason].expander+": "+reason)
+	}
+	if len(parts) > 0 {
+		status.Err = Some(strings.Join(parts, "; "))
 	}
 	return status
 }

@@ -336,8 +336,9 @@ phy-1:0    port-1:0  end device     0x500605b00b1e2f40  0   up        12.0 Gbit 
 phy-1:1    port-1:0  end device     0x500605b00b1e2f41  1   up        6.0 Gbit      12.0 Gbit  1274    7     31    2
 phy-1:0:0  -         edge expander  0x5000ccab05629d3f  0   disabled  Phy disabled  -          -       -     -     -
 
-Expander expander-1:0  address 0x5000ccab05629d3f  HGST H4060-J 4013  smp /dev/bsg/expander-1:0
-note: these are the phys of the HBA the named shelf is attached through; which phy carries which shelf is topology and is not reported here
+EXPANDER      SAS ADDRESS         IDENTITY           LEVEL  PHYS  SMP DEVICE
+expander-1:0  0x5000ccab05629d3f  HGST H4060-J 4013  1      -     /dev/bsg/expander-1:0
+note: these are the phys of host 1, the HBA the listed enclosures are attached through; which phy carries which shelf is topology and is not reported here
 ```
 
 The last four columns are the standard SAS link error counters: invalid
@@ -345,6 +346,14 @@ dwords, running disparity errors, losses of dword synchronisation and failed
 phy resets. The first grows on a marginal cable or connector, the third on a
 link that keeps dropping — the second row above is exactly such a link, and
 it is answering and counted as `up`.
+
+The absolute value of a counter is not a diagnosis on its own. On a real
+H4060-J nearly every 12 Gbit/s link shows on the order of 60-75 invalid
+dwords and as many disparity errors with two synchronisation losses,
+uniformly across all six expanders. That is link training noise from the
+links coming up, not six hundred bad cables. What matters is the growth: in
+Prometheus that is `rate()`, and in the CLI it is two runs and the
+difference between them.
 
 There are two sources, and they cost very different things:
 

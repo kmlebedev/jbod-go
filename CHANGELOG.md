@@ -9,6 +9,19 @@ built from a checkout.
 
 ### Changed
 
+- After the first run on real hardware (a WD H4060-J behind one HBA: 391
+  phys, six expanders, no smp_utils installed), four things in the phy
+  report were corrected. A counter that is absent now says which of the two
+  things happened — the driver publishes none, or the attribute exists and
+  the read failed, which is what an expander phy with nothing attached does.
+  The SMP note groups identical reasons instead of repeating one sentence
+  once per expander. The "not found" message reads the same whether the tool
+  lookup was cached or not, and names the package to install. The note about
+  the visibility boundary no longer says "the named shelf" when no shelf was
+  named.
+- The expanders of a host are rendered as a table, and a per-expander phy
+  table appears only for an expander that answered over SMP. Six expanders
+  used to take six one-line stanzas with a blank line before each.
 - The exposition is now built with
   [prometheus/client_golang](https://github.com/prometheus/client_golang)
   v1.24.1 instead of a hand-written text encoder. `internal/metrics` is a

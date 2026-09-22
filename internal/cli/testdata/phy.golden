@@ -4,8 +4,9 @@ phy-1:0    port-1:0  end device     0x500605b00b1e2f40  0   up        12.0 Gbit 
 phy-1:1    port-1:0  end device     0x500605b00b1e2f41  1   up        6.0 Gbit      12.0 Gbit  1274    7     31    2
 phy-1:0:0  -         edge expander  0x5000ccab05629d3f  0   disabled  Phy disabled  -          -       -     -     -
 
-Expander expander-1:0  address 0x5000ccab05629d3f  HGST H4060-J 4013  smp /dev/bsg/expander-1:0
-note: these are the phys of the HBA the named shelf is attached through; which phy carries which shelf is topology and is not reported here
+EXPANDER      SAS ADDRESS         IDENTITY           LEVEL  PHYS  SMP DEVICE
+expander-1:0  0x5000ccab05629d3f  HGST H4060-J 4013  1      2     /dev/bsg/expander-1:0
+note: these are the phys of host 1, the HBA the listed enclosures are attached through; which phy carries which shelf is topology and is not reported here
 
 Host 10  no phy reported  (enclosures 10:0:0:0)
 no SAS phy is registered for this host

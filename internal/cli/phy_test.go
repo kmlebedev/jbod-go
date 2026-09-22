@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -59,7 +60,8 @@ func links(smp bool) []jbod.SASReport {
 				Identifier: jbod.Some(int64(0)), State: jbod.PHYStateDisabled,
 				Negotiated: jbod.LinkRate{Text: jbod.Some("Phy disabled")},
 				Counters: jbod.ErrorCounters{
-					Source: "sysfs", Err: jbod.Some("this phy exposes no link error counters"),
+					Source: "sysfs", Err: jbod.Some(
+						"4 of the 4 link error counters are not exposed at all; this driver publishes none"),
 				},
 			},
 		},
@@ -110,6 +112,33 @@ func links(smp bool) []jbod.SASReport {
 	return []jbod.SASReport{host, bare}
 }
 
+// noSMPTools is the shape a real six-expander shelf produced when
+// smp_utils was not installed: the sysfs half intact, every expander
+// listed, and one grouped reason instead of six copies of it.
+func noSMPTools() []jbod.SASReport {
+	reports := links(false)
+	reason := "smp_rep_general: not found in /usr/sbin:/usr/bin:/sbin:/bin or PATH " +
+		"(install the smp-utils package)"
+	template := reports[0].Expanders[0]
+	var expanders []jbod.Expander
+	for i := range 6 {
+		expander := template
+		expander.Name = fmt.Sprintf("expander-1:%d", i)
+		expander.SASAddress = jbod.Some(fmt.Sprintf("0x5000ccab05629d%02x", 0x3d+2*i))
+		expander.SMPDevice = jbod.Some(fmt.Sprintf("/dev/bsg/expander-1:%d", i))
+		expander.NumPhys = jbod.None[int64]()
+		expander.SMP = jbod.SMPStatus{Requested: true, Err: jbod.Some(reason)}
+		expanders = append(expanders, expander)
+	}
+	reports[0].Expanders = expanders
+	reports[0].Collection.Complete = false
+	reports[0].Collection.SMP = jbod.SMPStatus{
+		Requested: true,
+		Err:       jbod.Some("6 expanders: " + reason),
+	}
+	return reports[:1]
+}
+
 // shelfLinks is the inventory of shelf() with the transport fixture behind
 // it, so the phy command has both shelves and their hosts.
 func shelfLinks(smp bool) *fake {
@@ -141,6 +170,27 @@ func TestPHYGolden(t *testing.T) {
 			}
 			golden(t, c.file, out.String())
 		})
+	}
+}
+
+// TestPHYWithoutSMPTools is the shape of the first hardware run: six
+// expanders and no smp_utils. The sysfs table must survive it, and the
+// reason must be said once.
+func TestPHYWithoutSMPTools(t *testing.T) {
+	t.Parallel()
+	inv := shelf()
+	inv.sas = noSMPTools()
+	var out bytes.Buffer
+	if err := cmdPHY(context.Background(), []string{"--smp"}, &out, inv); err != nil {
+		t.Fatal(err)
+	}
+	golden(t, "phy-no-smp-tools.golden", out.String())
+	got := out.String()
+	if strings.Count(got, "not found in") != 1 {
+		t.Errorf("the reason is repeated:\n%s", got)
+	}
+	if !strings.Contains(got, "phy-1:1") {
+		t.Errorf("the sysfs table was lost with SMP:\n%s", got)
 	}
 }
 

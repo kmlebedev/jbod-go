@@ -247,7 +247,7 @@ func TestSMPUnavailable(t *testing.T) {
 	report := smpReport(t, &smpRunner{general: func() (string, error) {
 		return "", fmt.Errorf("smp_rep_general: not found in /usr/sbin:/usr/bin:/sbin:/bin")
 	}})
-	if len(report.PHYs) != 5 {
+	if len(report.PHYs) != 6 {
 		t.Errorf("the sysfs phys were lost with SMP: %d", len(report.PHYs))
 	}
 	if report.Collection.SMP.Available || report.Collection.SMP.OK {
@@ -345,5 +345,71 @@ func TestSMPParsers(t *testing.T) {
 	empty, _ := parseSMPPhyErrorLog("Report phy error log response:\n  phy identifier: 0\n")
 	if empty.Present() {
 		t.Errorf("counters were invented from a response that carried none: %+v", empty)
+	}
+}
+
+// TestSMPFailuresAreGrouped covers what a real six-expander shelf without
+// smp_utils produced: one note that repeated the same sentence six times.
+//
+// The same reason is counted once with the number of expanders behind it,
+// and a reason that belongs to a single expander still names it.
+func TestSMPFailuresAreGrouped(t *testing.T) {
+	t.Parallel()
+	missing := "smp_rep_general: not found in /usr/sbin:/usr/bin:/sbin:/bin or PATH (install the smp-utils package)"
+	expanders := make([]Expander, 6)
+	for i := range expanders {
+		expanders[i] = Expander{
+			Name: fmt.Sprintf("expander-1:%d", i),
+			SMP:  SMPStatus{Requested: true, Err: Some(missing)},
+		}
+	}
+	status := summarizeSMP(expanders)
+	reason, ok := status.Err.Get()
+	if !ok {
+		t.Fatal("six failed expanders produced no reason")
+	}
+	if strings.Count(reason, missing) != 1 {
+		t.Errorf("the reason is repeated:\n%s", reason)
+	}
+	if !strings.HasPrefix(reason, "6 expanders: ") {
+		t.Errorf("the count is missing: %s", reason)
+	}
+	if status.Available || status.OK {
+		t.Errorf("status %+v", status)
+	}
+	// One expander failing on its own is still named, because then the
+	// name is the useful half of the sentence.
+	alone := summarizeSMP([]Expander{
+		{Name: "expander-1:0", SMP: SMPStatus{Requested: true, OK: true, Available: true, Phys: 4}},
+		{Name: "expander-1:1", SMP: SMPStatus{Requested: true, Err: Some("device or resource busy")}},
+	})
+	single, _ := alone.Err.Get()
+	if single != "expander-1:1: device or resource busy" {
+		t.Errorf("single failure: %q", single)
+	}
+	if !alone.OK || alone.Phys != 4 {
+		t.Errorf("one expander answered, so the host did: %+v", alone)
+	}
+}
+
+// TestToolNotFoundReadsTheSameEveryTime covers the other half of that note:
+// the lookup is cached, and the first miss used to be worded differently
+// from the ones after it.
+func TestToolNotFoundReadsTheSameEveryTime(t *testing.T) {
+	t.Parallel()
+	tools := newTools()
+	first, err := tools.path("smp_rep_general")
+	if err == nil {
+		t.Skipf("smp_utils is installed here (%s)", first)
+	}
+	_, again := tools.path("smp_rep_general")
+	if again == nil {
+		t.Fatal("the second lookup found what the first did not")
+	}
+	if err.Error() != again.Error() {
+		t.Errorf("cached miss reads differently:\n%s\n%s", err, again)
+	}
+	if !strings.Contains(err.Error(), "smp-utils") {
+		t.Errorf("the message does not name the package to install: %s", err)
 	}
 }

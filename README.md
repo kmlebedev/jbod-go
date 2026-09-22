@@ -329,8 +329,9 @@ phy-1:0    port-1:0  end device     0x500605b00b1e2f40  0   up        12.0 Gbit 
 phy-1:1    port-1:0  end device     0x500605b00b1e2f41  1   up        6.0 Gbit      12.0 Gbit  1274    7     31    2
 phy-1:0:0  -         edge expander  0x5000ccab05629d3f  0   disabled  Phy disabled  -          -       -     -     -
 
-Expander expander-1:0  address 0x5000ccab05629d3f  HGST H4060-J 4013  smp /dev/bsg/expander-1:0
-note: these are the phys of the HBA the named shelf is attached through; which phy carries which shelf is topology and is not reported here
+EXPANDER      SAS ADDRESS         IDENTITY           LEVEL  PHYS  SMP DEVICE
+expander-1:0  0x5000ccab05629d3f  HGST H4060-J 4013  1      -     /dev/bsg/expander-1:0
+note: these are the phys of host 1, the HBA the listed enclosures are attached through; which phy carries which shelf is topology and is not reported here
 ```
 
 Четыре последние колонки — стандартные счётчики ошибок линка SAS: невалидные
@@ -338,6 +339,13 @@ dword, ошибки running disparity, потери синхронизации d
 сбросы phy. Первая растёт на плохом кабеле или разъёме, третья — на линке,
 который падает и поднимается; вторая строка примера — это именно такой линк,
 который при этом отвечает и числится `up`.
+
+Абсолютное значение счётчика само по себе диагнозом не является. На реальной
+полке H4060-J почти все линки 12 Гбит/с показывают порядка 60-75 невалидных
+dword и столько же ошибок disparity при двух потерях синхронизации — одинаково
+на всех шести экспандерах. Это шум согласования линка при поднятии, а не
+шесть сотен плохих кабелей. Интересен не уровень, а рост: в Prometheus это
+`rate()`, в CLI — два прогона и разница между ними.
 
 Источников два, и они стоят по-разному:
 
