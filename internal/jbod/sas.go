@@ -61,13 +61,21 @@ const (
 	PHYStateFailed PHYState = "failed"
 	// PHYStateSpinupHold is a SATA phy held in spin-up hold.
 	PHYStateSpinupHold PHYState = "spin-up hold"
+	// PHYStateVacant is a phy the expander declares in its phy count and
+	// reports as not present. It is only ever reported over SMP: the
+	// transport class has no spelling for it, which is why the same phy
+	// reads as "unknown" in the sysfs table.
+	PHYStateVacant PHYState = "vacant"
 	// PHYStateUnknown is a phy the transport did not describe.
 	PHYStateUnknown PHYState = "unknown"
 )
 
 // PHYStates is every state, in the order reports render them, so a state
 // that drops to zero keeps its place.
-var PHYStates = []PHYState{PHYStateUp, PHYStateDisabled, PHYStateFailed, PHYStateSpinupHold, PHYStateUnknown}
+var PHYStates = []PHYState{
+	PHYStateUp, PHYStateDisabled, PHYStateFailed, PHYStateSpinupHold,
+	PHYStateVacant, PHYStateUnknown,
+}
 
 // LinkRate is one link rate as the transport or SMP spells it, with the
 // number pulled out of it when the spelling carries one.

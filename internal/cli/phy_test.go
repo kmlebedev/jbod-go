@@ -81,6 +81,7 @@ func links(smp bool) []jbod.SASReport {
 		},
 	}
 	if smp {
+		expander.NumPhys = jbod.Some(int64(3))
 		expander.SMP = jbod.SMPStatus{Requested: true, Available: true, OK: true, Phys: 2,
 			Command: "smp_rep_general /dev/bsg/expander-1:0"}
 		expander.Phys = []jbod.SMPPhy{
@@ -106,6 +107,18 @@ func links(smp bool) []jbod.SASReport {
 				Counters: jbod.ErrorCounters{
 					Source: "smp", InvalidDword: jbod.Some(int64(3)), RunningDisparityError: jbod.Some(int64(0)),
 					LossOfDwordSync: jbod.Some(int64(1)), PhyResetProblem: jbod.Some(int64(0)),
+				},
+			},
+			{
+				// A phy the expander declares and reports as not there.
+				// Its error log is not asked for, so every counter is a
+				// dash and the reason travels in the JSON.
+				Identifier: 2, State: jbod.PHYStateVacant,
+				Detail: jbod.Some("inaccessible (phy vacant)"),
+				Counters: jbod.ErrorCounters{
+					Source: "smp_rep_general /dev/bsg/expander-1:0",
+					Err: jbod.Some("the expander reports this phy as vacant, " +
+						"so its error log was not asked for"),
 				},
 			},
 		}
@@ -283,7 +296,7 @@ func TestPHYJSON(t *testing.T) {
 		t.Errorf("a counter that really is zero must stay zero: %+v", phys[0].Counters)
 	}
 	smp := document.Hosts[0].Expanders[0].Phys
-	if len(smp) != 2 || smp[1].Attached != nil {
+	if len(smp) != 3 || smp[1].Attached != nil {
 		t.Errorf("smp phys %+v", smp)
 	}
 }

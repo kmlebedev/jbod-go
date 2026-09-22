@@ -468,3 +468,125 @@ func TestSMPDiscoverDescribesFewerPhys(t *testing.T) {
 		t.Errorf("phy 3 lost its address: %+v", expander.Phys[3])
 	}
 }
+
+// realDiscoverOut is verbatim "smp_discover --multiple" output from a WD
+// H4060-J expander, trimmed to one of each shape it prints.
+//
+// It is here rather than paraphrased because all three shapes were found
+// by running the tool, not by reading its source, and the two this parser
+// originally missed cost 25 of that expander's 49 phys (ROADMAP 6).
+const realDiscoverOut = `  phy   0: inaccessible (phy vacant)
+  phy   1: inaccessible (phy vacant)
+  phy  24:U:attached:[5000ccab05629d3f:60 exp i(SMP) t(SMP)]  12 Gbps
+  phy  44:U:attached:[0000000000000000:00]
+  phy  47:U:disabled
+  phy  48:D:attached:[5000ccab05629d3c:48  V i(SSP) t(SSP)]  12 Gbps
+`
+
+// TestSMPDiscoverShapes pins every line shape the tool actually printed.
+func TestSMPDiscoverShapes(t *testing.T) {
+	t.Parallel()
+	phys := parseSMPDiscoverList(realDiscoverOut, "source")
+	if len(phys) != 6 {
+		t.Fatalf("got %d phys, want one per line: %+v", len(phys), phys)
+	}
+	byID := map[int64]SMPPhy{}
+	for _, phy := range phys {
+		byID[phy.Identifier] = phy
+	}
+	// A vacant phy is the expander saying the phy is not there. It has no
+	// routing letter, no far end and nothing to ask for.
+	vacant := byID[0]
+	if vacant.State != PHYStateVacant {
+		t.Errorf("phy 0 state %s, want vacant", vacant.State)
+	}
+	if vacant.Routing.Present() || vacant.AttachedAddress.Present() {
+		t.Errorf("phy 0 invented fields: %+v", vacant)
+	}
+	if detail, _ := vacant.Detail.Get(); detail != "inaccessible (phy vacant)" {
+		t.Errorf("phy 0 detail %q", detail)
+	}
+	// A disabled phy carries a routing letter and no far end.
+	off := byID[47]
+	if off.State != PHYStateDisabled {
+		t.Errorf("phy 47 state %s, want disabled", off.State)
+	}
+	if routing, _ := off.Routing.Get(); routing != "U" {
+		t.Errorf("phy 47 routing %v", off.Routing)
+	}
+	if detail, _ := off.Detail.Get(); detail != "disabled" {
+		t.Errorf("phy 47 detail %q", detail)
+	}
+	// An expander-to-expander link: one space between the attached phy
+	// identifier and the protocols, which is not the two the other shape
+	// uses.
+	link := byID[24]
+	if address, _ := link.AttachedAddress.Get(); address != "0x5000ccab05629d3f" {
+		t.Errorf("phy 24 attached %v", link.AttachedAddress)
+	}
+	if n, _ := link.AttachedPhy.Get(); n != 60 {
+		t.Errorf("phy 24 attached id %v", link.AttachedPhy)
+	}
+	if protocols, _ := link.AttachedProtocols.Get(); protocols != "exp i(SMP) t(SMP)" {
+		t.Errorf("phy 24 protocols %q", protocols)
+	}
+	if text, _ := link.Negotiated.Text.Get(); text != "12 Gbps" {
+		t.Errorf("phy 24 rate %q", text)
+	}
+	if link.State != PHYStateUp {
+		t.Errorf("phy 24 state %s", link.State)
+	}
+	// The null address is not an identity, and the phy identifier next to
+	// it is not one either.
+	if byID[44].AttachedAddress.Present() || byID[44].AttachedPhy.Present() {
+		t.Errorf("phy 44 published the null address: %+v", byID[44])
+	}
+	// Two spaces before the protocols, and a virtual phy behind it.
+	virtual := byID[48]
+	if routing, _ := virtual.Routing.Get(); routing != "D" {
+		t.Errorf("phy 48 routing %v", virtual.Routing)
+	}
+	if protocols, _ := virtual.AttachedProtocols.Get(); protocols != "V i(SSP) t(SSP)" {
+		t.Errorf("phy 48 protocols %q", protocols)
+	}
+}
+
+// TestSMPVacantPhysAreNotAsked covers the cost side of the same finding:
+// the expander said the phy is not there, so its error log is not asked
+// for. On one real expander that is 24 SMP requests per pass saved, and
+// the answer they would return is one this report already has.
+func TestSMPVacantPhysAreNotAsked(t *testing.T) {
+	t.Parallel()
+	runner := &smpRunner{discover: func() (string, error) { return realDiscoverOut, nil }}
+	report := smpReport(t, runner)
+	expander := report.Expanders[0]
+	// smp_rep_general reports four phys; discover described six, four of
+	// them numbered beyond that count. The list is the union: phys 2 and 3
+	// the count implies and discover skipped, plus 24, 44, 47 and 48 it
+	// described. Neither half is dropped to fit the other.
+	if len(expander.Phys) != 8 {
+		t.Fatalf("got %d phys: %+v", len(expander.Phys), expander.Phys)
+	}
+	for _, phy := range expander.Phys {
+		asked := runner.ran(fmt.Sprintf("--phy=%d ", phy.Identifier))
+		if phy.State == PHYStateVacant {
+			if asked {
+				t.Errorf("phy %d is vacant and was asked anyway: %v", phy.Identifier, runner.commands)
+			}
+			if phy.Counters.Present() {
+				t.Errorf("phy %d reports counters nobody read: %+v", phy.Identifier, phy.Counters)
+			}
+			if reason, _ := phy.Counters.Err.Get(); !strings.Contains(reason, "vacant") {
+				t.Errorf("phy %d gives no reason: %q", phy.Identifier, reason)
+			}
+			continue
+		}
+		if !asked {
+			t.Errorf("phy %d was not asked for its error log: %v", phy.Identifier, runner.commands)
+		}
+	}
+	// Six phys are not vacant, and every one of them answered.
+	if expander.SMP.Phys != 6 {
+		t.Errorf("read %d error logs, want 6", expander.SMP.Phys)
+	}
+}

@@ -9,6 +9,15 @@ built from a checkout.
 
 ### Changed
 
+- The one-line output of `smp_discover --multiple` is parsed in layers —
+  phy number, then the routing letter if there is one, then the attached
+  device if there is one, then whatever words the expander used instead.
+  It prints three shapes, not one: "inaccessible (phy vacant)",
+  "<letter>:disabled" and the attached form, and only the third was
+  recognised. A phy the expander reports as vacant is now a state of its
+  own, and its error log is not asked for: the expander already answered,
+  and on one real expander that is 24 requests per pass that would each
+  return an error whose reason is known.
 - After the second run on real hardware, this time with smp_utils
   installed, four more things were corrected. The phy list of an expander is
   built from the count the expander reports rather than from what

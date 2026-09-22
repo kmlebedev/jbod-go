@@ -89,6 +89,11 @@ type SMPPhy struct {
 	// AttachedProtocols is what the far end announced, as smp_discover
 	// prints it ("t(SSP)", "i(SSP+STP+SMP)").
 	AttachedProtocols Optional[string] `json:"attached_protocols"`
+	// Detail is what the expander said about a phy with no far end, in its
+	// own words: "inaccessible (phy vacant)", "disabled". State is the
+	// verdict; this is the sentence it was read from, kept because a
+	// spelling this package cannot classify must not vanish with it.
+	Detail Optional[string] `json:"detail"`
 	// Counters are the expander's own error counters for this phy.
 	Counters ErrorCounters `json:"error_counters"`
 	// Source is the command this phy was described by.
@@ -121,7 +126,18 @@ func (c *Client) addSMP(ctx context.Context, reports []SASReport, p *problems) {
 			continue
 		}
 		for k := range expander.Phys {
-			jobs = append(jobs, job{expander: expander, phy: &expander.Phys[k]})
+			phy := &expander.Phys[k]
+			if phy.State == PHYStateVacant {
+				// The expander already answered about this phy: it is not
+				// there. Asking it for an error log costs one SMP request
+				// per vacant phy — 24 of 49 on one real expander — and
+				// buys an error whose reason is already known.
+				phy.Counters.Source = expander.SMP.Command
+				phy.Counters.Err = Some("the expander reports this phy as vacant, " +
+					"so its error log was not asked for")
+				continue
+			}
+			jobs = append(jobs, job{expander: expander, phy: phy})
 		}
 	}
 	forEach(ctx, c.concurrency, len(jobs), func(i int) {

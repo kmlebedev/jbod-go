@@ -379,6 +379,13 @@ attribute: `D` direct, `S` subtractive, `T` table. A letter that is not one
 of those is passed through as it came — on an H4060-J that is `U` for 146 of
 148 phys, and inventing a meaning for it would be a claim nobody made.
 
+The `vacant` state only ever comes from SMP: the expander declares the phy
+in its own count and reports that it is not there. Such a phy is not asked
+for its error log — the expander has already answered, and the request would
+cost one SMP per phy (24 of 49 on an H4060-J) to return an error whose reason
+is known in advance. The sysfs transport has no spelling for `vacant`, so the
+same phy reads as `unknown` in the table above.
+
 The counters are only read. `smp_rep_phy_err_log` has a `--zero` option that
 clears what it prints; jbod-go never passes it — a diagnostic that destroys
 the history of a suspect cable is worse than no diagnostic.
