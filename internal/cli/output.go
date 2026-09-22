@@ -625,19 +625,53 @@ func printPHYTable(out io.Writer, phys []jbod.PHY) error {
 	return w.Flush()
 }
 
-// printExpanders renders the expanders of one host and, when SMP answered,
-// the phys they reported.
+// printExpanders renders the expanders of one host as a table, and then the
+// phys of each expander that answered over SMP.
+//
+// The table exists because the common case is that SMP was not asked for or
+// is not installed: a shelf with six expanders then produced six one-line
+// stanzas with a blank line between them, which is six times the space for
+// no more information.
 func printExpanders(out io.Writer, expanders []jbod.Expander) error {
+	if len(expanders) == 0 {
+		return nil
+	}
+	fmt.Fprintln(out)
+	w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "EXPANDER\tSAS ADDRESS\tIDENTITY\tLEVEL\tPHYS\tSMP DEVICE")
 	for _, expander := range expanders {
-		fmt.Fprintf(out, "\nExpander %s  address %s  %s  %s\n",
-			expander.Name, expander.SASAddress.Or(noAttribute),
-			expanderIdentity(expander), smpTarget(expander))
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+			expander.Name, expander.SASAddress.Or(noAttribute), expanderIdentity(expander),
+			optionalCell(expander.Level), optionalCell(expander.NumPhys),
+			expander.SMPDevice.Or(noAttribute))
+	}
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	return printSMPPhys(out, expanders)
+}
+
+// printSMPPhys renders the phys of every expander that answered over SMP.
+//
+// A phy the expander reports as vacant is counted in a note and not given a
+// row. It is not an empty bay, which is a place a disk can go and therefore
+// belongs in a listing: it is a phy the expander declares in its count and
+// says is not there, and its row can only ever be dashes. On a real
+// H4060-J that was 192 of 370 rows (ROADMAP 6, hardware run).
+func printSMPPhys(out io.Writer, expanders []jbod.Expander) error {
+	for _, expander := range expanders {
 		if len(expander.Phys) == 0 {
 			continue
 		}
+		fmt.Fprintf(out, "\nExpander %s over SMP (%s)\n", expander.Name, expander.SMPDevice.Or(noAttribute))
 		w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
 		fmt.Fprintln(w, "ID\tROUTING\tSTATE\tNEGOTIATED\tATTACHED\tATTACHED ID\tPROTOCOLS\tINV DW\tDISP\tSYNC\tRESET")
+		var vacant []int64
 		for _, phy := range expander.Phys {
+			if phy.State == jbod.PHYStateVacant {
+				vacant = append(vacant, phy.Identifier)
+				continue
+			}
 			attachedID := noAttribute
 			if n, ok := phy.AttachedPhy.Get(); ok {
 				attachedID = strconv.FormatInt(n, 10)
@@ -652,8 +686,52 @@ func printExpanders(out io.Writer, expanders []jbod.Expander) error {
 		if err := w.Flush(); err != nil {
 			return err
 		}
+		if len(vacant) > 0 {
+			fmt.Fprintf(out, "note: %d of %d phys are vacant and not listed (%s): the expander declares "+
+				"them in its phy count and reports that they are not there\n",
+				len(vacant), len(expander.Phys), numberRanges(vacant))
+		}
 	}
 	return nil
+}
+
+// numberRanges renders a sorted list of phy numbers as "0-23, 47".
+//
+// The numbers are the expander's own, and on a 68-phy expander the vacant
+// ones come in runs; printing 37 of them one by one would be the noise the
+// note exists to remove.
+func numberRanges(numbers []int64) string {
+	if len(numbers) == 0 {
+		return ""
+	}
+	var parts []string
+	start, previous := numbers[0], numbers[0]
+	flush := func() {
+		if start == previous {
+			parts = append(parts, strconv.FormatInt(start, 10))
+			return
+		}
+		parts = append(parts, strconv.FormatInt(start, 10)+"-"+strconv.FormatInt(previous, 10))
+	}
+	for _, n := range numbers[1:] {
+		if n == previous+1 {
+			previous = n
+			continue
+		}
+		flush()
+		start, previous = n, n
+	}
+	flush()
+	return strings.Join(parts, ", ")
+}
+
+// optionalCell renders an integer the hardware may not report.
+func optionalCell(v jbod.Optional[int64]) string {
+	n, ok := v.Get()
+	if !ok {
+		return noAttribute
+	}
+	return strconv.FormatInt(n, 10)
 }
 
 // expanderIdentity renders what the expander says it is.
@@ -668,15 +746,6 @@ func expanderIdentity(expander jbod.Expander) string {
 		return "identity " + noAttribute
 	}
 	return strings.Join(parts, " ")
-}
-
-// smpTarget says how the expander can be reached over SMP, which is also
-// the answer to why it was not.
-func smpTarget(expander jbod.Expander) string {
-	if device, ok := expander.SMPDevice.Get(); ok {
-		return "smp " + device
-	}
-	return "smp " + noAttribute
 }
 
 // phyNotes lists what the report did not get, and the one boundary a table
@@ -694,8 +763,9 @@ func phyNotes(report jbod.SASReport) []string {
 		// The table is the links of the HBA, not the links of the shelf.
 		// Saying so is the difference between a report and a guess: tying
 		// a phy to an enclosure is topology (ROADMAP 6).
-		notes = append(notes, "these are the phys of the HBA the named shelf is attached through; "+
-			"which phy carries which shelf is topology and is not reported here")
+		notes = append(notes, fmt.Sprintf(
+			"these are the phys of host %d, the HBA the listed enclosures are attached through; "+
+				"which phy carries which shelf is topology and is not reported here", report.Host))
 	}
 	if report.Collection.SMP.Requested {
 		if err, ok := report.Collection.SMP.Err.Get(); ok {

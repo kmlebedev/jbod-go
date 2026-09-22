@@ -3,8 +3,10 @@
 package jbod
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -87,6 +89,11 @@ type SMPPhy struct {
 	// AttachedProtocols is what the far end announced, as smp_discover
 	// prints it ("t(SSP)", "i(SSP+STP+SMP)").
 	AttachedProtocols Optional[string] `json:"attached_protocols"`
+	// Detail is what the expander said about a phy with no far end, in its
+	// own words: "inaccessible (phy vacant)", "disabled". State is the
+	// verdict; this is the sentence it was read from, kept because a
+	// spelling this package cannot classify must not vanish with it.
+	Detail Optional[string] `json:"detail"`
 	// Counters are the expander's own error counters for this phy.
 	Counters ErrorCounters `json:"error_counters"`
 	// Source is the command this phy was described by.
@@ -119,7 +126,18 @@ func (c *Client) addSMP(ctx context.Context, reports []SASReport, p *problems) {
 			continue
 		}
 		for k := range expander.Phys {
-			jobs = append(jobs, job{expander: expander, phy: &expander.Phys[k]})
+			phy := &expander.Phys[k]
+			if phy.State == PHYStateVacant {
+				// The expander already answered about this phy: it is not
+				// there. Asking it for an error log costs one SMP request
+				// per vacant phy — 24 of 49 on one real expander — and
+				// buys an error whose reason is already known.
+				phy.Counters.Source = expander.SMP.Command
+				phy.Counters.Err = Some("the expander reports this phy as vacant, " +
+					"so its error log was not asked for")
+				continue
+			}
+			jobs = append(jobs, job{expander: expander, phy: phy})
 		}
 	}
 	forEach(ctx, c.concurrency, len(jobs), func(i int) {
@@ -148,7 +166,16 @@ func summarizeSMP(expanders []Expander) SMPStatus {
 			"a directly attached shelf has no expander and this is not a failure")
 		return status
 	}
-	var failures []string
+	// The reasons are grouped rather than listed per expander. A shelf
+	// with six expanders and no smp_utils produced one note that repeated
+	// the same sentence six times, which is the same mistake the slot
+	// listing made with thirty unreadable bays (ROADMAP 4).
+	type failure struct {
+		expander string
+		count    int
+	}
+	failures := map[string]*failure{}
+	var order []string
 	for _, expander := range expanders {
 		if expander.SMP.Available {
 			status.Available = true
@@ -158,12 +185,26 @@ func summarizeSMP(expanders []Expander) SMPStatus {
 			status.Phys += expander.SMP.Phys
 			continue
 		}
-		if err, ok := expander.SMP.Err.Get(); ok {
-			failures = append(failures, expander.Name+": "+err)
+		reason, ok := expander.SMP.Err.Get()
+		if !ok {
+			continue
 		}
+		if failures[reason] == nil {
+			failures[reason] = &failure{expander: expander.Name}
+			order = append(order, reason)
+		}
+		failures[reason].count++
 	}
-	if len(failures) > 0 {
-		status.Err = Some(strings.Join(failures, "; "))
+	var parts []string
+	for _, reason := range order {
+		if n := failures[reason].count; n > 1 {
+			parts = append(parts, fmt.Sprintf("%d expanders: %s", n, reason))
+			continue
+		}
+		parts = append(parts, failures[reason].expander+": "+reason)
+	}
+	if len(parts) > 0 {
+		status.Err = Some(strings.Join(parts, "; "))
 	}
 	return status
 }
@@ -198,31 +239,60 @@ func (c *Client) smpExpander(ctx context.Context, expander *Expander, p *problem
 		// enumerated from the count it gave, because the error counters
 		// are the other half of this feature and do not need discover.
 		p.note(CollectorSAS, fmt.Errorf("%s: %w", discover, err))
-		expander.Phys = smpPhyPlaceholders(expander.NumPhys, discover+": "+err.Error())
+		expander.Phys = mergeSMPPhys(expander.NumPhys, nil, discover+": "+err.Error())
 		return
 	}
-	expander.Phys = parseSMPDiscoverList(list, discover)
-	if len(expander.Phys) == 0 {
+	described := parseSMPDiscoverList(list, discover)
+	reason := discover + ": this phy was not among the ones it described"
+	if len(described) == 0 {
 		// smp_discover answered in a shape this parser does not know. The
 		// phy list is rebuilt from the reported count rather than left
 		// empty, so an unparsed line costs the attached addresses and not
 		// the error counters as well.
-		expander.Phys = smpPhyPlaceholders(expander.NumPhys,
-			discover+": the output carried no phy this parser recognises")
+		reason = discover + ": the output carried no phy this parser recognises"
 	}
+	expander.Phys = mergeSMPPhys(expander.NumPhys, described, reason)
 }
 
-// smpPhyPlaceholders enumerates phys 0..n-1 with nothing known about them
-// but their number, so their error logs can still be read.
-func smpPhyPlaceholders(count Optional[int64], reason string) []SMPPhy {
+// mergeSMPPhys puts the phys smp_discover described into the list the
+// expander itself says it has.
+//
+// The phy count from smp_rep_general is the authority, and this is why: on
+// a WD H4060-J, "smp_discover --multiple" described 24 of one expander's 49
+// phys and said nothing about the other 25. Taking its list as the phy list
+// meant those 25 were never asked for their error log — the half of this
+// feature that does not depend on discover at all. They are listed instead,
+// with whatever their error log says and with the reason they carry no
+// attached address.
+//
+// A phy numbered past the reported count is kept as well: the expander
+// answered about it, and dropping an observation to fit a count is the
+// wrong way round.
+func mergeSMPPhys(count Optional[int64], described []SMPPhy, reason string) []SMPPhy {
 	n, ok := count.Get()
 	if !ok || n <= 0 || n > smpPhyLimit {
-		return nil
+		return described
 	}
-	phys := make([]SMPPhy, 0, n)
+	byID := make(map[int64]SMPPhy, len(described))
+	for _, phy := range described {
+		byID[phy.Identifier] = phy
+	}
+	phys := make([]SMPPhy, 0, max(int(n), len(described)))
 	for i := range n {
+		if phy, found := byID[i]; found {
+			phys = append(phys, phy)
+			delete(byID, i)
+			continue
+		}
 		phys = append(phys, SMPPhy{Identifier: i, State: PHYStateUnknown, Source: reason})
 	}
+	for _, phy := range described {
+		if _, beyond := byID[phy.Identifier]; beyond {
+			phys = append(phys, phy)
+			delete(byID, phy.Identifier)
+		}
+	}
+	slices.SortStableFunc(phys, func(a, b SMPPhy) int { return cmp.Compare(a.Identifier, b.Identifier) })
 	return phys
 }
 

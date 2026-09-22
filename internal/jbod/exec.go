@@ -28,6 +28,52 @@ var commands = []struct {
 	{"scsi_temperature", "sg3-utils"},
 }
 
+// optionalCommands are the tools only one capability needs, so Preflight
+// must not look for them: a machine with no expander has no use for
+// smp_utils and is not misconfigured for lacking it (ROADMAP 3).
+//
+// They are listed here for one reason: the "not found" message should name
+// the package either way. On a shelf whose SMP half is missing, "install
+// the smp-utils package" is the whole answer, and an operator should not
+// have to look it up.
+var optionalCommands = []struct {
+	Name    string
+	Package string
+}{
+	{smpReportGeneral, "smp-utils"},
+	{smpDiscover, "smp-utils"},
+	{smpPhyErrorLog, "smp-utils"},
+}
+
+// toolPackage names the package a command comes from, for the message
+// below.
+func toolPackage(name string) string {
+	for _, list := range [][]struct {
+		Name    string
+		Package string
+	}{commands, optionalCommands} {
+		for _, command := range list {
+			if command.Name == name {
+				return command.Package
+			}
+		}
+	}
+	return ""
+}
+
+// notFound is the one spelling of "this tool is not installed".
+//
+// It is a function rather than two fmt.Errorf calls because the lookup is
+// cached: the first miss and every later one used to produce differently
+// worded errors for the same condition, and a report that listed six
+// expanders showed both spellings of it.
+func notFound(name string) error {
+	if pkg := toolPackage(name); pkg != "" {
+		return fmt.Errorf("%s: not found in %s or PATH (install the %s package)", name, commandPath, pkg)
+	}
+	return fmt.Errorf("%s: not found in %s or PATH", name, commandPath)
+}
+
 // commandPath is the PATH the external tools are looked up in and run with.
 //
 // The process is normally root and started by systemd, so it must not depend
@@ -54,7 +100,7 @@ func (t *tools) path(name string) (string, error) {
 	defer t.mu.Unlock()
 	if path, ok := t.paths[name]; ok {
 		if path == "" {
-			return "", fmt.Errorf("%s: not found in %s", name, commandPath)
+			return "", notFound(name)
 		}
 		return path, nil
 	}
@@ -98,7 +144,7 @@ func lookPath(name string) (string, error) {
 	}
 	path, err := exec.LookPath(name)
 	if err != nil {
-		return "", fmt.Errorf("%s: not found in %s or PATH", name, commandPath)
+		return "", notFound(name)
 	}
 	return path, nil
 }
