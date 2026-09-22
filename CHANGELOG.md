@@ -9,6 +9,11 @@ built from a checkout.
 
 ### Changed
 
+- A phy the expander reports as vacant is counted in a note under its
+  table instead of being given a row of dashes: on a real shelf that was 192
+  of 370 rows. An empty bay is a place a disk can go and belongs in a
+  listing; a vacant phy is a number the firmware declares and calls absent.
+  The numbers are collapsed into ranges, and the phys stay in the JSON.
 - The one-line output of `smp_discover --multiple` is parsed in layers —
   phy number, then the routing letter if there is one, then the attached
   device if there is one, then whatever words the expander used instead.

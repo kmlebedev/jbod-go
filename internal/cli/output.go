@@ -652,6 +652,12 @@ func printExpanders(out io.Writer, expanders []jbod.Expander) error {
 }
 
 // printSMPPhys renders the phys of every expander that answered over SMP.
+//
+// A phy the expander reports as vacant is counted in a note and not given a
+// row. It is not an empty bay, which is a place a disk can go and therefore
+// belongs in a listing: it is a phy the expander declares in its count and
+// says is not there, and its row can only ever be dashes. On a real
+// H4060-J that was 192 of 370 rows (ROADMAP 6, hardware run).
 func printSMPPhys(out io.Writer, expanders []jbod.Expander) error {
 	for _, expander := range expanders {
 		if len(expander.Phys) == 0 {
@@ -660,7 +666,12 @@ func printSMPPhys(out io.Writer, expanders []jbod.Expander) error {
 		fmt.Fprintf(out, "\nExpander %s over SMP (%s)\n", expander.Name, expander.SMPDevice.Or(noAttribute))
 		w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
 		fmt.Fprintln(w, "ID\tROUTING\tSTATE\tNEGOTIATED\tATTACHED\tATTACHED ID\tPROTOCOLS\tINV DW\tDISP\tSYNC\tRESET")
+		var vacant []int64
 		for _, phy := range expander.Phys {
+			if phy.State == jbod.PHYStateVacant {
+				vacant = append(vacant, phy.Identifier)
+				continue
+			}
 			attachedID := noAttribute
 			if n, ok := phy.AttachedPhy.Get(); ok {
 				attachedID = strconv.FormatInt(n, 10)
@@ -675,8 +686,44 @@ func printSMPPhys(out io.Writer, expanders []jbod.Expander) error {
 		if err := w.Flush(); err != nil {
 			return err
 		}
+		if len(vacant) > 0 {
+			fmt.Fprintf(out, "note: %d of %d phys are vacant and not listed (%s): the expander declares "+
+				"them in its phy count and reports that they are not there\n",
+				len(vacant), len(expander.Phys), numberRanges(vacant))
+		}
 	}
 	return nil
+}
+
+// numberRanges renders a sorted list of phy numbers as "0-23, 47".
+//
+// The numbers are the expander's own, and on a 68-phy expander the vacant
+// ones come in runs; printing 37 of them one by one would be the noise the
+// note exists to remove.
+func numberRanges(numbers []int64) string {
+	if len(numbers) == 0 {
+		return ""
+	}
+	var parts []string
+	start, previous := numbers[0], numbers[0]
+	flush := func() {
+		switch {
+		case start == previous:
+			parts = append(parts, strconv.FormatInt(start, 10))
+		default:
+			parts = append(parts, strconv.FormatInt(start, 10)+"-"+strconv.FormatInt(previous, 10))
+		}
+	}
+	for _, n := range numbers[1:] {
+		if n == previous+1 {
+			previous = n
+			continue
+		}
+		flush()
+		start, previous = n, n
+	}
+	flush()
+	return strings.Join(parts, ", ")
 }
 
 // optionalCell renders an integer the hardware may not report.

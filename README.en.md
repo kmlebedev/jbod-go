@@ -380,7 +380,9 @@ of those is passed through as it came — on an H4060-J that is `U` for 146 of
 148 phys, and inventing a meaning for it would be a claim nobody made.
 
 The `vacant` state only ever comes from SMP: the expander declares the phy
-in its own count and reports that it is not there. Such a phy is not asked
+in its own count and reports that it is not there. Such a phy gets a note
+with the number ranges rather than a row: its row could only ever be dashes,
+and on an H4060-J that is 192 rows of 370. The JSON keeps them. Such a phy is not asked
 for its error log — the expander has already answered, and the request would
 cost one SMP per phy (24 of 49 on an H4060-J) to return an error whose reason
 is known in advance. The sysfs transport has no spelling for `vacant`, so the

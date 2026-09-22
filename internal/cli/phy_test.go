@@ -81,7 +81,7 @@ func links(smp bool) []jbod.SASReport {
 		},
 	}
 	if smp {
-		expander.NumPhys = jbod.Some(int64(3))
+		expander.NumPhys = jbod.Some(int64(4))
 		expander.SMP = jbod.SMPStatus{Requested: true, Available: true, OK: true, Phys: 2,
 			Command: "smp_rep_general /dev/bsg/expander-1:0"}
 		expander.Phys = []jbod.SMPPhy{
@@ -111,9 +111,20 @@ func links(smp bool) []jbod.SASReport {
 			},
 			{
 				// A phy the expander declares and reports as not there.
-				// Its error log is not asked for, so every counter is a
-				// dash and the reason travels in the JSON.
+				// Its error log is not asked for, and it gets a note
+				// rather than a row of dashes; the JSON keeps it.
 				Identifier: 2, State: jbod.PHYStateVacant,
+				Detail: jbod.Some("inaccessible (phy vacant)"),
+				Counters: jbod.ErrorCounters{
+					Source: "smp_rep_general /dev/bsg/expander-1:0",
+					Err: jbod.Some("the expander reports this phy as vacant, " +
+						"so its error log was not asked for"),
+				},
+			},
+			{
+				// The second half of a run, so the note has a range to
+				// print rather than two numbers.
+				Identifier: 3, State: jbod.PHYStateVacant,
 				Detail: jbod.Some("inaccessible (phy vacant)"),
 				Counters: jbod.ErrorCounters{
 					Source: "smp_rep_general /dev/bsg/expander-1:0",
@@ -295,8 +306,30 @@ func TestPHYJSON(t *testing.T) {
 	if phys[0].Counters.InvalidDword == nil || *phys[0].Counters.InvalidDword != 0 {
 		t.Errorf("a counter that really is zero must stay zero: %+v", phys[0].Counters)
 	}
+	// The vacant phys are in the document even though the table shows a
+	// note instead of their rows: the JSON is the whole model.
 	smp := document.Hosts[0].Expanders[0].Phys
-	if len(smp) != 3 || smp[1].Attached != nil {
+	if len(smp) != 4 || smp[1].Attached != nil {
 		t.Errorf("smp phys %+v", smp)
+	}
+}
+
+// TestNumberRanges covers the note the vacant phys are collapsed into.
+func TestNumberRanges(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		numbers []int64
+		want    string
+	}{
+		{nil, ""},
+		{[]int64{7}, "7"},
+		{[]int64{0, 1, 2, 3}, "0-3"},
+		{[]int64{0, 2}, "0, 2"},
+		// The two runs a real 68-phy expander produced.
+		{[]int64{21, 22, 23, 61, 62, 63}, "21-23, 61-63"},
+	} {
+		if got := numberRanges(c.numbers); got != c.want {
+			t.Errorf("%v: %q, want %q", c.numbers, got, c.want)
+		}
 	}
 }
