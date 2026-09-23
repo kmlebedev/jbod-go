@@ -352,8 +352,9 @@ func collectionNotes(status jbod.EnclosureStatus) []string {
 		}
 		word := "did not answer"
 		if page.OK {
-			// A page that was not required and was not read at all.
-			word = "was not read"
+			// A page that was not required and was not read at all, or
+			// one that answered and could not be decoded.
+			word = "was not used"
 		} else if !page.Required {
 			word = "did not answer and is not required"
 		}
@@ -382,7 +383,9 @@ func readingValue(r jbod.Reading) string {
 	return strconv.FormatFloat(v, 'f', -1, 64)
 }
 
-// threshold renders one limit of a reading.
+// threshold renders one limit of a reading. A voltage or current limit is a
+// percentage of the nominal value, not a number in the unit column, and it
+// carries its % so it cannot be read as volts.
 func threshold(r jbod.Reading, pick func(jbod.Thresholds) jbod.Optional[float64]) string {
 	if r.Thresholds == nil {
 		return noAttribute
@@ -391,7 +394,11 @@ func threshold(r jbod.Reading, pick func(jbod.Thresholds) jbod.Optional[float64]
 	if !ok {
 		return noAttribute
 	}
-	return strconv.FormatFloat(v, 'f', -1, 64)
+	text := strconv.FormatFloat(v, 'f', -1, 64)
+	if r.Thresholds.Unit == jbod.UnitPercentOfNominal {
+		text += "%"
+	}
+	return text
 }
 
 // unitSuffix is the short form of a unit, for the component listing.

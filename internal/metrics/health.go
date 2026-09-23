@@ -73,34 +73,49 @@ var (
 
 // sensorSeries is one reading kind with the two series it feeds.
 type sensorSeries struct {
-	kind      string
-	value     *prometheus.Desc
-	threshold *prometheus.Desc
+	kind  string
+	value *prometheus.Desc
+	// threshold publishes the limits of this kind, and thresholdUnit is the
+	// unit they have to be in to be published under it. A limit in any
+	// other unit gets no series: publishing a percentage under a name that
+	// ends in _volts would be a number with the wrong meaning.
+	threshold     *prometheus.Desc
+	thresholdUnit string
 }
 
 // newSensor builds the descriptors of one reading kind next to the kind
 // itself, so adding a kind is one entry rather than four edits.
-func newSensor(kind, value, threshold, help string) sensorSeries {
+func newSensor(kind, value, help, threshold, thresholdUnit, thresholdHelp string) sensorSeries {
 	return sensorSeries{
 		kind:  kind,
 		value: prometheus.NewDesc(value, help, componentLabels, nil),
-		threshold: prometheus.NewDesc(threshold,
-			"Threshold the enclosure declares for "+kind,
+		threshold: prometheus.NewDesc(threshold, thresholdHelp,
 			append(slices.Clone(componentLabels), "threshold"), nil),
+		thresholdUnit: thresholdUnit,
 	}
 }
 
 // sensorMetrics is every reading kind the enclosure can report.
+//
+// The Threshold In page states temperature limits in degrees, and voltage
+// and current limits as a percentage of the sensor's nominal value, which
+// no page reports. The names say which: comparing a voltage with its limit
+// takes the nominal, and a series that pretended to be in volts would hide
+// that.
 var sensorMetrics = []sensorSeries{
 	newSensor(jbod.ReadingTemperature,
-		"jbod_sensor_temperature_celsius", "jbod_sensor_temperature_threshold_celsius",
-		"Temperature reported by an enclosure element"),
+		"jbod_sensor_temperature_celsius", "Temperature reported by an enclosure element",
+		"jbod_sensor_temperature_threshold_celsius", jbod.UnitCelsius,
+		"Temperature limit the enclosure declares for an element"),
 	newSensor(jbod.ReadingVoltage,
-		"jbod_sensor_voltage_volts", "jbod_sensor_voltage_threshold_volts",
-		"Voltage reported by an enclosure element"),
+		"jbod_sensor_voltage_volts", "Voltage reported by an enclosure element",
+		"jbod_sensor_voltage_threshold_percent", jbod.UnitPercentOfNominal,
+		"Voltage limit the enclosure declares for an element, in percent of the nominal voltage: "+
+			"high limits above it, low limits below it"),
 	newSensor(jbod.ReadingCurrent,
-		"jbod_sensor_current_amps", "jbod_sensor_current_threshold_amps",
-		"Current reported by an enclosure element"),
+		"jbod_sensor_current_amps", "Current reported by an enclosure element",
+		"jbod_sensor_current_threshold_percent", jbod.UnitPercentOfNominal,
+		"Current limit the enclosure declares for an element, in percent above the nominal current"),
 }
 
 // thresholdSeries are the four limits, in the order they are published.
@@ -217,7 +232,7 @@ func collectSensors(s *sink, snapshot jbod.Snapshot) {
 					if v, ok := r.Value.Get(); ok {
 						s.gauge(metric.value, v, labels...)
 					}
-					if r.Thresholds == nil {
+					if r.Thresholds == nil || r.Thresholds.Unit != metric.thresholdUnit {
 						continue
 					}
 					for _, limit := range thresholdSeries {

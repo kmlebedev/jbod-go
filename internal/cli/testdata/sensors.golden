@@ -12,5 +12,5 @@ no element of this enclosure reports a reading
 note: the configuration page did not answer: sg_ses: device or resource busy
 note: the join page did not answer: sg_ses: device or resource busy
 note: the enclosure status page did not answer: sg_ses: device or resource busy
-note: the threshold in page was not read: not read: the shelf reports no sensor elements
+note: the threshold in page was not used: the shelf reports no sensor elements
 note: the enclosure status page did not answer, so the hardware verdict is unknown: sg_ses: device or resource busy

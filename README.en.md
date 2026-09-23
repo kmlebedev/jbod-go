@@ -222,7 +222,7 @@ I/O modules.
 
 One pass reads four pages: Configuration (`--page=cf`), Enclosure Status
 (`--page=es`), the join of Enclosure Status, Element Descriptor and
-Additional Element Status (`--join`), and Threshold In (`--page=th`).
+Additional Element Status (`--join`), and Threshold In (`--page=th --raw`).
 Nothing is written: reading a threshold is a read, and changing thresholds
 or cooling is 1.4.
 
@@ -286,6 +286,23 @@ ID   NAME        TYPE                READING      VALUE  UNIT     STATUS       H
 
 The thresholds are the enclosure's own numbers from the Threshold In page,
 not a constant in an alerting rule: the next shelf declares different ones.
+A temperature limit is in degrees. The page gives voltage and current limits
+as a percentage of the sensor's nominal value — high limits above it, low
+limits below it — and the nominal value is on no page, so the table prints
+such a limit with a `%`.
+
+The page is read raw (`--raw`) and decoded against the Configuration page,
+not from sg_ses's text. The text puts the limits on the lines under an
+"Element N descriptor:" header, laid out differently between versions, and
+from sg3-utils 1.48 sg_ses skips the element types that carry no thresholds
+without stepping over their descriptors: on any shelf that lists its bays
+before its sensors, the limits it prints for a sensor are bytes of another
+element. The raw page is the same in every version: the generation code and
+four bytes for every element of every type. A page that does not carry as
+many descriptors as the configuration declares, or carries another
+generation code, is not decoded at all — an error with both numbers, a note
+in the output and `jbod_scrape_errors_total`. A field of 00h means "not
+supported" in SES and stays `-`.
 A sensor that declares a reading and reported no value keeps its row with a
 `-`: a dropped row is indistinguishable from a sensor that never existed,
 and a zero is a lie. In JSON every reading carries its value, unit, source,
@@ -510,7 +527,9 @@ Added in 1.2:
 | jbod_sensor_temperature_celsius | gauge | enclosure, enclosure_id, component, component_id, type | temperature of an enclosure element |
 | jbod_sensor_voltage_volts | gauge | the same | voltage |
 | jbod_sensor_current_amps | gauge | the same | current |
-| jbod_sensor_*_threshold_* | gauge | the same plus threshold | the enclosure's own limit: high_critical, high_warning, low_warning, low_critical |
+| jbod_sensor_temperature_threshold_celsius | gauge | the same plus threshold | the enclosure's temperature limit: high_critical, high_warning, low_warning, low_critical |
+| jbod_sensor_voltage_threshold_percent | gauge | the same plus threshold | voltage limit in percent of nominal: high_* above it, low_* below it |
+| jbod_sensor_current_threshold_percent | gauge | the same plus threshold | current limit in percent above nominal: high_critical and high_warning only |
 | jbod_slot_sas_address_info | gauge | enclosure, enclosure_id, slot, component_id, sas_address, device, block_device | the slot → SAS address → disk mapping, always 1 |
 
 Added in 1.3:

@@ -178,6 +178,7 @@ func statuses() []jbod.EnclosureStatus {
 					Thresholds: &jbod.Thresholds{
 						HighCritical: jbod.Some(65.0), HighWarning: jbod.Some(60.0),
 						LowWarning: jbod.Some(0.0), LowCritical: jbod.Some(-19.0),
+						Unit: jbod.UnitCelsius,
 					},
 				}},
 			},
@@ -199,7 +200,7 @@ func statuses() []jbod.EnclosureStatus {
 				{Name: "configuration", Command: "sg_ses --page=cf /dev/sg0", OK: true, Required: true, Generation: jbod.Some("0x1")},
 				{Name: "join", Command: "sg_ses --join /dev/sg0", OK: true, Required: true},
 				{Name: "enclosure status", Command: "sg_ses --page=es /dev/sg0", OK: true, Required: true, Generation: jbod.Some("0x1")},
-				{Name: "threshold in", Command: "sg_ses --page=th /dev/sg0", OK: false, Required: false,
+				{Name: "threshold in", Command: "sg_ses --page=th --raw /dev/sg0", OK: false, Required: false,
 					Err: jbod.Some("sg_ses: Threshold In dpage not supported")},
 			},
 		},
@@ -223,8 +224,8 @@ func statuses() []jbod.EnclosureStatus {
 					Err: jbod.Some("sg_ses: device or resource busy")},
 				{Name: "enclosure status", Command: "sg_ses --page=es /dev/sg9", OK: false, Required: true,
 					Err: jbod.Some("sg_ses: device or resource busy")},
-				{Name: "threshold in", Command: "sg_ses --page=th /dev/sg9", OK: true, Required: false,
-					Err: jbod.Some("not read: the shelf reports no sensor elements")},
+				{Name: "threshold in", Command: "sg_ses --page=th --raw /dev/sg9", OK: true, Required: false,
+					Err: jbod.Some("the shelf reports no sensor elements")},
 			},
 		},
 	}

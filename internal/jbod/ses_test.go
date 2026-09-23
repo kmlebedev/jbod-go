@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -81,6 +83,10 @@ func inspected(t *testing.T, pages *shelfPages) *Client {
 			case "--join":
 				return pages.join, nil
 			case "--page=th":
+				// The page is only ever decoded from its raw bytes.
+				if !slices.Contains(args, "--raw") {
+					return "", fmt.Errorf("the threshold page was read without --raw: %v", args)
+				}
 				return pages.thresholds, nil
 			case "-j":
 				// The fan collector, which is unchanged.
@@ -518,5 +524,67 @@ func TestInspectUnreadableStatusPageIsNotHealthy(t *testing.T) {
 	}
 	if got := status.Level(); got != HealthUnknown {
 		t.Errorf("headline = %q, want unknown for a shelf whose status page did not answer", got)
+	}
+}
+
+// A threshold page that answered and could not be decoded is a failure of
+// this collection, not of the shelf: the sensors keep their readings, get
+// no limits, the reason travels with the page and the failure is counted.
+// The output here is what sg_ses prints without --raw, which is the thing a
+// decoder that trusted the text would have had to read.
+func TestInspectThresholdPageUndecoded(t *testing.T) {
+	t.Parallel()
+	pages := defaultPages()
+	pages.thresholds = `Threshold In diagnostic page:
+  INVOP=0
+  generation code: 0x1
+  Threshold status descriptor list
+    Element type: Temperature sensor, subenclosure id: 0 [ti=3]
+      Overall descriptor:
+        high critical=100, high warning=95
+        low warning=0, low critical=-19 (in Celsius)
+`
+	snapshot, err := inspected(t, pages).Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Errors[CollectorComponents] == 0 {
+		t.Errorf("an undecoded page was not counted: %v", snapshot.Errors)
+	}
+	status := snapshot.Status[0]
+	sensor, ok := componentsByIndex(status)["3,0"].Reading(ReadingTemperature)
+	if !ok || sensor.Value.Or(0) != 35 {
+		t.Fatalf("the sensor lost its reading: %+v", sensor)
+	}
+	if sensor.Thresholds != nil {
+		t.Errorf("limits were attached from a page that was not decoded: %+v", sensor.Thresholds)
+	}
+	page := status.Collection.Pages[3]
+	if !page.OK || !strings.Contains(page.Err.Or(""), "was not decoded") {
+		t.Errorf("threshold page status %+v, want answered with the reason it was not used", page)
+	}
+	// The page is optional, so the collection is still complete.
+	if !status.Collection.Complete {
+		t.Errorf("an optional page made the collection incomplete: %+v", status.Collection)
+	}
+}
+
+// The threshold page takes part in the generation check with the code in
+// its raw bytes: a configuration that changed between the pages of one pass
+// is reported, and its limits are not attached.
+func TestInspectThresholdPageGeneration(t *testing.T) {
+	t.Parallel()
+	pages := defaultPages()
+	pages.thresholds = "00 00 00 02" + strings.TrimPrefix(thresholdPage, "00 00 00 01")
+	status := inspectOnly(t, inspected(t, pages))
+	if !status.Collection.GenerationChanged || status.Collection.Complete {
+		t.Errorf("a threshold page of another generation went unnoticed: %+v", status.Collection)
+	}
+	if got := status.Collection.Pages[3].Generation.Or(""); got != "0x2" {
+		t.Errorf("threshold page generation %q, want 0x2", got)
+	}
+	sensor, _ := componentsByIndex(status)["3,0"].Reading(ReadingTemperature)
+	if sensor.Thresholds != nil {
+		t.Errorf("limits of another configuration were attached: %+v", sensor.Thresholds)
 	}
 }

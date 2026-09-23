@@ -173,6 +173,7 @@ func shelfStatus() []jbod.EnclosureStatus {
 					Thresholds: &jbod.Thresholds{
 						HighCritical: jbod.Some(65.0), HighWarning: jbod.Some(60.0),
 						LowWarning: jbod.Some(0.0), LowCritical: jbod.Some(-19.0),
+						Unit: jbod.UnitCelsius,
 					},
 				}},
 			},
@@ -193,6 +194,13 @@ func shelfStatus() []jbod.EnclosureStatus {
 				Readings: []jbod.Reading{{
 					Kind: jbod.ReadingVoltage, Unit: jbod.UnitVolts, Value: jbod.Some(12.01),
 					Source: "sg_ses --join", ReadAt: readAt,
+					// The page states voltage limits as an offset from
+					// the nominal voltage, not in volts.
+					Thresholds: &jbod.Thresholds{
+						HighCritical: jbod.Some(5.0), HighWarning: jbod.Some(3.0),
+						LowWarning: jbod.Some(3.0), LowCritical: jbod.Some(5.0),
+						Unit: jbod.UnitPercentOfNominal,
+					},
 				}},
 			},
 		},
