@@ -161,6 +161,11 @@ type ErrorCounters struct {
 	LossOfDwordSync Optional[int64] `json:"loss_of_dword_sync_count"`
 	// PhyResetProblem counts failed phy resets.
 	PhyResetProblem Optional[int64] `json:"phy_reset_problem_count"`
+	// Failed is how many of the counters exist and failed to read, as
+	// opposed to not being exposed at all; Err says why in words. It is
+	// what tells an expander that declined to describe a phy from a driver
+	// that publishes no counters (see PHY.Unanswered).
+	Failed int `json:"failed,omitempty"`
 	// Err is why the counters are absent, when the source failed.
 	Err Optional[string] `json:"error"`
 }
@@ -441,6 +446,30 @@ func (c *Client) readPHY(name string, readAt time.Time) PHY {
 	return phy
 }
 
+// Unanswered reports a phy of an expander that the transport can say nothing
+// about: it has no link rate, and every one of its error counters exists and
+// fails to read. The driver serves those attributes by asking the expander
+// for the phy's error log over SMP, so all four failing is the expander
+// declining to describe the phy, not a driver without counters (a missing
+// attribute) and not a clean link.
+//
+// This is the sysfs face of a vacant phy. On a WD H4060-J the set of phys it
+// selects and the set SMP DISCOVER reports as vacant were the same 192 of
+// 370, phy for phy; the 30 disabled phys and the 6 SMP left "unknown"
+// answered with their counters. The state stays PHYStateUnknown, because the
+// transport has no spelling for vacant and only SMP says it. What this
+// predicate licenses is narrower: a caller that never speaks SMP, such as
+// the exporter, can leave these phys out instead of publishing a row of
+// nothing for each of them.
+//
+// A host phy never qualifies: its counters come from the HBA, not from an
+// expander, and all four failing there would be a finding of its own.
+func (p PHY) Unanswered() bool {
+	return p.State == PHYStateUnknown &&
+		strings.Contains(p.DeviceType.Or(""), "expander") &&
+		p.Counters.Failed == len(counterAttributes)
+}
+
 // counterAttributes are the four link error counters of the SAS transport
 // class, in the order the reports render them.
 var counterAttributes = []struct {
@@ -461,8 +490,10 @@ var counterAttributes = []struct {
 // means the kernel does not have the feature at all; a file that exists and
 // fails to read means the driver tried. For an expander phy the driver
 // answers by asking the expander for that phy's error log, and that request
-// fails on its own — a phy with nothing attached commonly returns EIO —
-// which is one phy we could not ask, not a driver without counters.
+// fails on its own, which is one phy we could not ask, not a driver without
+// counters. On the one shelf checked it was not "nothing attached" that
+// failed — disabled phys and phys with no link answered with their counters —
+// but exactly the phys the expander reports as vacant (see PHY.Unanswered).
 func readCounter(path string) (Optional[int64], error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -502,6 +533,7 @@ func readCounters(dir string, readAt time.Time) ErrorCounters {
 			first = err
 		}
 	}
+	counters.Failed = failed
 	switch {
 	case failed == 0 && missing == 0:
 		return counters

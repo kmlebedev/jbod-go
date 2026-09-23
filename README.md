@@ -507,13 +507,14 @@ stderr.
 
 | Метрика | Тип | Labels | Значение |
 | --- | --- | --- | --- |
-| jbod_sas_phy_info | gauge | host, phy, port, sas_address, device_type, state, negotiated_link_rate | один phy, всегда 1 |
-| jbod_sas_phy_up | gauge | host, phy, port, sas_address, device_type | 1, если линк согласовал скорость |
-| jbod_sas_phy_negotiated_link_rate_gbps | gauge | те же | скорость линка; серии нет, если скорости нет |
+| jbod_sas_phy_info | gauge | host, phy, port, sas_address, device_type, negotiated_link_rate | один phy, всегда 1 |
+| jbod_sas_phy_state | gauge | host, phy, port, sas_address, device_type, state | 1 у состояния phy, 0 у остальных: up, disabled, failed, spin-up hold, unknown |
+| jbod_sas_phy_negotiated_link_rate_gbps | gauge | host, phy, port, sas_address, device_type | скорость линка; серии нет, если скорости нет |
 | jbod_sas_phy_invalid_dword_total | counter | те же | невалидные dword |
 | jbod_sas_phy_running_disparity_error_total | counter | те же | ошибки running disparity |
 | jbod_sas_phy_loss_of_dword_sync_total | counter | те же | потери синхронизации dword |
 | jbod_sas_phy_reset_problem_total | counter | те же | неудавшиеся сбросы phy |
+| jbod_sas_expander_phys_unanswered | gauge | host, sas_address | phy экспандера без скорости, журнал ошибок которых экспандер не отдал; своих серий они не получают |
 
 Счётчики отдаются как counter со значением самого железа. Они обнуляются при
 сбросе phy, перезагрузке драйвера и ребуте — и это ровно то, что Prometheus
@@ -525,6 +526,22 @@ Labels — хост и phy, а не корпус: phy принадлежит HBA
 транспорт не отдал, серии не получает вовсе — ноль здесь означал бы чистый
 линк. Экспортёр читает только sysfs: SMP стоит по запросу на phy и в scrape
 не ходит.
+
+Состояние phy — набор серий, по одной на состояние, с единицей у текущего.
+`disabled`, `failed` и `unknown` — три разных диагноза, и «поднят или нет»
+складывал их в один ноль. Label на info-серии вместо этого обрывал бы одну
+серию и начинал другую ровно в момент, когда линк меняется. Вакантного
+состояния в наборе нет: такой phy серий не получает.
+
+Phy экспандера, у которого нет скорости и все четыре счётчика существуют, но
+не читаются, отдельных серий не получает. Драйвер отвечает на эти атрибуты,
+спрашивая у экспандера журнал ошибок phy по SMP, и отказ по всем четырём — это
+экспандер, который отказался описывать phy: так вакантный phy выглядит в
+sysfs. На WD H4060-J это ровно те 192 phy из 370, которые SMP называет
+вакантными, phy в phy; отключённые phy и phy без линка счётчики отдают. Вместо
+192 пустых строк — одна серия на экспандер, `jbod_sas_expander_phys_unanswered`,
+в том числе нулевая: экспандер, который перестал описывать phy, виден как
+скачок.
 
 Состояние — это label, а не число: числовой шкале пришлось бы куда-то
 поместить `unknown`, и любое место неверно. Рядом с `ok` он прячет полку,

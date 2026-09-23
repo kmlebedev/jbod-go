@@ -9,6 +9,26 @@ built from a checkout.
 
 ### Changed
 
+- The phy state is published as a state set, `jbod_sas_phy_state{state}`,
+  with 1 on the state the transport reports and 0 on the others, and
+  replaces `jbod_sas_phy_up`. That series folded disabled, failed and unknown
+  into one 0 — the three diagnoses the transport offers — and on a real shelf
+  it read 0 on 241 of 391 phys. The `state` label is gone from
+  `jbod_sas_phy_info`: it ended one series and started another at the moment
+  a link changed. Both series are new in this release, so nothing is
+  deprecated.
+- An expander phy with no rate whose four error counters all exist and all
+  fail to read gets no per-phy series. The driver serves those attributes by
+  asking the expander for the phy's error log, and on a WD H4060-J the phys
+  that fail all four are exactly the 192 of 370 SMP reports as vacant, phy
+  for phy; disabled phys and phys with no link answer with their counters.
+  They were an info series and a state series each, saying nothing. The new
+  `jbod_sas_expander_phys_unanswered{host,sas_address}` counts them per
+  expander, zero included, so an expander that stops describing phys it used
+  to is still seen. The check is `jbod.PHY.Unanswered`; the phy's state
+  stays `unknown`, since only SMP says vacant.
+- `ErrorCounters.Failed` (`failed` in the JSON) counts the counters that exist
+  and failed to read, next to the reason in words.
 - A phy the expander reports as vacant is counted in a note under its
   table instead of being given a row of dashes: on a real shelf that was 192
   of 370 rows. An empty bay is a place a disk can go and belongs in a
@@ -91,7 +111,7 @@ built from a checkout.
   `smp.phy_error_counters`, with the evidence behind each verdict. None of
   them ever reports write support: a link rate and a state are reports of
   what the link did, not settings.
-- Metrics `jbod_sas_phy_info`, `jbod_sas_phy_up`,
+- Metrics `jbod_sas_phy_info`, `jbod_sas_phy_state`,
   `jbod_sas_phy_negotiated_link_rate_gbps` and the counters
   `jbod_sas_phy_invalid_dword_total`,
   `jbod_sas_phy_running_disparity_error_total`,
@@ -100,7 +120,9 @@ built from a checkout.
   total as a Prometheus counter, so a hardware reset reads as a counter
   reset and never as a negative increase; accumulating them in the exporter
   would be wrong across a restart. The labels are the host and the phy, not
-  the enclosure, because a phy belongs to the HBA.
+  the enclosure, because a phy belongs to the HBA. Phys the expander
+  declined to describe are counted in
+  `jbod_sas_expander_phys_unanswered` instead.
 - A `sas` collector in `jbod_scrape_errors_total`, and the phys in the
   snapshot the exporter publishes. The scrape reads sysfs only.
 - `jbod_build_info` with the version and the toolchain of the running

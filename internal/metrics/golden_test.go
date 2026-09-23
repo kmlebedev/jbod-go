@@ -67,12 +67,16 @@ func fullSnapshot() jbod.Snapshot {
 }
 
 // shelfPHYs is the SAS transport half of the snapshot: a link that is up
-// with clean counters, a link that is up and counting errors, and a phy the
-// transport described without any counter at all (ROADMAP 6).
+// with clean counters, a link that is up and counting errors, a phy the
+// transport described without any counter at all, an expander phy with no
+// link that still answered with its counters, and one the expander declined
+// to describe (ROADMAP 6).
 //
-// The third one is the case the encoder has to get right: it gets an info
-// series and no counter series, because a zero would be a claim that the
-// link is clean and nobody made it.
+// The third one gets an info series and no counter series, because a zero
+// would be a claim that the link is clean and nobody made it. The fourth is
+// "unknown" in the state set and keeps its counters. The fifth is the sysfs
+// face of a vacant phy: no per-phy series at all, one in its expander's
+// count.
 func shelfPHYs() []jbod.PHY {
 	clean := jbod.ErrorCounters{
 		Source: "sysfs", ReadAt: readAt,
@@ -107,6 +111,23 @@ func shelfPHYs() []jbod.PHY {
 			Counters: jbod.ErrorCounters{
 				Source: "sysfs", ReadAt: readAt,
 				Err: jbod.Some("this phy exposes no link error counters"),
+			},
+		},
+		{
+			Name: "phy-1:0:1", Host: jbod.Some(int64(1)),
+			SASAddress: jbod.Some("0x5000ccab05629d3f"), DeviceType: jbod.Some("edge expander"),
+			Identifier: jbod.Some(int64(1)), State: jbod.PHYStateUnknown,
+			Negotiated: jbod.LinkRate{Text: jbod.Some("Unknown")},
+			Counters:   clean,
+		},
+		{
+			Name: "phy-1:0:2", Host: jbod.Some(int64(1)),
+			SASAddress: jbod.Some("0x5000ccab05629d3f"), DeviceType: jbod.Some("edge expander"),
+			Identifier: jbod.Some(int64(2)), State: jbod.PHYStateUnknown,
+			Negotiated: jbod.LinkRate{Text: jbod.Some("Unknown")},
+			Counters: jbod.ErrorCounters{
+				Source: "sysfs", ReadAt: readAt, Failed: 4,
+				Err: jbod.Some("4 of the 4 link error counters exist and could not be read"),
 			},
 		},
 	}
