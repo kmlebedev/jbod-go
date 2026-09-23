@@ -517,13 +517,14 @@ Added in 1.3:
 
 | Metric | Type | Labels | Meaning |
 | --- | --- | --- | --- |
-| jbod_sas_phy_info | gauge | host, phy, port, sas_address, device_type, state, negotiated_link_rate | one phy, always 1 |
-| jbod_sas_phy_up | gauge | host, phy, port, sas_address, device_type | 1 when the link negotiated a rate |
-| jbod_sas_phy_negotiated_link_rate_gbps | gauge | the same | the rate; no series when there is none |
+| jbod_sas_phy_info | gauge | host, phy, port, sas_address, device_type, negotiated_link_rate | one phy, always 1 |
+| jbod_sas_phy_state | gauge | host, phy, port, sas_address, device_type, state | 1 on the phy's state, 0 on the others: up, disabled, failed, spin-up hold, unknown |
+| jbod_sas_phy_negotiated_link_rate_gbps | gauge | host, phy, port, sas_address, device_type | the rate; no series when there is none |
 | jbod_sas_phy_invalid_dword_total | counter | the same | invalid dwords |
 | jbod_sas_phy_running_disparity_error_total | counter | the same | running disparity errors |
 | jbod_sas_phy_loss_of_dword_sync_total | counter | the same | losses of dword synchronisation |
 | jbod_sas_phy_reset_problem_total | counter | the same | failed phy resets |
+| jbod_sas_expander_phys_unanswered | gauge | host, sas_address | expander phys with no rate whose error log the expander refused; they get no series of their own |
 
 The counters are published as counters, carrying the hardware's own running
 total. They restart on a phy reset, a driver reload and a reboot, and that
@@ -536,6 +537,22 @@ The labels are the host and the phy, not the enclosure: a phy belongs to the
 HBA. A counter the transport did not expose gets no series at all, because a
 zero here would mean a clean link. The exporter reads sysfs only: SMP costs
 one request per phy and stays out of the scrape.
+
+The state of a phy is a state set, one series per state with 1 on the current
+one. `disabled`, `failed` and `unknown` are three diagnoses, and "up or not"
+folded them into one zero. A label on the info series instead would end one
+series and start another exactly when a link changes. Vacant is not in the
+set: a vacant phy gets no series.
+
+An expander phy with no rate whose four counters all exist and all fail to
+read gets no series of its own. The driver answers those attributes by asking
+the expander for the phy's error log over SMP, and a refusal on all four is
+the expander declining to describe the phy — which is how a vacant phy reads
+in sysfs. On a WD H4060-J these were exactly the 192 of 370 phys SMP reports
+as vacant, phy for phy; disabled phys and phys with no link answer with their
+counters. Instead of 192 empty rows there is one series per expander,
+`jbod_sas_expander_phys_unanswered`, zero included, so an expander that stops
+describing phys shows up as a step.
 
 Health is a label and never a number: a numeric scale would have to put
 `unknown` somewhere, and every place is wrong. Next to `ok` it hides a shelf

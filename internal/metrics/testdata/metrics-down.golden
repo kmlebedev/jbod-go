@@ -72,17 +72,23 @@ jbod_fan_rpm{device="Fan B",slot="2,1"} 3000
 # TYPE jbod_fan_speed_rpm gauge
 jbod_fan_speed_rpm{component="Fan A",component_id="2,0",enclosure="1:0:0:0",enclosure_id="ENC1"} 1200
 jbod_fan_speed_rpm{component="Fan B",component_id="2,1",enclosure="1:0:0:0",enclosure_id="ENC1"} 3000
-# HELP jbod_sas_phy_info One SAS phy: its state and the rate it negotiated; always 1
+# HELP jbod_sas_expander_phys_unanswered Phys of an expander that have no rate and whose error log the expander refused, which is how a vacant phy reads in sysfs; they get no per-phy series
+# TYPE jbod_sas_expander_phys_unanswered gauge
+jbod_sas_expander_phys_unanswered{host="1",sas_address="0x5000ccab05629d3f"} 1
+# HELP jbod_sas_phy_info One SAS phy and the rate it negotiated, as the transport spells it; always 1
 # TYPE jbod_sas_phy_info gauge
-jbod_sas_phy_info{device_type="edge expander",host="1",negotiated_link_rate="Phy disabled",phy="phy-1:0:0",port="",sas_address="0x5000ccab05629d3f",state="disabled"} 1
-jbod_sas_phy_info{device_type="end device",host="1",negotiated_link_rate="12.0 Gbit",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40",state="up"} 1
-jbod_sas_phy_info{device_type="end device",host="1",negotiated_link_rate="6.0 Gbit",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41",state="up"} 1
+jbod_sas_phy_info{device_type="edge expander",host="1",negotiated_link_rate="Phy disabled",phy="phy-1:0:0",port="",sas_address="0x5000ccab05629d3f"} 1
+jbod_sas_phy_info{device_type="edge expander",host="1",negotiated_link_rate="Unknown",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f"} 1
+jbod_sas_phy_info{device_type="end device",host="1",negotiated_link_rate="12.0 Gbit",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40"} 1
+jbod_sas_phy_info{device_type="end device",host="1",negotiated_link_rate="6.0 Gbit",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41"} 1
 # HELP jbod_sas_phy_invalid_dword_total Dwords the phy could not decode, as the hardware counts them
 # TYPE jbod_sas_phy_invalid_dword_total counter
+jbod_sas_phy_invalid_dword_total{device_type="edge expander",host="1",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f"} 0
 jbod_sas_phy_invalid_dword_total{device_type="end device",host="1",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40"} 0
 jbod_sas_phy_invalid_dword_total{device_type="end device",host="1",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41"} 1274
 # HELP jbod_sas_phy_loss_of_dword_sync_total Times the phy lost dword synchronisation, as the hardware counts them
 # TYPE jbod_sas_phy_loss_of_dword_sync_total counter
+jbod_sas_phy_loss_of_dword_sync_total{device_type="edge expander",host="1",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f"} 0
 jbod_sas_phy_loss_of_dword_sync_total{device_type="end device",host="1",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40"} 0
 jbod_sas_phy_loss_of_dword_sync_total{device_type="end device",host="1",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41"} 31
 # HELP jbod_sas_phy_negotiated_link_rate_gbps Rate the link came up at; absent when the transport reports no rate
@@ -91,17 +97,36 @@ jbod_sas_phy_negotiated_link_rate_gbps{device_type="end device",host="1",phy="ph
 jbod_sas_phy_negotiated_link_rate_gbps{device_type="end device",host="1",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41"} 6
 # HELP jbod_sas_phy_reset_problem_total Phy reset problems, as the hardware counts them
 # TYPE jbod_sas_phy_reset_problem_total counter
+jbod_sas_phy_reset_problem_total{device_type="edge expander",host="1",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f"} 0
 jbod_sas_phy_reset_problem_total{device_type="end device",host="1",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40"} 0
 jbod_sas_phy_reset_problem_total{device_type="end device",host="1",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41"} 2
 # HELP jbod_sas_phy_running_disparity_error_total Running disparity errors, as the hardware counts them
 # TYPE jbod_sas_phy_running_disparity_error_total counter
+jbod_sas_phy_running_disparity_error_total{device_type="edge expander",host="1",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f"} 0
 jbod_sas_phy_running_disparity_error_total{device_type="end device",host="1",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40"} 0
 jbod_sas_phy_running_disparity_error_total{device_type="end device",host="1",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41"} 7
-# HELP jbod_sas_phy_up Whether the phy negotiated a link rate
-# TYPE jbod_sas_phy_up gauge
-jbod_sas_phy_up{device_type="edge expander",host="1",phy="phy-1:0:0",port="",sas_address="0x5000ccab05629d3f"} 0
-jbod_sas_phy_up{device_type="end device",host="1",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40"} 1
-jbod_sas_phy_up{device_type="end device",host="1",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41"} 1
+# HELP jbod_sas_phy_state Condition of one phy; 1 marks the state the transport reports, the others are 0
+# TYPE jbod_sas_phy_state gauge
+jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:0",port="",sas_address="0x5000ccab05629d3f",state="disabled"} 1
+jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:0",port="",sas_address="0x5000ccab05629d3f",state="failed"} 0
+jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:0",port="",sas_address="0x5000ccab05629d3f",state="spin-up hold"} 0
+jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:0",port="",sas_address="0x5000ccab05629d3f",state="unknown"} 0
+jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:0",port="",sas_address="0x5000ccab05629d3f",state="up"} 0
+jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f",state="disabled"} 0
+jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f",state="failed"} 0
+jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f",state="spin-up hold"} 0
+jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f",state="unknown"} 1
+jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f",state="up"} 0
+jbod_sas_phy_state{device_type="end device",host="1",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40",state="disabled"} 0
+jbod_sas_phy_state{device_type="end device",host="1",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40",state="failed"} 0
+jbod_sas_phy_state{device_type="end device",host="1",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40",state="spin-up hold"} 0
+jbod_sas_phy_state{device_type="end device",host="1",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40",state="unknown"} 0
+jbod_sas_phy_state{device_type="end device",host="1",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40",state="up"} 1
+jbod_sas_phy_state{device_type="end device",host="1",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41",state="disabled"} 0
+jbod_sas_phy_state{device_type="end device",host="1",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41",state="failed"} 0
+jbod_sas_phy_state{device_type="end device",host="1",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41",state="spin-up hold"} 0
+jbod_sas_phy_state{device_type="end device",host="1",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41",state="unknown"} 0
+jbod_sas_phy_state{device_type="end device",host="1",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41",state="up"} 1
 # HELP jbod_scrape_duration_seconds Duration of the last collection
 # TYPE jbod_scrape_duration_seconds gauge
 jbod_scrape_duration_seconds 120

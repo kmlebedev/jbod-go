@@ -316,7 +316,15 @@ func TestPHYSeries(t *testing.T) {
 	for _, want := range []string{
 		`jbod_sas_phy_invalid_dword_total{device_type="end device",host="1",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41"} 1274`,
 		`jbod_sas_phy_negotiated_link_rate_gbps{device_type="end device",host="1",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40"} 12`,
-		`jbod_sas_phy_up{device_type="edge expander",host="1",phy="phy-1:0:0",port="",sas_address="0x5000ccab05629d3f"} 0`,
+		// The state set names the diagnosis instead of folding it into
+		// "not up".
+		`jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:0",port="",sas_address="0x5000ccab05629d3f",state="disabled"} 1`,
+		`jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:0",port="",sas_address="0x5000ccab05629d3f",state="up"} 0`,
+		`jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f",state="unknown"} 1`,
+		// A phy with no link that answered keeps its counters.
+		`jbod_sas_phy_invalid_dword_total{device_type="edge expander",host="1",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f"} 0`,
+		// The one the expander declined to describe is counted, not listed.
+		`jbod_sas_expander_phys_unanswered{host="1",sas_address="0x5000ccab05629d3f"} 1`,
 		// The counters are counters: a phy reset or an HBA reload restarts
 		// the hardware's total, and that is a reset Prometheus already
 		// knows how to read.
@@ -327,12 +335,25 @@ func TestPHYSeries(t *testing.T) {
 		}
 	}
 	for _, unwanted := range []string{
-		// The phy with no counters, and the one with no rate.
-		`jbod_sas_phy_invalid_dword_total{device_type="edge expander"`,
+		// The phy with no counters, and the ones with no rate.
+		`jbod_sas_phy_invalid_dword_total{device_type="edge expander",host="1",phy="phy-1:0:0"`,
 		`jbod_sas_phy_negotiated_link_rate_gbps{device_type="edge expander"`,
+		// The unanswered phy has no series of its own, of any family.
+		`phy="phy-1:0:2"`,
+		// The series the state set replaced.
+		"jbod_sas_phy_up",
+		// Vacant is never published: a vacant phy gets no series.
+		`state="vacant"`,
 	} {
 		if strings.Contains(out, unwanted) {
 			t.Errorf("a value was published for something nobody read:\n%s", unwanted)
+		}
+	}
+	// The state lives in the state set only. As a label on the info series
+	// it would end that series every time a link changed.
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "jbod_sas_phy_info{") && strings.Contains(line, "state=") {
+			t.Errorf("the info series still carries the state: %s", line)
 		}
 	}
 	// The SAS collector has its own error counter, so a transport that
@@ -340,5 +361,61 @@ func TestPHYSeries(t *testing.T) {
 	if !strings.Contains(encode(t, fullSnapshot(), map[string]int{jbod.CollectorSAS: 3}, Options{}),
 		`jbod_scrape_errors_total{collector="sas"} 3`) {
 		t.Error("the sas collector has no error series")
+	}
+}
+
+// TestPHYStateSet checks the invariant the state set exists for: every
+// published phy has one series per state, and exactly one of them is 1. A
+// phy with two 1s, or none, would make count by (state) disagree with the
+// number of phys.
+func TestPHYStateSet(t *testing.T) {
+	t.Parallel()
+	out := encode(t, fullSnapshot(), nil, Options{})
+	ones, series := map[string]int{}, map[string]int{}
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.HasPrefix(line, "jbod_sas_phy_state{") {
+			continue
+		}
+		start := strings.Index(line, `phy="`) + len(`phy="`)
+		phy := line[start : start+strings.Index(line[start:], `"`)]
+		series[phy]++
+		if strings.HasSuffix(line, " 1") {
+			ones[phy]++
+		}
+	}
+	// Four phys are published; phy-1:0:2 is the unanswered one.
+	if len(series) != 4 {
+		t.Fatalf("state set covers %d phys, want 4: %v", len(series), series)
+	}
+	for phy, n := range series {
+		if n != 5 {
+			t.Errorf("%s has %d state series, want 5 (up, disabled, failed, spin-up hold, unknown)", phy, n)
+		}
+		if ones[phy] != 1 {
+			t.Errorf("%s has %d states at 1, want exactly one", phy, ones[phy])
+		}
+	}
+}
+
+// TestUnansweredCountIsPublishedAtZero keeps the per-expander count a series
+// with history: an expander that described every phy reports 0, so the day
+// it stops describing some the change is a step, not a series appearing.
+func TestUnansweredCountIsPublishedAtZero(t *testing.T) {
+	t.Parallel()
+	snapshot := fullSnapshot()
+	var phys []jbod.PHY
+	for _, phy := range snapshot.PHYs {
+		if !phy.Unanswered() {
+			phys = append(phys, phy)
+		}
+	}
+	snapshot.PHYs = phys
+	out := encode(t, snapshot, nil, Options{})
+	if !strings.Contains(out, `jbod_sas_expander_phys_unanswered{host="1",sas_address="0x5000ccab05629d3f"} 0`) {
+		t.Errorf("an expander with nothing unanswered has no zero series:\n%s", out)
+	}
+	// Host phys are not an expander and are not counted as one.
+	if strings.Contains(out, `jbod_sas_expander_phys_unanswered{host="1",sas_address="0x500605b00b1e2f4`) {
+		t.Error("the HBA was counted as an expander")
 	}
 }

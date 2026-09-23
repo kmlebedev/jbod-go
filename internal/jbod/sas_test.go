@@ -67,9 +67,9 @@ func links(t *testing.T) *Client {
 	}
 	// An expander phy whose counters exist and answer with an error. The
 	// driver serves them by asking the expander for that phy's error log,
-	// and on a real 68-phy expander every unattached phy answers EIO; a
-	// directory in place of the file reproduces a read that fails without
-	// the file being absent.
+	// and on a real shelf the phys that failed this way were exactly the
+	// ones SMP reports as vacant; a directory in place of the file
+	// reproduces a read that fails without the file being absent.
 	unreadable := map[string]string{
 		"sas_address": "0x5000ccab05629d3f", "device_type": "edge expander", "phy_identifier": "3",
 		"enable": "1", "negotiated_linkrate": "Unknown",
@@ -232,6 +232,24 @@ func TestSASPHYs(t *testing.T) {
 	if unknown.Negotiated.Gbps.Present() {
 		t.Errorf("phy-1:0:1 invented a rate: %v", unknown.Negotiated)
 	}
+	// Only the phy whose four counters all exist and all fail is one the
+	// expander declined to describe. A driver without counters (phy-1:0:0),
+	// a phy with no link that still answered (phy-1:0:1) and a directory
+	// with nothing in it (phy-1:0:2) are each something else.
+	if unreadable.Counters.Failed != 4 {
+		t.Errorf("phy-1:0:3 failed reads %d, want 4", unreadable.Counters.Failed)
+	}
+	if bare.Counters.Failed != 0 {
+		t.Errorf("phy-1:0:0 counted missing attributes as failed reads: %d", bare.Counters.Failed)
+	}
+	for name, want := range map[string]bool{
+		"phy-1:0": false, "phy-1:1": false, "phy-1:0:0": false,
+		"phy-1:0:1": false, "phy-1:0:2": false, "phy-1:0:3": true,
+	} {
+		if got := byName[name].Unanswered(); got != want {
+			t.Errorf("%s unanswered = %v, want %v", name, got, want)
+		}
+	}
 	// A directory with no attributes is a phy nobody could describe.
 	if !byName["phy-1:0:2"].Err.Present() {
 		t.Error("an attribute-less phy is reported as if it had been read")
@@ -389,5 +407,40 @@ func TestHostOf(t *testing.T) {
 	}
 	if hostOfAddress("nonsense").Present() {
 		t.Error("hostOfAddress accepted a value that is not an address")
+	}
+}
+
+// TestPHYUnanswered pins the predicate the exporter leaves phys out by
+// (ROADMAP 6, fourth hardware run). Each condition is load-bearing: on a
+// real shelf 30 disabled phys and 6 with no link answered with their
+// counters, and only the 192 vacant ones failed all four.
+func TestPHYUnanswered(t *testing.T) {
+	t.Parallel()
+	refused := ErrorCounters{Failed: 4, Err: Some("4 of the 4 link error counters exist and could not be read")}
+	expander := func(state PHYState, counters ErrorCounters) PHY {
+		return PHY{Name: "phy-1:0:0", DeviceType: Some("edge expander"), State: state, Counters: counters}
+	}
+	for _, tc := range []struct {
+		name string
+		phy  PHY
+		want bool
+	}{
+		{"expander phy, no rate, every counter refused", expander(PHYStateUnknown, refused), true},
+		{"fanout expanders count too", PHY{DeviceType: Some("fanout expander"), State: PHYStateUnknown, Counters: refused}, true},
+		// A link that is up has been described, whatever its counters did.
+		{"up, counters refused", expander(PHYStateUp, refused), false},
+		// Disabled is a diagnosis; the phy exists.
+		{"disabled, counters refused", expander(PHYStateDisabled, refused), false},
+		{"some counters refused", expander(PHYStateUnknown, ErrorCounters{Failed: 3, LossOfDwordSync: Some(int64(0))}), false},
+		{"no counters exposed", expander(PHYStateUnknown, ErrorCounters{Err: Some("not exposed at all")}), false},
+		{"counters answered", expander(PHYStateUnknown, ErrorCounters{InvalidDword: Some(int64(0))}), false},
+		// Host phy counters come from the HBA; all four failing there is a
+		// finding, not a vacant phy.
+		{"host phy", PHY{DeviceType: Some("end device"), State: PHYStateUnknown, Counters: refused}, false},
+		{"no device type", PHY{State: PHYStateUnknown, Counters: refused}, false},
+	} {
+		if got := tc.phy.Unanswered(); got != tc.want {
+			t.Errorf("%s: unanswered = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }
