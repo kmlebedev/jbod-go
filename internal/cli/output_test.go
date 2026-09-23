@@ -238,3 +238,23 @@ func TestLEDDelegatesToTheClient(t *testing.T) {
 		t.Fatal("LED failure reported as success")
 	}
 }
+
+// A voltage limit is a percentage of nominal and says so; a temperature limit
+// is in the unit of its reading and prints bare.
+func TestThresholdRendering(t *testing.T) {
+	t.Parallel()
+	high := func(th jbod.Thresholds) jbod.Optional[float64] { return th.HighCritical }
+	volts := jbod.Reading{Kind: jbod.ReadingVoltage, Unit: jbod.UnitVolts,
+		Thresholds: &jbod.Thresholds{HighCritical: jbod.Some(5.5), Unit: jbod.UnitPercentOfNominal}}
+	if got := threshold(volts, high); got != "5.5%" {
+		t.Errorf("voltage limit rendered %q, want 5.5%%", got)
+	}
+	celsius := jbod.Reading{Kind: jbod.ReadingTemperature, Unit: jbod.UnitCelsius,
+		Thresholds: &jbod.Thresholds{HighCritical: jbod.Some(80.0), Unit: jbod.UnitCelsius}}
+	if got := threshold(celsius, high); got != "80" {
+		t.Errorf("temperature limit rendered %q, want 80", got)
+	}
+	if got := threshold(jbod.Reading{}, high); got != noAttribute {
+		t.Errorf("a reading without limits rendered %q", got)
+	}
+}

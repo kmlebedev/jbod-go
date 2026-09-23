@@ -1,0 +1,44 @@
+  HGST  H4060-J  4013
+Configuration diagnostic page:
+  number of secondary subenclosures: 0
+  generation code: 0x0
+  enclosure descriptor list:
+    Subenclosure identifier: 0 [primary]
+      relative ES process id: 1, number of ES processes: 2
+      number of type descriptor headers: 11
+      enclosure logical identifier (hex): 5000ccab05629d00
+      enclosure vendor: HGST  product: H4060-J  rev: 4013
+  type descriptor header and text list:
+    Element type: Array device slot, subenclosure id: 0
+      number of possible elements: 60
+      text: Array Slots
+    Element type: Enclosure, subenclosure id: 0
+      number of possible elements: 1
+      text: Enclosure
+    Element type: Power supply, subenclosure id: 0
+      number of possible elements: 2
+      text: Power Supply
+    Element type: Cooling, subenclosure id: 0
+      number of possible elements: 8
+      text: Cooling
+    Element type: Temperature sensor, subenclosure id: 0
+      number of possible elements: 86
+      text: Temp Sensor
+    Element type: Enclosure services controller electronics, subenclosure id: 0
+      number of possible elements: 2
+      text: IOM
+    Element type: SAS expander, subenclosure id: 0
+      number of possible elements: 6
+      text: SAS Expander
+    Element type: SAS connector, subenclosure id: 0
+      number of possible elements: 12
+      text: SAS Connector
+    Element type: Voltage sensor, subenclosure id: 0
+      number of possible elements: 8
+      text: Voltage Sensor
+    Element type: Current sensor, subenclosure id: 0
+      number of possible elements: 8
+      text: Current Sensor
+    Element type: Door, subenclosure id: 0
+      number of possible elements: 1
+      text: Enclosure Cover

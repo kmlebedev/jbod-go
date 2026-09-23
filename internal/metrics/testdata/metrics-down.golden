@@ -142,12 +142,18 @@ jbod_scrape_errors_total{collector="slots"} 0
 # HELP jbod_sensor_temperature_celsius Temperature reported by an enclosure element
 # TYPE jbod_sensor_temperature_celsius gauge
 jbod_sensor_temperature_celsius{component="TEMP A",component_id="3,0",enclosure="1:0:0:0",enclosure_id="ENC1",type="temperature sensor"} 35
-# HELP jbod_sensor_temperature_threshold_celsius Threshold the enclosure declares for temperature
+# HELP jbod_sensor_temperature_threshold_celsius Temperature limit the enclosure declares for an element
 # TYPE jbod_sensor_temperature_threshold_celsius gauge
 jbod_sensor_temperature_threshold_celsius{component="TEMP A",component_id="3,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="high_critical",type="temperature sensor"} 65
 jbod_sensor_temperature_threshold_celsius{component="TEMP A",component_id="3,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="high_warning",type="temperature sensor"} 60
 jbod_sensor_temperature_threshold_celsius{component="TEMP A",component_id="3,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="low_critical",type="temperature sensor"} -19
 jbod_sensor_temperature_threshold_celsius{component="TEMP A",component_id="3,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="low_warning",type="temperature sensor"} 0
+# HELP jbod_sensor_voltage_threshold_percent Voltage limit the enclosure declares for an element, in percent of the nominal voltage: high limits above it, low limits below it
+# TYPE jbod_sensor_voltage_threshold_percent gauge
+jbod_sensor_voltage_threshold_percent{component="VOLT 12V",component_id="4,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="high_critical",type="voltage sensor"} 5
+jbod_sensor_voltage_threshold_percent{component="VOLT 12V",component_id="4,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="high_warning",type="voltage sensor"} 3
+jbod_sensor_voltage_threshold_percent{component="VOLT 12V",component_id="4,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="low_critical",type="voltage sensor"} 5
+jbod_sensor_voltage_threshold_percent{component="VOLT 12V",component_id="4,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="low_warning",type="voltage sensor"} 3
 # HELP jbod_sensor_voltage_volts Voltage reported by an enclosure element
 # TYPE jbod_sensor_voltage_volts gauge
 jbod_sensor_voltage_volts{component="VOLT 12V",component_id="4,0",enclosure="1:0:0:0",enclosure_id="ENC1",type="voltage sensor"} 12.01

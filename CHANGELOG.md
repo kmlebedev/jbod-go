@@ -7,7 +7,41 @@ built from a checkout.
 
 ## Unreleased
 
+### Fixed
+
+- The sensor thresholds were never read on real hardware. The parser
+  expected each limit on its element's line, a layout no version of sg_ses
+  prints — it puts them on the lines under "Element N descriptor:" — so the
+  Threshold In page was read, reported as answered and decoded into
+  nothing; on a WD H4060-J `jbod_sensor_temperature_threshold_celsius` had
+  no series. The page is now read with `--raw` and decoded from its bytes
+  against the Configuration page. sg_ses's text is not used at all: from
+  sg3-utils 1.48 it skips the element types that carry no thresholds
+  without stepping over their descriptors, so every limit it prints after
+  the first such type belongs to another element. A page whose descriptor
+  count or generation code does not match the configuration is not decoded,
+  and the reason is a page note and a `components` scrape error. A field of
+  00h is SES's "not supported" and stays absent. The decoding is pinned by
+  the Configuration and raw Threshold In pages of a real H4060-J under
+  sg_ses 2.86 (`internal/jbod/testdata/h4060j`): 205 descriptors, limits on
+  all 102 sensors and on nothing else, and the shift sg_ses 1.48 applies to
+  that very page reproduced.
+
 ### Changed
+
+- Voltage and current thresholds are published as
+  `jbod_sensor_voltage_threshold_percent` and
+  `jbod_sensor_current_threshold_percent`, and
+  `jbod_sensor_voltage_threshold_volts` and
+  `jbod_sensor_current_threshold_amps` are gone. The page states those
+  limits as a percentage of the sensor's nominal value, which no page
+  reports, so a series in volts or amps could not be filled honestly; the
+  removed names never carried a value on any shelf, since no sg_ses prints
+  those limits in volts. `Thresholds.Unit` (`unit` in the JSON) says which
+  unit a reading's limits are in, and `jbod sensors` prints a percentage
+  limit with `%`.
+- A page note for an optional page that answered and was not used reads
+  "was not used" instead of "was not read".
 
 - The phy state is published as a state set, `jbod_sas_phy_state{state}`,
   with 1 on the state the transport reports and 0 on the others, and

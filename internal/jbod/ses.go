@@ -105,14 +105,19 @@ func worstOf(levels []HealthLevel) HealthLevel {
 	return worst
 }
 
-// Thresholds are the limits the enclosure declares for a sensor, in the
-// unit of the reading they belong to. They are read from the Threshold In
-// page and never written (ROADMAP 5).
+// Thresholds are the limits the enclosure declares for a sensor. They are
+// read from the Threshold In page and never written (ROADMAP 5).
+//
+// Unit is what the numbers are in, and it is not always the unit of the
+// reading: a temperature limit is in degrees, but the page gives voltage and
+// current limits as a percentage of the sensor's nominal value — high limits
+// above it, low limits below it — and the nominal value is on no page.
 type Thresholds struct {
 	HighCritical Optional[float64] `json:"high_critical"`
 	HighWarning  Optional[float64] `json:"high_warning"`
 	LowWarning   Optional[float64] `json:"low_warning"`
 	LowCritical  Optional[float64] `json:"low_critical"`
+	Unit         string            `json:"unit"`
 }
 
 // Reading kinds and their units.
@@ -126,6 +131,9 @@ const (
 	UnitRPM     = "rpm"
 	UnitVolts   = "volts"
 	UnitAmps    = "amps"
+	// UnitPercentOfNominal is the unit of voltage and current thresholds:
+	// an offset from the sensor's nominal value.
+	UnitPercentOfNominal = "percent_of_nominal"
 )
 
 // Reading is one sensor value with everything needed to judge it: the unit,
@@ -341,10 +349,13 @@ type sesPage struct {
 var sesPages = struct {
 	config, status, join, thresholds sesPage
 }{
-	config:     sesPage{name: "configuration", args: []string{"--page=cf"}, required: true},
-	status:     sesPage{name: "enclosure status", args: []string{"--page=es"}, required: true},
-	join:       sesPage{name: "join", args: []string{"--join"}, required: true},
-	thresholds: sesPage{name: "threshold in", args: []string{"--page=th"}, required: false},
+	config: sesPage{name: "configuration", args: []string{"--page=cf"}, required: true},
+	status: sesPage{name: "enclosure status", args: []string{"--page=es"}, required: true},
+	join:   sesPage{name: "join", args: []string{"--join"}, required: true},
+	// The Threshold In page is read raw and decoded against the
+	// configuration; see parseThresholdPage for why sg_ses's own decoding
+	// of it cannot be used.
+	thresholds: sesPage{name: "threshold in", args: []string{"--page=th", "--raw"}, required: false},
 }
 
 // Inspect reads the health, components and sensors of the given enclosures.
@@ -444,7 +455,21 @@ func (c *Client) inspectOne(ctx context.Context, enc Enclosure, slots []Slot, p 
 	if hasSensors(elements) {
 		var out string
 		out, thresholdPage = c.read(ctx, enc, sesPages.thresholds, p)
-		thresholds = parseThresholds(out, typeIndices(elements))
+		if thresholdPage.OK {
+			decoded, err := parseThresholdPage(out, config)
+			if decoded.Generation != "" {
+				thresholdPage.Generation = Some(decoded.Generation)
+			}
+			if err != nil {
+				// The page answered and could not be used. That is a
+				// failure of this collection, not of the shelf, and it
+				// is counted as one.
+				thresholdPage.Err = Some("the page answered and was not decoded: " + err.Error())
+				p.note(CollectorComponents, fmt.Errorf("%s: %w", thresholdPage.Command, err))
+			} else {
+				thresholds = decoded.Limits
+			}
+		}
 	} else {
 		thresholdPage.Command = "sg_ses " + strings.Join(sesPages.thresholds.args, " ") + " " + enc.Device
 		thresholdPage.OK = true
@@ -471,31 +496,7 @@ func (c *Client) inspectOne(ctx context.Context, enc Enclosure, slots []Slot, p 
 func hasSensors(elements []sesElement) bool {
 	for _, e := range elements {
 		switch e.Type {
-		case "temperature sensor", "voltage sensor", "current sensor":
-			return true
-		}
-	}
-	return false
-}
-
-// typeIndices maps an element type to the type indices the join reported
-// for it, in order, so the threshold page can be joined to it.
-func typeIndices(elements []sesElement) map[string][]int64 {
-	result := map[string][]int64{}
-	for _, e := range elements {
-		if !containsInt(result[e.Type], e.TypeIndex) {
-			result[e.Type] = append(result[e.Type], e.TypeIndex)
-		}
-	}
-	for _, indices := range result {
-		slices.Sort(indices)
-	}
-	return result
-}
-
-func containsInt(list []int64, want int64) bool {
-	for _, v := range list {
-		if v == want {
+		case sesTypeTemperature, sesTypeVoltage, sesTypeCurrent:
 			return true
 		}
 	}
@@ -618,6 +619,7 @@ func readingsOf(e sesElement, thresholds map[string]sesThreshold, readAt time.Ti
 				HighWarning:  t.HighWarning,
 				LowWarning:   t.LowWarning,
 				LowCritical:  t.LowCritical,
+				Unit:         t.Unit,
 			}
 		}
 		if !value.Present() {

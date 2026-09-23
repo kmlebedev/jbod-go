@@ -419,3 +419,42 @@ func TestUnansweredCountIsPublishedAtZero(t *testing.T) {
 		t.Error("the HBA was counted as an expander")
 	}
 }
+
+// TestSensorThresholdUnits keeps each limit under the name of its unit. The
+// Threshold In page gives voltage and current limits as a percentage of
+// nominal; a percentage published as volts, or a limit in a unit no series
+// is named for, would be a number with the wrong meaning, so it gets none.
+func TestSensorThresholdUnits(t *testing.T) {
+	t.Parallel()
+	out := encode(t, fullSnapshot(), nil, Options{})
+	for _, want := range []string{
+		`jbod_sensor_temperature_threshold_celsius{component="TEMP A",component_id="3,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="high_critical",type="temperature sensor"} 65`,
+		`jbod_sensor_voltage_threshold_percent{component="VOLT 12V",component_id="4,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="high_critical",type="voltage sensor"} 5`,
+		`jbod_sensor_voltage_threshold_percent{component="VOLT 12V",component_id="4,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="low_warning",type="voltage sensor"} 3`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing:\n%s", want)
+		}
+	}
+	for _, gone := range []string{"jbod_sensor_voltage_threshold_volts", "jbod_sensor_current_threshold_amps"} {
+		if strings.Contains(out, gone) {
+			t.Errorf("%s is published; the page has no limits in that unit", gone)
+		}
+	}
+
+	snapshot := fullSnapshot()
+	for i := range snapshot.Status[0].Components {
+		c := &snapshot.Status[0].Components[i]
+		for j := range c.Readings {
+			if th := c.Readings[j].Thresholds; th != nil {
+				copied := *th
+				copied.Unit = jbod.UnitVolts
+				c.Readings[j].Thresholds = &copied
+			}
+		}
+	}
+	out = encode(t, snapshot, nil, Options{})
+	if strings.Contains(out, "_threshold_") {
+		t.Errorf("limits in a unit no series is named for were published:\n%s", out)
+	}
+}

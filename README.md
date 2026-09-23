@@ -218,7 +218,7 @@ disk.temperature   unknown      unsupported  scsi_temperature: installed; ...
 
 За один проход читаются четыре страницы: Configuration (`--page=cf`),
 Enclosure Status (`--page=es`), join Enclosure Status + Element Descriptor +
-Additional Element Status (`--join`) и Threshold In (`--page=th`). Ничего не
+Additional Element Status (`--join`) и Threshold In (`--page=th --raw`). Ничего не
 пишется: чтение порогов — это чтение, а изменение порогов и охлаждения —
 версия 1.4.
 
@@ -280,7 +280,22 @@ ID   NAME        TYPE                READING      VALUE  UNIT     STATUS       H
 ```
 
 Пороги — это числа самого корпуса со страницы Threshold In, а не константа в
-правиле алертинга: на следующей полке она будет другой. Датчик, который
+правиле алертинга: на следующей полке она будет другой. Порог температуры —
+в градусах. Порог напряжения и тока страница задаёт в процентах от
+номинала датчика — верхние выше номинала, нижние ниже, — а сам номинал ни на
+одной странице не приходит, поэтому в таблице такой порог печатается с `%`.
+
+Страница читается сырой (`--raw`) и декодируется по странице Configuration,
+а не по тексту sg_ses. Текст раскладывает пороги по строкам под заголовком
+«Element N descriptor:», по-разному в разных версиях, а начиная с
+sg3-utils 1.48 sg_ses пропускает типы элементов без порогов, не перешагивая
+их дескрипторы: на любой полке, где корзины идут раньше датчиков, пороги
+датчика в его выводе — это байты другого элемента. Сырая страница одинакова
+во всех версиях: код генерации и по четыре байта на каждый элемент каждого
+типа. Страница, в которой дескрипторов не столько, сколько объявляет
+конфигурация, или код генерации другой, не декодируется вовсе — ошибка с
+обоими числами, заметка в выводе и `jbod_scrape_errors_total`. Поле 00h по
+SES значит «порог не поддерживается» и остаётся `-`. Датчик, который
 объявляет показание и не отдал значения, остаётся строкой со значением `-`:
 пропавшая строка неотличима от датчика, которого никогда не было, а ноль —
 это ложь. В JSON каждое показание несёт значение, единицу, источник, время
@@ -500,7 +515,9 @@ stderr.
 | jbod_sensor_temperature_celsius | gauge | enclosure, enclosure_id, component, component_id, type | температура элемента корпуса |
 | jbod_sensor_voltage_volts | gauge | те же | напряжение |
 | jbod_sensor_current_amps | gauge | те же | ток |
-| jbod_sensor_*_threshold_* | gauge | те же + threshold | порог корпуса: high_critical, high_warning, low_warning, low_critical |
+| jbod_sensor_temperature_threshold_celsius | gauge | те же + threshold | порог температуры корпуса: high_critical, high_warning, low_warning, low_critical |
+| jbod_sensor_voltage_threshold_percent | gauge | те же + threshold | порог напряжения в процентах от номинала: high_* выше него, low_* ниже |
+| jbod_sensor_current_threshold_percent | gauge | те же + threshold | порог тока в процентах выше номинала: только high_critical и high_warning |
 | jbod_slot_sas_address_info | gauge | enclosure, enclosure_id, slot, component_id, sas_address, device, block_device | отображение slot → SAS address → disk, всегда 1 |
 
 Добавлено в 1.3:

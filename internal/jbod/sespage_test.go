@@ -1,6 +1,7 @@
 package jbod
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -98,14 +99,21 @@ VOLT 12V [4,0]  Element type: Voltage sensor
       Voltage: 12.01 volts
 `
 
-const thresholdPage = `Threshold In diagnostic page:
-  generation code: 0x1
-  Element type: Temperature sensor, subenclosure id: 0 [ti=3]
-    Overall threshold: high critical=100 C, high warning=95 C, low warning=0 C, low critical=-19 C
-    Element 0 threshold: high critical=65 C, high warning=60 C, low warning=0 C, low critical=-19 C
-    Element 1 threshold: high critical=65 C, high warning=60 C, low warning=0 C, low critical=-19 C
-  Element type: Voltage sensor, subenclosure id: 1 [ti=4]
-    Element 0 threshold: high critical=13.20 V, high warning=12.96 V, low warning=11.04 V, low critical=10.80 V
+// thresholdPage is "sg_ses --page=th --raw" for configPage: the page from
+// its generation code on, in the layout sg_ses prints raw bytes in. Every
+// element of every type has a descriptor, the bays, supplies and fans
+// included, which is what a decoder that skipped them would misread.
+//
+//	[3,-1] temperature overall  78 73 14 01  100 95 0 -19 C
+//	[3,0]  temperature          55 50 14 01   65 60 0 -19 C
+//	[3,1]  temperature          55 50 14 00   65 60 0, low critical not supported
+//	[4,-1] voltage overall      00 00 00 00  none declared
+//	[4,0]  voltage              0a 06 06 0a  5.0 3.0 3.0 5.0 % of nominal
+const thresholdPage = `00 00 00 01 00 00 00 00  00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00
+78 73 14 01 55 50 14 01  55 50 14 00 00 00 00 00
+0a 06 06 0a
 `
 
 func TestParseConfiguration(t *testing.T) {
@@ -350,63 +358,6 @@ func TestParseJoinElementsGarbage(t *testing.T) {
 	}
 }
 
-func TestParseThresholds(t *testing.T) {
-	t.Parallel()
-	thresholds := parseThresholds(thresholdPage, typeIndices(parseJoinElements(joinPage)))
-	sensor, ok := thresholds["3,0"]
-	if !ok {
-		t.Fatalf("no thresholds for the first temperature sensor: %v", thresholds)
-	}
-	if v, ok := sensor.HighCritical.Get(); !ok || v != 65 {
-		t.Errorf("high critical = %v, want 65", sensor.HighCritical)
-	}
-	if v, ok := sensor.LowCritical.Get(); !ok || v != -19 {
-		t.Errorf("low critical = %v, want -19", sensor.LowCritical)
-	}
-	// The overall threshold of a type is not a threshold of any element of
-	// it, so it is kept apart and never attached to one.
-	overall, ok := thresholds["3,-1"]
-	if !ok {
-		t.Fatal("the overall threshold was dropped")
-	}
-	if v, ok := overall.HighCritical.Get(); !ok || v != 100 {
-		t.Errorf("overall high critical = %v, want 100", overall.HighCritical)
-	}
-	volts, ok := thresholds["4,0"]
-	if !ok {
-		t.Fatalf("no thresholds for the voltage sensor: %v", thresholds)
-	}
-	if v, ok := volts.HighWarning.Get(); !ok || v != 12.96 {
-		t.Errorf("voltage high warning = %v, want 12.96", volts.HighWarning)
-	}
-}
-
-// Without the "[ti=N]" hint the page has to be joined by type, in the order
-// the types appear, because the header carries no type index of its own.
-func TestParseThresholdsWithoutTypeIndex(t *testing.T) {
-	t.Parallel()
-	page := strings.ReplaceAll(thresholdPage, " [ti=3]", "")
-	page = strings.ReplaceAll(page, " [ti=4]", "")
-	thresholds := parseThresholds(page, typeIndices(parseJoinElements(joinPage)))
-	if _, ok := thresholds["3,0"]; !ok {
-		t.Errorf("temperature thresholds were not joined: %v", thresholds)
-	}
-	if _, ok := thresholds["4,0"]; !ok {
-		t.Errorf("voltage thresholds were not joined: %v", thresholds)
-	}
-}
-
-// A shelf that does not implement the page reports an error, and an error
-// is not a threshold of zero.
-func TestParseThresholdsUnsupported(t *testing.T) {
-	t.Parallel()
-	for _, in := range []string{"", "sg_ses: Threshold In dpage not supported\n"} {
-		if got := parseThresholds(in, nil); len(got) != 0 {
-			t.Errorf("%q produced %v", in, got)
-		}
-	}
-}
-
 func TestNormalizeElementType(t *testing.T) {
 	t.Parallel()
 	cases := map[string]string{
@@ -471,28 +422,6 @@ func TestParseJoinElementsUnknownType(t *testing.T) {
 	}
 }
 
-// The same leak in the threshold page would write one element's limits onto
-// another element's reading, which is a wrong number rather than an absent
-// one.
-func TestParseThresholdsUnknownType(t *testing.T) {
-	t.Parallel()
-	const page = `Threshold In diagnostic page:
-  generation code: 0x1
-  Element type: Temperature sensor, subenclosure id: 0 [ti=2]
-    Element 0 threshold: high critical=65 C, high warning=60 C, low warning=0 C, low critical=-19 C
-  Element type: vendor specific [0x81], subenclosure id: 0 [ti=3]
-    Element 0 threshold: high critical=99, high warning=98, low warning=2, low critical=1
-`
-	thresholds := parseThresholds(page, nil)
-	sensor, ok := thresholds["2,0"]
-	if !ok {
-		t.Fatalf("the sensor lost its thresholds: %v", thresholds)
-	}
-	if v, present := sensor.HighCritical.Get(); !present || v != 65 {
-		t.Errorf("high critical = %v, want 65 (the vendor element's limits overwrote it)", sensor.HighCritical)
-	}
-}
-
 // The generation code ends at the end of its line. A value that swallowed
 // the next line would compare unequal to the other pages' and report a
 // configuration change that did not happen.
@@ -513,5 +442,210 @@ func TestPageGeneration(t *testing.T) {
 	}
 	if got := pageGeneration("sg_ses: unable to open /dev/sg0\n"); got.Present() {
 		t.Errorf("a failed page reported generation %v", got)
+	}
+}
+
+// rawThresholds renders a Threshold In page the way "sg_ses --raw" prints
+// it, so a test can state descriptors instead of hex.
+func rawThresholds(generation uint32, descriptors ...[4]byte) string {
+	raw := []byte{byte(generation >> 24), byte(generation >> 16), byte(generation >> 8), byte(generation)}
+	for _, d := range descriptors {
+		raw = append(raw, d[:]...)
+	}
+	var b strings.Builder
+	for i, x := range raw {
+		switch {
+		case i%16 == 0 && i > 0:
+			b.WriteString("\n")
+		case i%16 == 8:
+			b.WriteString("  ")
+		case i%16 != 0:
+			b.WriteString(" ")
+		}
+		fmt.Fprintf(&b, "%02x", x)
+	}
+	b.WriteString("\n")
+	return b.String()
+}
+
+func TestParseThresholdPage(t *testing.T) {
+	t.Parallel()
+	page, err := parseThresholdPage(thresholdPage, parseConfiguration(configPage))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Generation != "0x1" {
+		t.Errorf("generation = %q, want 0x1, the spelling of the text pages", page.Generation)
+	}
+	sensor, ok := page.Limits["3,0"]
+	if !ok {
+		t.Fatalf("no thresholds for the first temperature sensor: %v", page.Limits)
+	}
+	for name, got := range map[string]Optional[float64]{
+		"high critical": sensor.HighCritical, "high warning": sensor.HighWarning,
+		"low warning": sensor.LowWarning, "low critical": sensor.LowCritical,
+	} {
+		want := map[string]float64{"high critical": 65, "high warning": 60, "low warning": 0, "low critical": -19}[name]
+		if v, ok := got.Get(); !ok || v != want {
+			t.Errorf("%s = %v, want %v", name, got, want)
+		}
+	}
+	if sensor.Unit != UnitCelsius {
+		t.Errorf("temperature thresholds in %q", sensor.Unit)
+	}
+	// 00h is "not supported", not -20 C.
+	if second := page.Limits["3,1"]; second.LowCritical.Present() {
+		t.Errorf("an unsupported limit was decoded as %v", second.LowCritical)
+	}
+	// The overall element of a type is not any element of it, so it is kept
+	// apart and never attached to one.
+	if overall, ok := page.Limits["3,-1"]; !ok || overall.HighCritical.Or(0) != 100 {
+		t.Errorf("overall thresholds %+v (present %v), want high critical 100", overall, ok)
+	}
+	// A voltage limit is a percentage of nominal, not volts.
+	volts, ok := page.Limits["4,0"]
+	if !ok {
+		t.Fatalf("no thresholds for the voltage sensor: %v", page.Limits)
+	}
+	if v, _ := volts.HighCritical.Get(); v != 5 || volts.Unit != UnitPercentOfNominal {
+		t.Errorf("voltage high critical %v %s, want 5 %s", volts.HighCritical, volts.Unit, UnitPercentOfNominal)
+	}
+	if v, _ := volts.LowWarning.Get(); v != 3 {
+		t.Errorf("voltage low warning %v, want 3", volts.LowWarning)
+	}
+	// Elements without thresholds and a type's all-zero overall descriptor
+	// produce nothing.
+	for _, key := range []string{"0,0", "1,0", "2,0", "4,-1"} {
+		if _, ok := page.Limits[key]; ok {
+			t.Errorf("%s has thresholds it does not declare", key)
+		}
+	}
+}
+
+// A current sensor has high limits only; its low fields are reserved, and a
+// reserved field that happens to be set is not a limit.
+func TestParseThresholdPageCurrent(t *testing.T) {
+	t.Parallel()
+	cfg := parseConfiguration(`  generation code: 0x7
+    Element type: Current sensor, subenclosure id: 0, number of possible elements: 1
+`)
+	page, err := parseThresholdPage(rawThresholds(7, [4]byte{}, [4]byte{0x14, 0x0a, 0x04, 0x02}), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current := page.Limits["0,0"]
+	if current.HighCritical.Or(0) != 10 || current.HighWarning.Or(0) != 5 {
+		t.Errorf("current high limits %+v, want 10 and 5 %% of nominal", current)
+	}
+	if current.LowWarning.Present() || current.LowCritical.Present() {
+		t.Errorf("reserved low fields were decoded: %+v", current)
+	}
+}
+
+// The descriptors mean something only against the configuration they were
+// written for. Every way the page and the configuration can disagree ends
+// in an error and no limits, because a limit on the wrong element is a
+// wrong number (ROADMAP 5).
+func TestParseThresholdPageRefuses(t *testing.T) {
+	t.Parallel()
+	cfg := parseConfiguration(configPage)
+	all := make([][4]byte, 16)
+	for _, tc := range []struct {
+		name, out, want string
+	}{
+		// sg_ses 1.48 and later print only the types that use thresholds;
+		// a page that short did not come from this configuration.
+		{"only the sensor types", rawThresholds(1, all[:5]...), "carries 5 descriptors and the configuration declares 16"},
+		{"one descriptor too many", rawThresholds(1, make([][4]byte, 17)...), "carries 17 descriptors"},
+		{"another generation", rawThresholds(2, all...), "generation code 0x2"},
+		{"a partial descriptor", strings.TrimSuffix(rawThresholds(1, all...), "\n") + " 00\n", "whole number"},
+		{"text instead of hex", "Threshold In diagnostic page:\n  INVOP=0\n", "not a hex byte"},
+		{"an error message", "sg_ses: Threshold In dpage not supported\n", "not a hex byte"},
+		{"nothing", "", "empty"},
+		{"too short", "00 00\n", "shorter than its generation code"},
+	} {
+		page, err := parseThresholdPage(tc.out, cfg)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: error %v, want one saying %q", tc.name, err, tc.want)
+		}
+		if len(page.Limits) != 0 {
+			t.Errorf("%s: limits decoded from a page that was refused: %v", tc.name, page.Limits)
+		}
+	}
+	// A configuration that does not say how many elements a type has
+	// cannot place the descriptors after it.
+	uncounted := parseConfiguration("  generation code: 0x1\n    Element type: Temperature sensor, subenclosure id: 0\n")
+	if _, err := parseThresholdPage(rawThresholds(1, all[:1]...), uncounted); err == nil ||
+		!strings.Contains(err.Error(), "no element count") {
+		t.Errorf("a type without a count was decoded: %v", err)
+	}
+}
+
+// TestParseThresholdPageSixtyBayLayout decodes a page shaped like the
+// WD H4060-J's: eleven element types with 60 bays, the enclosure, two
+// supplies and eight fans before the 86 temperature sensors, and voltage and
+// current sensors after the modules and connectors — 205 descriptors. Each
+// limit here is distinct per element, so a decoder that lost its place by
+// one descriptor anywhere before a sensor puts the wrong number on it. That
+// is what sg_ses 1.48 does in its own text: it skips the four types in front
+// of the temperature sensors without stepping over their 75 descriptors.
+func TestParseThresholdPageSixtyBayLayout(t *testing.T) {
+	t.Parallel()
+	types := []struct {
+		name  string
+		count int
+	}{
+		{"Array device slot", 60}, {"Enclosure", 1}, {"Power supply", 2}, {"Cooling", 8},
+		{"Temperature sensor", 86}, {"Enclosure services controller electronics", 2},
+		{"SAS expander", 6}, {"SAS connector", 12}, {"Voltage sensor", 8},
+		{"Current sensor", 8}, {"Door", 1},
+	}
+	var cfg strings.Builder
+	cfg.WriteString("  generation code: 0x0\n  type descriptor header and text list\n")
+	var descriptors [][4]byte
+	for _, ty := range types {
+		fmt.Fprintf(&cfg, "    Element type: %s, subenclosure id: 0, number of possible elements: %d\n", ty.name, ty.count)
+		for e := -1; e < ty.count; e++ {
+			var d [4]byte
+			switch ty.name {
+			case "Temperature sensor":
+				if e >= 0 {
+					// high critical 30 + e degrees, high warning 25 + e.
+					d = [4]byte{byte(50 + e), byte(45 + e), 20, 0}
+				}
+			case "Voltage sensor":
+				if e >= 0 {
+					d = [4]byte{byte(10 + e), byte(6 + e), byte(6 + e), byte(10 + e)}
+				}
+			case "Current sensor":
+				if e >= 0 {
+					d = [4]byte{byte(20 + e), byte(10 + e), 0, 0}
+				}
+			}
+			descriptors = append(descriptors, d)
+		}
+	}
+	page, err := parseThresholdPage(rawThresholds(0, descriptors...), parseConfiguration(cfg.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for e := 0; e < 86; e++ {
+		limits := page.Limits[fmt.Sprintf("4,%d", e)]
+		if limits.HighCritical.Or(-1) != float64(30+e) || limits.HighWarning.Or(-1) != float64(25+e) {
+			t.Fatalf("temperature sensor %d limits %+v, want %d and %d", e, limits, 30+e, 25+e)
+		}
+	}
+	for e := 0; e < 8; e++ {
+		volts := page.Limits[fmt.Sprintf("8,%d", e)]
+		if volts.HighCritical.Or(-1) != float64(10+e)/2 || volts.LowCritical.Or(-1) != float64(10+e)/2 {
+			t.Errorf("voltage sensor %d limits %+v", e, volts)
+		}
+		amps := page.Limits[fmt.Sprintf("9,%d", e)]
+		if amps.HighCritical.Or(-1) != float64(20+e)/2 || amps.HighWarning.Or(-1) != float64(10+e)/2 {
+			t.Errorf("current sensor %d limits %+v", e, amps)
+		}
+	}
+	if n := len(page.Limits); n != 86+8+8 {
+		t.Errorf("%d elements got limits, want the 102 sensors", n)
 	}
 }
