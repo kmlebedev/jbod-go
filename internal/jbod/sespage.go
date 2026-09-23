@@ -3,6 +3,9 @@
 package jbod
 
 import (
+	"encoding/binary"
+	"errors"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -11,7 +14,7 @@ import (
 // This file parses the SES diagnostic pages as sg_ses prints them: the
 // Configuration page, the Enclosure Status page, the join of Enclosure
 // Status, Element Descriptor and Additional Element Status, and the
-// Threshold In page (ROADMAP 5).
+// Threshold In page, which is decoded from its raw bytes (ROADMAP 5).
 //
 // Everything here is a pure function of the text it is given, like the rest
 // of parse.go, so the pages can be exercised from fixtures without a shelf.
@@ -589,12 +592,17 @@ func containsString(list []string, want string) bool {
 	return false
 }
 
-// sesThreshold is one element's thresholds, in the unit of its reading.
+// sesThreshold is one element's thresholds and the unit they are in.
 type sesThreshold struct {
 	HighCritical Optional[float64]
 	HighWarning  Optional[float64]
 	LowWarning   Optional[float64]
 	LowCritical  Optional[float64]
+	// Unit is UnitCelsius for a temperature sensor and
+	// UnitPercentOfNominal for a voltage or current sensor, whose limits
+	// the page states as an offset from the nominal value rather than as
+	// volts or amps.
+	Unit string
 }
 
 // present reports whether the enclosure declared any threshold at all.
@@ -603,85 +611,157 @@ func (t sesThreshold) present() bool {
 		t.LowWarning.Present() || t.LowCritical.Present()
 }
 
-var thresholdValue = regexp.MustCompile(`(?i)(high critical|high warning|low warning|low critical)\s*[:=]\s*(-?\d+(?:\.\d+)?)`)
+// SES element type codes of the elements that carry thresholds this package
+// decodes (SES-3 table 70).
+const (
+	sesTypeTemperature = "temperature sensor"
+	sesTypeVoltage     = "voltage sensor"
+	sesTypeCurrent     = "current sensor"
+)
 
-// parseThresholds reads "sg_ses --page=th" output, keyed by the
-// "[type,element]" index the other pages use.
+// sesThresholdPage is the decoded Threshold In page.
+type sesThresholdPage struct {
+	// Generation is the generation code the page carries, in the spelling
+	// the text pages use, so the pages of one pass can be compared.
+	Generation string
+	// Limits are keyed by the "[type,element]" index the other pages use;
+	// the overall element of a type is kept under element -1.
+	Limits map[string]sesThreshold
+}
+
+// parseThresholdPage decodes "sg_ses --page=th --raw": the Threshold In
+// page as hex, from the generation code on.
 //
-// The page lists thresholds under an element type header, and the type
-// header does not carry the type index the rest of this package addresses
-// elements by. types maps a normalized element type to the type indices the
-// join reported for it, in order, which is what lets the two be joined: the
-// n-th header of a type is the n-th type index of that type.
+// The page is decoded here rather than read from sg_ses's own text, for two
+// reasons found in the sg3_utils sources. The text puts each element's
+// limits on the lines under an "Element N descriptor:" header, in a layout
+// that differs between versions. And from sg3_utils 1.48 sg_ses skips the
+// element types that carry no thresholds without stepping over their
+// descriptors, so on any shelf that lists its bays before its sensors —
+// every shelf — the limits it prints for a sensor are bytes of some other
+// element. The raw page is the same in every version: the generation code,
+// then one four-byte descriptor for the overall element and for each
+// element of every type, in Configuration page order (SES-3 6.1.8).
 //
-// Nothing here is written back. Reading a threshold is a read of a
-// diagnostic page and changing one is a control page, which is 1.4
-// (ROADMAP 7).
-func parseThresholds(out string, types map[string][]int64) map[string]sesThreshold {
-	result := map[string]sesThreshold{}
-	seen := map[string]int{}
-	typeIndex := Optional[int64]{}
-	for line := range strings.Lines(out) {
-		if isTypeHeader(line) {
-			name := elementTypeOf(line, "")
-			typeIndex = None[int64]()
-			if m := typeIndexOnly.FindStringSubmatch(line); m != nil {
-				if n, err := strconv.ParseInt(m[1], 10, 64); err == nil {
-					typeIndex = Some(n)
-				}
-			}
-			if !typeIndex.Present() {
-				indices := types[name]
-				if n := seen[name]; n < len(indices) {
-					typeIndex = Some(indices[n])
-				}
-				seen[name]++
-			}
-			continue
+// The configuration is what gives the descriptors their meaning, so the
+// page is decoded only when it carries exactly as many descriptors as the
+// configuration declares and the same generation code. Anything else is an
+// error with both numbers in it and no thresholds: a limit attached to the
+// wrong element is a wrong number, not a missing one.
+//
+// A field of 00h is "not supported" for every sensor type (SES-3 7.3.x) and
+// stays absent. Nothing here is written back: changing a threshold is a
+// control page, which is 1.4 (ROADMAP 7).
+func parseThresholdPage(out string, cfg sesConfig) (sesThresholdPage, error) {
+	page := sesThresholdPage{Limits: map[string]sesThreshold{}}
+	raw, err := parseHexDump(out)
+	if err != nil {
+		return page, err
+	}
+	if len(raw) < 4 {
+		return page, fmt.Errorf("the page is %d bytes, shorter than its generation code", len(raw))
+	}
+	page.Generation = fmt.Sprintf("0x%x", binary.BigEndian.Uint32(raw[:4]))
+	if want, ok := cfg.Generation.Get(); ok && !strings.EqualFold(strings.TrimSpace(want), page.Generation) {
+		return page, fmt.Errorf("the page has generation code %s and the configuration page %s; "+
+			"the descriptors are not decoded against a configuration they do not belong to", page.Generation, want)
+	}
+	descriptors := raw[4:]
+	if len(descriptors)%4 != 0 {
+		return page, fmt.Errorf("the descriptor list is %d bytes, not a whole number of 4-byte descriptors", len(descriptors))
+	}
+	if len(cfg.Types) == 0 {
+		return page, errors.New("the configuration page declared no element types to decode the page against")
+	}
+	declared := 0
+	for _, t := range cfg.Types {
+		n, ok := t.Possible.Get()
+		if !ok {
+			return page, fmt.Errorf("the configuration page declared no element count for type %d (%s)", t.TypeIndex, t.Type)
 		}
-		if !typeIndex.Present() {
-			continue
-		}
-		element := Optional[int64]{}
-		switch {
-		case overallOrdinal.MatchString(line):
-			// The overall element of a type summarises the others; its
-			// thresholds are kept under element -1 and never attached to a
-			// real element, which would be the enclosure's answer for a
-			// different thing.
-			element = Some(int64(-1))
-		default:
-			if m := elementOrdinal.FindStringSubmatch(line); m != nil {
-				if n, err := strconv.ParseInt(m[1], 10, 64); err == nil {
-					element = Some(n)
-				}
-			}
-		}
-		if !element.Present() {
-			continue
-		}
-		var t sesThreshold
-		for _, m := range thresholdValue.FindAllStringSubmatch(line, -1) {
-			v, err := strconv.ParseFloat(m[2], 64)
-			if err != nil {
+		declared += 1 + int(n)
+	}
+	if got := len(descriptors) / 4; got != declared {
+		return page, fmt.Errorf("the page carries %d descriptors and the configuration declares %d elements "+
+			"(each type's overall element included)", got, declared)
+	}
+	offset := 0
+	for _, t := range cfg.Types {
+		n := int(t.Possible.Or(0))
+		for element := -1; element < n; element++ {
+			d := descriptors[offset : offset+4]
+			offset += 4
+			limits, ok := decodeThreshold(t.Type, d)
+			if !ok {
 				continue
 			}
-			switch strings.ToLower(m[1]) {
-			case "high critical":
-				t.HighCritical = Some(v)
-			case "high warning":
-				t.HighWarning = Some(v)
-			case "low warning":
-				t.LowWarning = Some(v)
-			case "low critical":
-				t.LowCritical = Some(v)
-			}
+			page.Limits[strconv.FormatInt(t.TypeIndex, 10)+","+strconv.Itoa(element)] = limits
 		}
-		if !t.present() {
-			continue
-		}
-		key := strconv.FormatInt(typeIndex.Or(0), 10) + "," + strconv.FormatInt(element.Or(0), 10)
-		result[key] = t
 	}
-	return result
+	return page, nil
+}
+
+// decodeThreshold reads one threshold status descriptor of an element type.
+// It is false for a type without thresholds this package knows the unit of
+// and for a descriptor that declares none.
+func decodeThreshold(elementType string, d []byte) (sesThreshold, bool) {
+	var t sesThreshold
+	field := func(b byte, scale func(byte) float64) Optional[float64] {
+		if b == 0 {
+			return None[float64]()
+		}
+		return Some(scale(b))
+	}
+	// A temperature is offset by 20 so that one byte covers -19 to 235 C.
+	celsius := func(b byte) float64 { return float64(int(b) - 20) }
+	// Voltage and current limits are in units of 0.5 % of nominal.
+	percent := func(b byte) float64 { return float64(b) / 2 }
+	switch elementType {
+	case sesTypeTemperature:
+		t = sesThreshold{
+			HighCritical: field(d[0], celsius), HighWarning: field(d[1], celsius),
+			LowWarning: field(d[2], celsius), LowCritical: field(d[3], celsius),
+			Unit: UnitCelsius,
+		}
+	case sesTypeVoltage:
+		// High limits are above nominal and low limits below it.
+		t = sesThreshold{
+			HighCritical: field(d[0], percent), HighWarning: field(d[1], percent),
+			LowWarning: field(d[2], percent), LowCritical: field(d[3], percent),
+			Unit: UnitPercentOfNominal,
+		}
+	case sesTypeCurrent:
+		// A current sensor has high limits only; the low fields are
+		// reserved.
+		t = sesThreshold{
+			HighCritical: field(d[0], percent), HighWarning: field(d[1], percent),
+			Unit: UnitPercentOfNominal,
+		}
+	default:
+		return t, false
+	}
+	return t, t.present()
+}
+
+// parseHexDump reads the hex sg_ses prints for --raw: two hex digits per
+// byte, sixteen to a line, with no offsets and no ASCII column. A token that
+// is not a byte means the output is something else, and it is refused
+// rather than skipped, because a skipped byte shifts every descriptor after
+// it.
+func parseHexDump(out string) ([]byte, error) {
+	var raw []byte
+	for _, field := range strings.Fields(out) {
+		if len(field) != 2 {
+			return nil, fmt.Errorf("%q is not a hex byte; the output is not a raw page", field)
+		}
+		b, err := strconv.ParseUint(field, 16, 8)
+		if err != nil {
+			return nil, fmt.Errorf("%q is not a hex byte; the output is not a raw page", field)
+		}
+		raw = append(raw, byte(b))
+	}
+	if len(raw) == 0 {
+		return nil, errors.New("the page is empty")
+	}
+	return raw, nil
 }
