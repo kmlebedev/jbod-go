@@ -2,6 +2,11 @@
 # TYPE jbod_collection_complete gauge
 jbod_collection_complete{enclosure="10:0:0:0",enclosure_id="10:0:0:0"} 0
 jbod_collection_complete{enclosure="1:0:0:0",enclosure_id="ENC1"} 1
+# HELP jbod_component_flag A status bit an element has set, under a stable name; the series exists only while the bit is set, so 1 is its only value
+# TYPE jbod_component_flag gauge
+jbod_component_flag{component="PSU A",component_id="1,0",enclosure="1:0:0:0",enclosure_id="ENC1",flag="ac_fail",type="power supply"} 1
+jbod_component_flag{component="PSU A",component_id="1,0",enclosure="1:0:0:0",enclosure_id="ENC1",flag="fail",type="power supply"} 1
+jbod_component_flag{component="SLOT 00",component_id="0,0",enclosure="1:0:0:0",enclosure_id="ENC1",flag="predicted_failure",type="array device slot"} 1
 # HELP jbod_component_info Condition of one element; status is the enclosure's own spelling
 # TYPE jbod_component_info gauge
 jbod_component_info{component="PSU A",component_id="1,0",enclosure="1:0:0:0",enclosure_id="ENC1",health="critical",status="Critical",type="power supply"} 1
@@ -10,6 +15,14 @@ jbod_component_info{component="SLOT 01",component_id="0,1",enclosure="1:0:0:0",e
 jbod_component_info{component="TEMP A",component_id="3,0",enclosure="1:0:0:0",enclosure_id="ENC1",health="ok",status="OK",type="temperature sensor"} 1
 jbod_component_info{component="TEMP B",component_id="3,1",enclosure="1:0:0:0",enclosure_id="ENC1",health="unknown",status="Unsupported",type="temperature sensor"} 1
 jbod_component_info{component="VOLT 12V",component_id="4,0",enclosure="1:0:0:0",enclosure_id="ENC1",health="ok",status="OK",type="voltage sensor"} 1
+# HELP jbod_enclosure_component_flags Elements of a type with a status bit set, for every bit the enclosure reports for that type; 0 when none has it
+# TYPE jbod_enclosure_component_flags gauge
+jbod_enclosure_component_flags{enclosure="1:0:0:0",enclosure_id="ENC1",flag="ac_fail",type="power supply"} 1
+jbod_enclosure_component_flags{enclosure="1:0:0:0",enclosure_id="ENC1",flag="dc_fail",type="power supply"} 0
+jbod_enclosure_component_flags{enclosure="1:0:0:0",enclosure_id="ENC1",flag="fail",type="power supply"} 1
+jbod_enclosure_component_flags{enclosure="1:0:0:0",enclosure_id="ENC1",flag="fault_sensed",type="array device slot"} 0
+jbod_enclosure_component_flags{enclosure="1:0:0:0",enclosure_id="ENC1",flag="ident",type="array device slot"} 0
+jbod_enclosure_component_flags{enclosure="1:0:0:0",enclosure_id="ENC1",flag="predicted_failure",type="array device slot"} 1
 # HELP jbod_enclosure_components Declared elements per enclosure, by type and condition
 # TYPE jbod_enclosure_components gauge
 jbod_enclosure_components{enclosure="1:0:0:0",enclosure_id="ENC1",health="critical",type="power supply"} 1
@@ -64,10 +77,6 @@ jbod_enclosure_slots{enclosure="10:0:0:0",enclosure_id="10:0:0:0",occupancy="una
 jbod_enclosure_slots{enclosure="1:0:0:0",enclosure_id="ENC1",occupancy="empty"} 0
 jbod_enclosure_slots{enclosure="1:0:0:0",enclosure_id="ENC1",occupancy="occupied"} 0
 jbod_enclosure_slots{enclosure="1:0:0:0",enclosure_id="ENC1",occupancy="unavailable"} 0
-# HELP jbod_fan_rpm DEPRECATED, replaced by jbod_fan_speed_rpm: the labels omit the enclosure, so identical fans of two shelves overwrite each other. Removal is planned for 2.0.
-# TYPE jbod_fan_rpm gauge
-jbod_fan_rpm{device="Fan A",slot="2,0"} 1200
-jbod_fan_rpm{device="Fan B",slot="2,1"} 3000
 # HELP jbod_fan_speed_rpm Speed of a cooling element, addressed by enclosure and component
 # TYPE jbod_fan_speed_rpm gauge
 jbod_fan_speed_rpm{component="Fan A",component_id="2,0",enclosure="1:0:0:0",enclosure_id="ENC1"} 1200

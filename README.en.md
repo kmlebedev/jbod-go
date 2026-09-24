@@ -291,6 +291,31 @@ as a percentage of the sensor's nominal value — high limits above it, low
 limits below it — and the nominal value is on no page, so the table prints
 such a limit with a `%`.
 
+The status bits of an element — `predicted_failure`, `fault_sensed`,
+`ident`, `do_not_remove`, `swap`, and for a power supply `ac_fail`,
+`dc_fail`, `overtemp_warning`, `dc_overcurrent` and the rest — are
+published in two shapes. `jbod_component_flag` is per element and carries
+only the bits that are set: nearly every bit is 0 nearly all the time (on an
+H4060-J 25 of a module's 1961 bits are set, all of them normal states), and
+a zero for each was 3922 series per host that said nothing. A bit that is
+missing for an element present in `jbod_component_info` is clear, not
+unread. `jbod_enclosure_component_flags` is per enclosure, type and bit: how
+many elements have it, zeros included. That series is always there, so it
+is the one an alert is written on:
+`jbod_enclosure_component_flags{flag="predicted_failure"} > 0`, or "fewer
+cables" —
+`delta(jbod_enclosure_component_flags{type="sas connector",flag="mated"}[10m]) < 0`;
+`jbod_component_flag` then says which element. `hot_swap` is not published
+at all: it is what an element can do rather than its state, and it is set on
+every supply, fan and module. `report` marks the module that is answering. The name of
+a bit comes from the SES-3 field, not from sg_ses's spelling, which differs
+between element types and versions ("Fault reqstd" and "Fault requested"
+are one bit). A field the table does not know is not published, which also
+keeps out the numbers printed in the same "Name=N" shape — "Actual speed=0
+rpm", "Time until power cycle=1". An element whose status is "No access
+allowed" gets no bits: that is half the bays of a two-module shelf, and the
+other module answers for them.
+
 The page is read raw (`--raw`) and decoded against the Configuration page,
 not from sg_ses's text. The text puts the limits on the lines under an
 "Element N descriptor:" header, laid out differently between versions, and
@@ -462,7 +487,6 @@ Tuning flags (`--help` shows the defaults):
 | `--scrape-timeout` | 2m | timeout of one full collection |
 | `--concurrency` | 12 | external commands allowed to run at once |
 | `--cache-ttl` | 0s | serve the previous snapshot for this long |
-| `--deprecated-metrics` | true | also export the pre-1.1 series (`jbod_fan_rpm`) |
 | `--log-level` | info | debug, info, warn or error |
 | `--log-format` | json | json for systemd, text for a terminal |
 
@@ -507,7 +531,6 @@ The metric names and label sets of the original are kept:
 | --- | --- |
 | number_of_enclosures | none |
 | jbod_slot_temperature | slot, enclosure |
-| jbod_fan_rpm | device, slot — **deprecated**, see below |
 
 Added in 1.1:
 
@@ -524,6 +547,8 @@ Added in 1.2:
 | jbod_enclosure_health | gauge | enclosure, enclosure_id, source, level | 1 on the current level; source is `hardware` or `components` |
 | jbod_enclosure_components | gauge | enclosure, enclosure_id, type, health | elements per type in each condition |
 | jbod_component_info | gauge | enclosure, enclosure_id, component, component_id, type, status, health | one element, always 1 |
+| jbod_component_flag | gauge | enclosure, enclosure_id, component, component_id, type, flag | a status bit an element has set; the series exists only while it is set, its value is always 1 |
+| jbod_enclosure_component_flags | gauge | enclosure, enclosure_id, type, flag | elements of a type that have the bit set, for every bit the enclosure reports; 0 when none has it |
 | jbod_sensor_temperature_celsius | gauge | enclosure, enclosure_id, component, component_id, type | temperature of an enclosure element |
 | jbod_sensor_voltage_volts | gauge | the same | voltage |
 | jbod_sensor_current_amps | gauge | the same | current |
@@ -622,29 +647,25 @@ The response is written by `promhttp`, so content negotiation (text 0.0.4 and
 OpenMetrics), gzip and the headers Prometheus expects come with it, and none
 of that is hand-written in this repository.
 
-### Migrating off jbod_fan_rpm
+### jbod_fan_rpm is removed
 
-In `jbod_fan_rpm` the `device` label is the fan description and `slot` is the
-sg_ses index. Both are per-shelf, so "Fan A" at index `2,0` collides with
-every other shelf in the rack and the last value written wins. It cannot be
-fixed in place: changing the label set would change the meaning of a series
-dashboards already read.
-
-So the corrected metric is a new name:
+In `jbod_fan_rpm` the `device` label was the fan description and `slot` the
+sg_ses index. Both are per-shelf, so "Fan A" at index `2,0` collided with
+every other shelf in the rack and the last value written won. The corrected
+metric is a new name:
 
 ```
 jbod_fan_speed_rpm{enclosure="1:0:0:0",enclosure_id="naa.5000...01",component="Fan A",component_id="2,0"} 1200
 jbod_fan_speed_rpm{enclosure="10:0:0:0",enclosure_id="naa.5000...02",component="Fan A",component_id="2,0"} 4800
 ```
 
-The migration:
-
-1. upgrade the exporter: both series are served at once and nothing breaks;
-2. move dashboards and rules to `jbod_fan_speed_rpm`;
-3. run the exporter with `--deprecated-metrics=false` and check nothing went
-   missing;
-4. leave it there. Removing `jbod_fan_rpm` is planned for 2.0 at the
-   earliest.
+`jbod_fan_rpm` was removed ahead of the 2.0 it was promised for: eight
+series per host that carried nothing `jbod_fan_speed_rpm` does not, and wrong
+numbers on a rack of several shelves. A dashboard or rule that reads it
+moves over by renaming the metric and its labels: `device` → `component`,
+`slot` → `component_id`, plus `enclosure` and `enclosure_id`. The
+`--deprecated-metrics` flag is still accepted, so a unit file that passes it
+keeps starting the exporter, but it does nothing and warns that it does not.
 
 Every scrape collects fresh values. Hardware that disappeared drops out of
 the output. An unavailable temperature is skipped (the CLI shows ERR); an

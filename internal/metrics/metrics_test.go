@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -30,7 +31,7 @@ func snapshot() jbod.Snapshot {
 
 func TestEncode(t *testing.T) {
 	t.Parallel()
-	got := encode(t, snapshot(), map[string]int{jbod.CollectorFans: 3}, Options{Deprecated: true})
+	got := encode(t, snapshot(), map[string]int{jbod.CollectorFans: 3}, Options{})
 	for _, want := range []string{
 		"# TYPE number_of_enclosures gauge\nnumber_of_enclosures 1\n",
 		// A disk without a reading is skipped, not exported as zero.
@@ -55,8 +56,13 @@ func TestEncode(t *testing.T) {
 	if n := strings.Count(got, `jbod_slot_temperature{enclosure="1:0:0:0",slot="Slot 01"`); n != 1 {
 		t.Errorf("%d series for one label set:\n%s", n, got)
 	}
-	if !strings.Contains(got, `jbod_fan_rpm{device="Fan A",slot="2,0"} 1500`) || strings.Count(got, "jbod_fan_rpm{") != 1 {
+	if !strings.Contains(got, `jbod_fan_speed_rpm{component="Fan A",component_id="2,0",enclosure="1:0:0:0",`) ||
+		!strings.Contains(got, `} 1500`) || strings.Count(got, "jbod_fan_speed_rpm{") != 1 {
 		t.Errorf("fan series not collapsed:\n%s", got)
+	}
+	// jbod_fan_rpm is gone, with nothing that brings it back.
+	if strings.Contains(got, "jbod_fan_rpm") {
+		t.Errorf("the removed series is published:\n%s", got)
 	}
 }
 
@@ -64,7 +70,7 @@ func TestEncodeIncompleteCollection(t *testing.T) {
 	t.Parallel()
 	s := snapshot()
 	s.Up = false
-	got := encode(t, s, s.Errors, Options{Deprecated: true})
+	got := encode(t, s, s.Errors, Options{})
 	if !strings.Contains(got, "jbod_up 0") {
 		t.Errorf("an incomplete pass must report jbod_up 0:\n%s", got)
 	}
@@ -81,10 +87,10 @@ func TestEncodeEscapesLabels(t *testing.T) {
 		Fans:  []jbod.Fan{{Description: "Fan\\A", Index: `2,"0"`, Speed: jbod.Some(int64(900))}},
 		Up:    true,
 	}
-	got := encode(t, s, nil, Options{Deprecated: true})
+	got := encode(t, s, nil, Options{})
 	for _, want := range []string{
 		`jbod_slot_temperature{enclosure="enc\n1",slot="Slot \"1\"\\x"} 20`,
-		`jbod_fan_rpm{device="Fan\\A",slot="2,\"0\""} 900`,
+		`jbod_fan_speed_rpm{component="Fan\\A",component_id="2,\"0\"",enclosure="",enclosure_id=""} 900`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in\n%s", want, got)
@@ -96,7 +102,7 @@ func TestEncodeEscapesLabels(t *testing.T) {
 // of the output if someone adds one without touching this package.
 func TestEncodeUnknownCollector(t *testing.T) {
 	t.Parallel()
-	got := encode(t, jbod.Snapshot{Up: true}, map[string]int{"psu": 2, jbod.CollectorDisks: 1}, Options{Deprecated: true})
+	got := encode(t, jbod.Snapshot{Up: true}, map[string]int{"psu": 2, jbod.CollectorDisks: 1}, Options{})
 	if !strings.Contains(got, `jbod_scrape_errors_total{collector="psu"} 2`) {
 		t.Errorf("unknown collector missing:\n%s", got)
 	}
@@ -109,13 +115,10 @@ func TestEncodeUnknownCollector(t *testing.T) {
 }
 
 // TestFanSeriesDoNotCollideAcrossEnclosures is the readiness criterion of
-// ROADMAP 4: two shelves with identically named fans are two fans.
-//
-// jbod_fan_rpm labels a cooling element with its description and its SES
-// index only, and both are per-shelf, so "Fan A" at index 2,0 collides with
-// every other shelf in the rack and the last one written wins. The fix
-// cannot be made in place without changing what the existing series means,
-// so it is a new name that carries the enclosure.
+// ROADMAP 4: two shelves with identically named fans are two fans. The
+// description and the SES index are per shelf, so "Fan A" at index 2,0 is on
+// every shelf in the rack; jbod_fan_rpm, labelled with those two only, let
+// the last shelf overwrite the others and is removed.
 func TestFanSeriesDoNotCollideAcrossEnclosures(t *testing.T) {
 	t.Parallel()
 	s := jbod.Snapshot{
@@ -129,7 +132,7 @@ func TestFanSeriesDoNotCollideAcrossEnclosures(t *testing.T) {
 		},
 		Up: true,
 	}
-	got := encode(t, s, nil, Options{Deprecated: true})
+	got := encode(t, s, nil, Options{})
 
 	for _, want := range []string{
 		`jbod_fan_speed_rpm{component="Fan A",component_id="2,0",enclosure="1:0:0:0",enclosure_id="naa.5000000000000001"} 1200`,
@@ -140,25 +143,10 @@ func TestFanSeriesDoNotCollideAcrossEnclosures(t *testing.T) {
 		}
 	}
 	if n := strings.Count(got, "jbod_fan_speed_rpm{"); n != 2 {
-		t.Errorf("got %d corrected fan series, want 2:\n%s", n, got)
+		t.Errorf("got %d fan series, want 2:\n%s", n, got)
 	}
-	// The old series still collides, which is why it is deprecated rather
-	// than quietly relabelled: relabelling it would change the meaning of
-	// a series that dashboards already read.
-	if n := strings.Count(got, "jbod_fan_rpm{"); n != 1 {
-		t.Errorf("got %d deprecated fan series, want the single colliding one:\n%s", n, got)
-	}
-	if !strings.Contains(got, "# HELP jbod_fan_rpm DEPRECATED") {
-		t.Error("the deprecated series is not marked as such")
-	}
-
-	// And it can be switched off once nothing reads it.
-	without := encode(t, s, nil, Options{})
-	if strings.Contains(without, "jbod_fan_rpm{") {
-		t.Error("the deprecated series survived Options{Deprecated: false}")
-	}
-	if n := strings.Count(without, "jbod_fan_speed_rpm{"); n != 2 {
-		t.Errorf("the corrected series must stay: %s", without)
+	if strings.Contains(got, "jbod_fan_rpm") {
+		t.Errorf("the removed series is published:\n%s", got)
 	}
 }
 
@@ -456,5 +444,64 @@ func TestSensorThresholdUnits(t *testing.T) {
 	out = encode(t, snapshot, nil, Options{})
 	if strings.Contains(out, "_threshold_") {
 		t.Errorf("limits in a unit no series is named for were published:\n%s", out)
+	}
+}
+
+// TestComponentFlags checks the two shapes the element bits are published
+// in: per element only the bits that are set, always 1; per enclosure, type
+// and bit the count of elements that have it, zeros included. Nothing is
+// published for a bay the module cannot reach or for a field that is not a
+// bit, and each module of a two-module shelf keeps its own series: both
+// share the enclosure identifier and the element index.
+func TestComponentFlags(t *testing.T) {
+	t.Parallel()
+	out := encode(t, fullSnapshot(), nil, Options{})
+	for _, want := range []string{
+		"# TYPE jbod_component_flag gauge",
+		`jbod_component_flag{component="SLOT 00",component_id="0,0",enclosure="1:0:0:0",enclosure_id="ENC1",flag="predicted_failure",type="array device slot"} 1`,
+		`jbod_component_flag{component="PSU A",component_id="1,0",enclosure="1:0:0:0",enclosure_id="ENC1",flag="ac_fail",type="power supply"} 1`,
+		`jbod_enclosure_component_flags{enclosure="1:0:0:0",enclosure_id="ENC1",flag="predicted_failure",type="array device slot"} 1`,
+		`jbod_enclosure_component_flags{enclosure="1:0:0:0",enclosure_id="ENC1",flag="fault_sensed",type="array device slot"} 0`,
+		`jbod_enclosure_component_flags{enclosure="1:0:0:0",enclosure_id="ENC1",flag="dc_fail",type="power supply"} 0`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing:\n%s", want)
+		}
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "jbod_component_flag{") && !strings.HasSuffix(line, "} 1") {
+			t.Errorf("a clear bit has a series: %s", line)
+		}
+	}
+	for _, unwanted := range []string{
+		`component_id="0,1",enclosure="1:0:0:0",enclosure_id="ENC1",flag=`,
+		`flag="actual_speed"`, `flag="Actual speed"`, `flag="hot_swap"`,
+	} {
+		if strings.Contains(out, unwanted) {
+			t.Errorf("published: %s", unwanted)
+		}
+	}
+
+	// The same shelf through its second module.
+	snapshot := fullSnapshot()
+	second := snapshot.Status[0]
+	second.Enclosure = "1:0:31:0"
+	second.Components = slices.Clone(second.Components)
+	for i := range second.Components {
+		second.Components[i].Enclosure = "1:0:31:0"
+	}
+	snapshot.Status = append(snapshot.Status, second)
+	out = encode(t, snapshot, nil, Options{})
+	for _, enclosure := range []string{"1:0:0:0", "1:0:31:0"} {
+		for _, want := range []string{
+			`jbod_component_flag{component="PSU A",component_id="1,0",enclosure="` + enclosure +
+				`",enclosure_id="ENC1",flag="ac_fail",type="power supply"} 1`,
+			`jbod_enclosure_component_flags{enclosure="` + enclosure +
+				`",enclosure_id="ENC1",flag="ac_fail",type="power supply"} 1`,
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("the module %s lost its series:\n%s", enclosure, want)
+			}
+		}
 	}
 }

@@ -45,6 +45,16 @@ var (
 		"jbod_component_info",
 		"Condition of one element; status is the enclosure's own spelling",
 		[]string{"enclosure", "enclosure_id", "component", "component_id", "type", "status", "health"}, nil)
+	descComponentFlag = prometheus.NewDesc(
+		"jbod_component_flag",
+		"A status bit an element has set, under a stable name; the series exists only while "+
+			"the bit is set, so 1 is its only value",
+		append(slices.Clone(componentLabels), "flag"), nil)
+	descComponentFlags = prometheus.NewDesc(
+		"jbod_enclosure_component_flags",
+		"Elements of a type with a status bit set, for every bit the enclosure reports for "+
+			"that type; 0 when none has it",
+		[]string{"enclosure", "enclosure_id", "type", "flag"}, nil)
 	descMapping = prometheus.NewDesc(
 		"jbod_slot_sas_address_info",
 		"Bay, SAS address and the disk the kernel sees in it",
@@ -132,7 +142,8 @@ var thresholdSeries = []struct {
 // healthDescriptors is what this file can publish, for Describe.
 var healthDescriptors = func() []*prometheus.Desc {
 	descs := []*prometheus.Desc{
-		descEnclosureHealth, descComponents, descComponentInfo, descMapping,
+		descEnclosureHealth, descComponents, descComponentInfo, descComponentFlag, descComponentFlags,
+		descMapping,
 		descSnapshotTimestamp, descCollectionComplete, descPageRead,
 		descGenerationChanged, descComponentsMissing,
 	}
@@ -204,12 +215,49 @@ func collectComponents(s *sink, snapshot jbod.Snapshot) {
 	for _, k := range order {
 		s.gauge(descComponents, float64(counts[k]), k.enclosure, k.id, k.kind, string(k.level))
 	}
+	// The bits behind the status: a power supply that is OK with "AC fail"
+	// set is on its last input, and a bay that is OK with "Predicted
+	// failure" set holds a disk that said it is dying.
+	//
+	// They are published in two shapes, because nearly all of them are 0
+	// nearly all the time: on a WD H4060-J 25 of the 1961 bits each module
+	// reports are set, and every one of those is a normal state. Publishing
+	// each bit as 0 or 1 was 3922 series per host that said nothing. So:
+	//
+	//   - per element, only the bits that are set. A bit that clears ends
+	//     its series; that the element was read at all is
+	//     jbod_component_info, so a missing flag next to a present element
+	//     means the bit is clear, not that nobody looked.
+	//   - per enclosure, type and bit, the count of elements that have it,
+	//     zeros included. That series is always there, so the moment a bit
+	//     sets or clears is a step with history — "predicted failure went
+	//     from 0 to 1", "one connector fewer is mated" — which is what an
+	//     alert is written on. The per-element series then says which.
+	type flagKey struct{ enclosure, id, kind, flag string }
+	flagCounts := map[flagKey]int{}
+	var flagOrder []flagKey
 	for _, status := range snapshot.Status {
 		for _, c := range status.Components {
 			s.gauge(descComponentInfo, 1,
 				status.Enclosure, status.Address, c.Name, c.Index,
 				c.Type, c.Status.Or(""), string(c.Health))
+			for _, flag := range c.StatusFlags() {
+				k := flagKey{status.Enclosure, status.Address, c.Type, flag.Name}
+				if _, seen := flagCounts[k]; !seen {
+					flagOrder = append(flagOrder, k)
+					flagCounts[k] = 0
+				}
+				if !flag.Set {
+					continue
+				}
+				flagCounts[k]++
+				s.gauge(descComponentFlag, 1,
+					status.Enclosure, status.Address, c.Name, c.Index, c.Type, flag.Name)
+			}
 		}
+	}
+	for _, k := range flagOrder {
+		s.gauge(descComponentFlags, float64(flagCounts[k]), k.enclosure, k.id, k.kind, k.flag)
 	}
 }
 
