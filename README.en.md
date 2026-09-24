@@ -562,7 +562,8 @@ Added in 1.3:
 | Metric | Type | Labels | Meaning |
 | --- | --- | --- | --- |
 | jbod_sas_phy_info | gauge | host, phy, port, sas_address, device_type, negotiated_link_rate | one phy, always 1 |
-| jbod_sas_phy_state | gauge | host, phy, port, sas_address, device_type, state | 1 on the phy's state, 0 on the others: up, disabled, failed, spin-up hold, unknown |
+| jbod_sas_phy_state | gauge | host, phy, port, sas_address, device_type, state | the phy's current state — up, disabled, failed, spin-up hold or unknown; one series per phy, always 1 |
+| jbod_sas_device_phys | gauge | host, sas_address, device_type, state | phys of one device — an expander or the HBA — in each state; 0 when none is |
 | jbod_sas_phy_negotiated_link_rate_gbps | gauge | host, phy, port, sas_address, device_type | the rate; no series when there is none |
 | jbod_sas_phy_invalid_dword_total | counter | the same | invalid dwords |
 | jbod_sas_phy_running_disparity_error_total | counter | the same | running disparity errors |
@@ -582,11 +583,17 @@ HBA. A counter the transport did not expose gets no series at all, because a
 zero here would mean a clean link. The exporter reads sysfs only: SMP costs
 one request per phy and stays out of the scrape.
 
-The state of a phy is a state set, one series per state with 1 on the current
-one. `disabled`, `failed` and `unknown` are three diagnoses, and "up or not"
-folded them into one zero. A label on the info series instead would end one
-series and start another exactly when a link changes. Vacant is not in the
-set: a vacant phy gets no series.
+The state of a phy is published in two shapes, the way element bits are.
+`jbod_sas_phy_state` is one series per phy carrying its current state, with
+the value 1: `disabled`, `failed` and `unknown` are three diagnoses, and "up
+or not" folded them into one zero. A full state set said the same with four
+zeros per phy — 796 of 995 series on an H4060-J host. `jbod_sas_device_phys`
+is per device, expander or HBA, and state: how many of its phys are in it,
+zeros included. When a link changes state its `jbod_sas_phy_state` series
+ends and another begins; the per-device count is always there, so it is what
+an alert is written on — `delta(jbod_sas_device_phys{state="up"}[10m]) < 0`,
+"fewer links up on this expander" — and `jbod_sas_phy_state{state!="up"}`
+then shows which phy. Vacant is in neither: a vacant phy gets no series.
 
 An expander phy with no rate whose four counters all exist and all fail to
 read gets no series of its own. The driver answers those attributes by asking

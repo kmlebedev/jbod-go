@@ -549,7 +549,8 @@ stderr.
 | Метрика | Тип | Labels | Значение |
 | --- | --- | --- | --- |
 | jbod_sas_phy_info | gauge | host, phy, port, sas_address, device_type, negotiated_link_rate | один phy, всегда 1 |
-| jbod_sas_phy_state | gauge | host, phy, port, sas_address, device_type, state | 1 у состояния phy, 0 у остальных: up, disabled, failed, spin-up hold, unknown |
+| jbod_sas_phy_state | gauge | host, phy, port, sas_address, device_type, state | текущее состояние phy — up, disabled, failed, spin-up hold или unknown; одна серия на phy, всегда 1 |
+| jbod_sas_device_phys | gauge | host, sas_address, device_type, state | сколько phy устройства — экспандера или HBA — в каждом состоянии; 0, если ни одного |
 | jbod_sas_phy_negotiated_link_rate_gbps | gauge | host, phy, port, sas_address, device_type | скорость линка; серии нет, если скорости нет |
 | jbod_sas_phy_invalid_dword_total | counter | те же | невалидные dword |
 | jbod_sas_phy_running_disparity_error_total | counter | те же | ошибки running disparity |
@@ -568,11 +569,19 @@ Labels — хост и phy, а не корпус: phy принадлежит HBA
 линк. Экспортёр читает только sysfs: SMP стоит по запросу на phy и в scrape
 не ходит.
 
-Состояние phy — набор серий, по одной на состояние, с единицей у текущего.
-`disabled`, `failed` и `unknown` — три разных диагноза, и «поднят или нет»
-складывал их в один ноль. Label на info-серии вместо этого обрывал бы одну
-серию и начинал другую ровно в момент, когда линк меняется. Вакантного
-состояния в наборе нет: такой phy серий не получает.
+Состояние phy публикуется в двух видах, как биты элементов.
+`jbod_sas_phy_state` — одна серия на phy с его текущим состоянием и
+значением 1: `disabled`, `failed` и `unknown` — три разных диагноза, и
+«поднят или нет» складывал их в один ноль. Полный набор состояний говорил
+то же самое четырьмя нулями на phy — 796 из 995 серий на хосте с H4060-J.
+`jbod_sas_device_phys` — по каждому устройству, экспандеру или HBA, и
+каждому состоянию: сколько его phy в нём, нули тоже. Когда линк меняет
+состояние, его серия в `jbod_sas_phy_state` заканчивается и начинается
+другая; счётчик по устройству есть всегда, поэтому алерт пишется на него —
+`delta(jbod_sas_device_phys{state="up"}[10m]) < 0` («на экспандере стало
+меньше поднятых линков»), а `jbod_sas_phy_state{state!="up"}` затем
+показывает, какой phy. Вакантного состояния нет ни там, ни там: такой phy
+серий не получает.
 
 Phy экспандера, у которого нет скорости и все четыре счётчика существуют, но
 не читаются, отдельных серий не получает. Драйвер отвечает на эти атрибуты,

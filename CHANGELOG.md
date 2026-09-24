@@ -7,6 +7,20 @@ built from a checkout.
 
 ## Unreleased
 
+### Changed
+
+- `jbod_sas_phy_state` carries only the phy's current state, one series per
+  phy with the value 1, instead of a series per state with zeros on the
+  other four. The zeros were 796 of the 995 series on a WD H4060-J host and
+  said nothing a single series does not. The new
+  `jbod_sas_device_phys{host,sas_address,device_type,state}` counts the phys
+  of each SAS device — each expander and the HBA — in each state, zeros
+  included, 35 series on that host: when a link changes state its per-phy
+  series ends and another begins, and the count is the series with history
+  an alert is written on. An expression that read the zeros, such as
+  `jbod_sas_phy_state{state="up"} == 0`, now finds nothing; the same
+  question is `jbod_sas_phy_state{state!="up"}`.
+
 ### Removed
 
 - `jbod_fan_rpm`, ahead of the 2.0 its removal was promised for. This breaks

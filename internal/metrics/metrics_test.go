@@ -304,11 +304,13 @@ func TestPHYSeries(t *testing.T) {
 	for _, want := range []string{
 		`jbod_sas_phy_invalid_dword_total{device_type="end device",host="1",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41"} 1274`,
 		`jbod_sas_phy_negotiated_link_rate_gbps{device_type="end device",host="1",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40"} 12`,
-		// The state set names the diagnosis instead of folding it into
+		// The state names the diagnosis instead of folding it into
 		// "not up".
 		`jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:0",port="",sas_address="0x5000ccab05629d3f",state="disabled"} 1`,
-		`jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:0",port="",sas_address="0x5000ccab05629d3f",state="up"} 0`,
 		`jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f",state="unknown"} 1`,
+		// The count per device carries the zeros.
+		`jbod_sas_device_phys{device_type="edge expander",host="1",sas_address="0x5000ccab05629d3f",state="up"} 0`,
+		`jbod_sas_device_phys{device_type="edge expander",host="1",sas_address="0x5000ccab05629d3f",state="disabled"} 1`,
 		// A phy with no link that answered keeps its counters.
 		`jbod_sas_phy_invalid_dword_total{device_type="edge expander",host="1",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f"} 0`,
 		// The one the expander declined to describe is counted, not listed.
@@ -328,8 +330,10 @@ func TestPHYSeries(t *testing.T) {
 		`jbod_sas_phy_negotiated_link_rate_gbps{device_type="edge expander"`,
 		// The unanswered phy has no series of its own, of any family.
 		`phy="phy-1:0:2"`,
-		// The series the state set replaced.
+		// The series the state replaced, and the zeros a full state set
+		// would carry per phy.
 		"jbod_sas_phy_up",
+		`state="up"} 0` + "\n" + `jbod_sas_phy_state`,
 		// Vacant is never published: a vacant phy gets no series.
 		`state="vacant"`,
 	} {
@@ -337,8 +341,8 @@ func TestPHYSeries(t *testing.T) {
 			t.Errorf("a value was published for something nobody read:\n%s", unwanted)
 		}
 	}
-	// The state lives in the state set only. As a label on the info series
-	// it would end that series every time a link changed.
+	// The state lives in jbod_sas_phy_state only. As a label on the info
+	// series it would end that series every time a link changed too.
 	for _, line := range strings.Split(out, "\n") {
 		if strings.HasPrefix(line, "jbod_sas_phy_info{") && strings.Contains(line, "state=") {
 			t.Errorf("the info series still carries the state: %s", line)
@@ -352,35 +356,62 @@ func TestPHYSeries(t *testing.T) {
 	}
 }
 
-// TestPHYStateSet checks the invariant the state set exists for: every
-// published phy has one series per state, and exactly one of them is 1. A
-// phy with two 1s, or none, would make count by (state) disagree with the
-// number of phys.
-func TestPHYStateSet(t *testing.T) {
+// TestPHYStateAndDeviceCounts checks the two shapes the phy state is
+// published in. Every published phy has exactly one state series, and it is
+// 1: a full state set would add four zeros per phy, 796 of 995 series on a
+// real host. Every device has one count per state, zeros included, and the
+// counts of a device add up to its published phys — the unanswered phy is
+// in neither, it is jbod_sas_expander_phys_unanswered's.
+func TestPHYStateAndDeviceCounts(t *testing.T) {
 	t.Parallel()
 	out := encode(t, fullSnapshot(), nil, Options{})
-	ones, series := map[string]int{}, map[string]int{}
+	label := func(line, name string) string {
+		start := strings.Index(line, name+`="`) + len(name+`="`)
+		return line[start : start+strings.Index(line[start:], `"`)]
+	}
+	perPHY := map[string]int{}
+	perDevice := map[string]map[string]string{}
 	for _, line := range strings.Split(out, "\n") {
-		if !strings.HasPrefix(line, "jbod_sas_phy_state{") {
-			continue
-		}
-		start := strings.Index(line, `phy="`) + len(`phy="`)
-		phy := line[start : start+strings.Index(line[start:], `"`)]
-		series[phy]++
-		if strings.HasSuffix(line, " 1") {
-			ones[phy]++
+		switch {
+		case strings.HasPrefix(line, "jbod_sas_phy_state{"):
+			perPHY[label(line, "phy")]++
+			if !strings.HasSuffix(line, "} 1") {
+				t.Errorf("a phy state series is not 1: %s", line)
+			}
+		case strings.HasPrefix(line, "jbod_sas_device_phys{"):
+			address := label(line, "sas_address")
+			if perDevice[address] == nil {
+				perDevice[address] = map[string]string{}
+			}
+			perDevice[address][label(line, "state")] = line[strings.LastIndex(line, " ")+1:]
 		}
 	}
 	// Four phys are published; phy-1:0:2 is the unanswered one.
-	if len(series) != 4 {
-		t.Fatalf("state set covers %d phys, want 4: %v", len(series), series)
+	if len(perPHY) != 4 {
+		t.Fatalf("state series for %d phys, want 4: %v", len(perPHY), perPHY)
 	}
-	for phy, n := range series {
-		if n != 5 {
-			t.Errorf("%s has %d state series, want 5 (up, disabled, failed, spin-up hold, unknown)", phy, n)
+	for phy, n := range perPHY {
+		if n != 1 {
+			t.Errorf("%s has %d state series, want one", phy, n)
 		}
-		if ones[phy] != 1 {
-			t.Errorf("%s has %d states at 1, want exactly one", phy, ones[phy])
+	}
+	want := map[string]map[string]string{
+		"0x5000ccab05629d3f": {"up": "0", "disabled": "1", "failed": "0", "spin-up hold": "0", "unknown": "1"},
+		"0x500605b00b1e2f40": {"up": "1", "disabled": "0", "failed": "0", "spin-up hold": "0", "unknown": "0"},
+		"0x500605b00b1e2f41": {"up": "1", "disabled": "0", "failed": "0", "spin-up hold": "0", "unknown": "0"},
+	}
+	if len(perDevice) != len(want) {
+		t.Errorf("counts for %d devices, want %d: %v", len(perDevice), len(want), perDevice)
+	}
+	for address, states := range want {
+		got := perDevice[address]
+		if len(got) != len(states) {
+			t.Errorf("%s has %d state counts, want %d: %v", address, len(got), len(states), got)
+		}
+		for state, n := range states {
+			if got[state] != n {
+				t.Errorf("%s %s = %q, want %s", address, state, got[state], n)
+			}
 		}
 	}
 }

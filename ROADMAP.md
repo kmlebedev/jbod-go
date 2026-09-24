@@ -394,7 +394,9 @@ Capabilities: `sas.phy`, `sas.phy_error_counters`, `smp.phy_error_counters`.
 Запись ни одна из них не сообщает — скорость и состояние это отчёт, а не
 настройка.
 
-Метрики: `jbod_sas_phy_info`, `jbod_sas_phy_state` (набор состояний),
+Метрики: `jbod_sas_phy_info`, `jbod_sas_phy_state` (текущее состояние, одна
+серия на phy), `jbod_sas_device_phys` (число phy устройства в каждом
+состоянии, с нулями),
 `jbod_sas_phy_negotiated_link_rate_gbps`, четыре `*_total` со счётчиками и
 `jbod_sas_expander_phys_unanswered` — число phy экспандера, которые он не
 описал (так вакантный phy выглядит в sysfs); отдельных серий они не получают.
