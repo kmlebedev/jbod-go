@@ -111,13 +111,6 @@ func WithCacheTTL(d time.Duration) Option {
 	}
 }
 
-// WithDeprecatedMetrics keeps the pre-1.1 series in the output. It is on by
-// default so an upgrade does not blank a dashboard; an operator who has
-// finished migrating to jbod_fan_speed_rpm can turn it off.
-func WithDeprecatedMetrics(enabled bool) Option {
-	return func(e *Exporter) { e.encode.Deprecated = enabled }
-}
-
 // WithVersion labels jbod_build_info with the version of the running
 // binary. Without it the label says "unknown".
 func WithVersion(v string) Option {
@@ -143,7 +136,7 @@ func New(c Collector, opts ...Option) *Exporter {
 	e := &Exporter{
 		collector:     c,
 		scrapeTimeout: DefaultScrapeTimeout,
-		encode:        metrics.Options{Deprecated: true},
+		encode:        metrics.Options{},
 		version:       "unknown",
 		logger:        slog.New(slog.DiscardHandler),
 		totals:        map[string]int{},

@@ -7,6 +7,82 @@ built from a checkout.
 
 ## Unreleased
 
+### Changed
+
+- Sensor thresholds are published once per threshold profile instead of once
+  per sensor. `jbod_sensor_{temperature,voltage,current}_threshold_*` are
+  labelled `profile` and `threshold` only, and the new
+  `jbod_sensor_threshold_profile_info{enclosure_id,component,component_id,type,profile}`
+  says which profile a sensor uses. A profile is named by its limits
+  ("59/56/8/6", "20.5/20/-/-"), so it is the same on every shelf and scrape.
+  On a WD H4060-J the 102 sensors use 12 profiles: 392 threshold series
+  become 44 plus 102, and the host goes from 2457 series to 2211. Comparing
+  a reading with its limit is a join through the profile; an alert can use
+  the enclosure's own verdict in `jbod_enclosure_component_flags` instead.
+
+- The element series of a shelf are published once per shelf instead of
+  once per I/O module: `jbod_component_info`, `jbod_component_flag`,
+  `jbod_enclosure_component_flags`, `jbod_sensor_*` and
+  `jbod_slot_sas_address_info` lose the `enclosure` label and are addressed
+  by `enclosure_id` and `component_id`. This breaks a query that selects or
+  joins them by `enclosure`. Both modules of a two-module shelf report every
+  element, so each was published twice — 870 of 3327 series on a WD H4060-J
+  host, down to 2457. The value is the answer of the module best placed to
+  give it: one with access to the element over one that answers "No access
+  allowed", then one whose collection was complete, then the first by SCSI
+  address. The thirty bays each module could not reach, which read as
+  unknown in the series of that module, now come with their owner's status
+  and disk, and a module that stops answering no longer ends the element
+  series; which module answered is in the per-module series, which keep the
+  label.
+
+- `jbod_sas_phy_state` carries only the phy's current state, one series per
+  phy with the value 1, instead of a series per state with zeros on the
+  other four. The zeros were 796 of the 995 series on a WD H4060-J host and
+  said nothing a single series does not. The new
+  `jbod_sas_device_phys{host,sas_address,device_type,state}` counts the phys
+  of each SAS device — each expander and the HBA — in each state, zeros
+  included, 35 series on that host: when a link changes state its per-phy
+  series ends and another begins, and the count is the series with history
+  an alert is written on. An expression that read the zeros, such as
+  `jbod_sas_phy_state{state="up"} == 0`, now finds nothing; the same
+  question is `jbod_sas_phy_state{state!="up"}`.
+
+### Removed
+
+- `jbod_fan_rpm`, ahead of the 2.0 its removal was promised for. This breaks
+  a dashboard or rule that still reads it; `jbod_fan_speed_rpm` carries the
+  same value with `component` for `device`, `component_id` for `slot`, and
+  the `enclosure` and `enclosure_id` that `jbod_fan_rpm` lacked, which is
+  why it gave wrong numbers on a rack of several shelves. The
+  `--deprecated-metrics` flag that switched it is still accepted, is hidden
+  from the help and warns that it does nothing, so a unit file that passes
+  it keeps starting the exporter. `exporter.WithDeprecatedMetrics` and
+  `metrics.Options.Deprecated` are gone.
+
+### Added
+
+- `jbod_component_flag{enclosure,enclosure_id,component,component_id,type,flag}`
+  and `jbod_enclosure_component_flags{enclosure,enclosure_id,type,flag}`:
+  the status bits of every element under a stable name. The first carries
+  only the bits that are set, always as 1; the second counts, per enclosure,
+  type and bit, the elements that have it, zeros included, and is what an
+  alert is written on. Publishing every bit as 0 or 1 was 3922 series on a
+  WD H4060-J host, of which 50 were 1, all normal states; the two shapes are
+  about 250. `hot_swap` is a capability, set on every supply, fan and module,
+  and is not published. They cover predicted failure, fault sensed and requested, ident, do not remove, swap,
+  device off, and for a power supply AC fail, DC fail, over-temperature
+  failure and warning, DC over- and undervoltage and overcurrent. The bits
+  were parsed and never published, so a supply that was OK with AC fail set
+  looked like any other. Names are the SES-3 field names in snake case,
+  mapped from the spellings of sg3-utils 1.44 to 1.48 (`jbod.FlagName`),
+  because sg_ses spells one bit differently for different element types; a
+  field the table does not know gets no series, which is also what keeps
+  numbers such as "Actual speed=0 rpm" out. An element reported as "No
+  access allowed" gets no bits: its owning module reports it. The labels
+  include the enclosure, because both modules of a shelf share the
+  enclosure identifier and the element index.
+
 ### Fixed
 
 - The sensor thresholds were never read on real hardware. The parser

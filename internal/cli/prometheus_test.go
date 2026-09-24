@@ -336,3 +336,52 @@ func TestPrometheusLogsToStderr(t *testing.T) {
 		t.Errorf("log records leaked into stdout:\n%s", out.String())
 	}
 }
+
+// TestPrometheusAcceptsRemovedFlag keeps an existing unit file working after
+// jbod_fan_rpm was removed: the flag that switched it still parses, in both
+// spellings a migration guide suggested, warns that it does nothing and is
+// gone from the help. A flag that failed to parse would stop the exporter
+// over a series that no value of it can bring back.
+func TestPrometheusAcceptsRemovedFlag(t *testing.T) {
+	t.Parallel()
+	for _, flag := range []string{"--deprecated-metrics=false", "--deprecated-metrics"} {
+		t.Run(flag, func(t *testing.T) {
+			t.Parallel()
+			client := jbod.New(jbod.WithSysfs(sysfsRoot(t)), jbod.WithRunner(func(context.Context, string, ...string) (string, error) {
+				return "", nil
+			}))
+			port := freePort(t)
+			out := &syncBuffer{}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			served := make(chan error, 1)
+			go func() {
+				served <- Prometheus(ctx, []string{"-i", "127.0.0.1", "-p", port, flag}, out, io.Discard, client)
+			}()
+			waitFor(t, "the exporter to start", func() bool { return strings.Contains(out.String(), "==> Started on") })
+			if !strings.Contains(out.String(), "jbod_fan_rpm has been removed") {
+				t.Errorf("no warning that the flag does nothing:\n%s", out.String())
+			}
+			resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/metrics", port))
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if strings.Contains(string(body), "jbod_fan_rpm") {
+				t.Errorf("the removed series is back with %s", flag)
+			}
+			cancel()
+			if err := <-served; err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+	help := &syncBuffer{}
+	_ = Prometheus(context.Background(), []string{"--help"}, help, io.Discard, nil)
+	for _, line := range strings.Split(help.String(), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "--deprecated-metrics") {
+			t.Errorf("the help still offers the flag: %s", line)
+		}
+	}
+}

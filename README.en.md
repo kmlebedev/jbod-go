@@ -286,10 +286,56 @@ ID   NAME        TYPE                READING      VALUE  UNIT     STATUS       H
 
 The thresholds are the enclosure's own numbers from the Threshold In page,
 not a constant in an alerting rule: the next shelf declares different ones.
+
+In the metrics the thresholds are published per profile, not per sensor. A
+limit belongs to a class of sensor: on an H4060-J the 102 sensors use 12 sets
+of limits (all 60 bays one, the 14 expander and module dies and memories
+another), and 392 series per sensor carried 44 numbers. A profile is named by
+its limits, in the order high critical/high warning/low warning/low critical,
+with `-` for a limit not declared: `59/56/8/6`, `20.5/20/-/-`, so the name is
+the same on every shelf and every scrape. `jbod_sensor_threshold_profile_info`
+says which profile a sensor uses, and comparing a reading with its limit on a
+dashboard is a join through the profile:
+
+```
+jbod_sensor_temperature_celsius
+  * on(enclosure_id, component_id) group_left(profile) jbod_sensor_threshold_profile_info
+  >= on(profile) group_left() jbod_sensor_temperature_threshold_celsius{threshold="high_warning"}
+```
+
+An alert does not need the numbers: the enclosure compares its readings with
+its own limits and sets the element's bits, which are in
+`jbod_enclosure_component_flags` with their zeros —
+`jbod_enclosure_component_flags{flag=~"overtemp_warning|overtemp_failure|warn_over|crit_over|warn_under|crit_under"} > 0`.
 A temperature limit is in degrees. The page gives voltage and current limits
 as a percentage of the sensor's nominal value — high limits above it, low
 limits below it — and the nominal value is on no page, so the table prints
 such a limit with a `%`.
+
+The status bits of an element — `predicted_failure`, `fault_sensed`,
+`ident`, `do_not_remove`, `swap`, and for a power supply `ac_fail`,
+`dc_fail`, `overtemp_warning`, `dc_overcurrent` and the rest — are
+published in two shapes. `jbod_component_flag` is per element and carries
+only the bits that are set: nearly every bit is 0 nearly all the time (on an
+H4060-J 25 of a module's 1961 bits are set, all of them normal states), and
+a zero for each was 3922 series per host that said nothing. A bit that is
+missing for an element present in `jbod_component_info` is clear, not
+unread. `jbod_enclosure_component_flags` is per enclosure, type and bit: how
+many elements have it, zeros included. That series is always there, so it
+is the one an alert is written on:
+`jbod_enclosure_component_flags{flag="predicted_failure"} > 0`, or "fewer
+cables" —
+`delta(jbod_enclosure_component_flags{type="sas connector",flag="mated"}[10m]) < 0`;
+`jbod_component_flag` then says which element. `hot_swap` is not published
+at all: it is what an element can do rather than its state, and it is set on
+every supply, fan and module. `report` marks the module that is answering. The name of
+a bit comes from the SES-3 field, not from sg_ses's spelling, which differs
+between element types and versions ("Fault reqstd" and "Fault requested"
+are one bit). A field the table does not know is not published, which also
+keeps out the numbers printed in the same "Name=N" shape — "Actual speed=0
+rpm", "Time until power cycle=1". An element whose status is "No access
+allowed" gets no bits: that is half the bays of a two-module shelf, and the
+other module answers for them.
 
 The page is read raw (`--raw`) and decoded against the Configuration page,
 not from sg_ses's text. The text puts the limits on the lines under an
@@ -462,7 +508,6 @@ Tuning flags (`--help` shows the defaults):
 | `--scrape-timeout` | 2m | timeout of one full collection |
 | `--concurrency` | 12 | external commands allowed to run at once |
 | `--cache-ttl` | 0s | serve the previous snapshot for this long |
-| `--deprecated-metrics` | true | also export the pre-1.1 series (`jbod_fan_rpm`) |
 | `--log-level` | info | debug, info, warn or error |
 | `--log-format` | json | json for systemd, text for a terminal |
 
@@ -507,7 +552,6 @@ The metric names and label sets of the original are kept:
 | --- | --- |
 | number_of_enclosures | none |
 | jbod_slot_temperature | slot, enclosure |
-| jbod_fan_rpm | device, slot — **deprecated**, see below |
 
 Added in 1.1:
 
@@ -523,21 +567,41 @@ Added in 1.2:
 | --- | --- | --- | --- |
 | jbod_enclosure_health | gauge | enclosure, enclosure_id, source, level | 1 on the current level; source is `hardware` or `components` |
 | jbod_enclosure_components | gauge | enclosure, enclosure_id, type, health | elements per type in each condition |
-| jbod_component_info | gauge | enclosure, enclosure_id, component, component_id, type, status, health | one element, always 1 |
-| jbod_sensor_temperature_celsius | gauge | enclosure, enclosure_id, component, component_id, type | temperature of an enclosure element |
+| jbod_component_info | gauge | enclosure_id, component, component_id, type, status, health | one element of a shelf, always 1 |
+| jbod_component_flag | gauge | enclosure_id, component, component_id, type, flag | a status bit an element has set; the series exists only while it is set, its value is always 1 |
+| jbod_enclosure_component_flags | gauge | enclosure_id, type, flag | elements of a type that have the bit set, for every bit the shelf reports; 0 when none has it |
+| jbod_sensor_temperature_celsius | gauge | enclosure_id, component, component_id, type | temperature of an element of the shelf |
 | jbod_sensor_voltage_volts | gauge | the same | voltage |
 | jbod_sensor_current_amps | gauge | the same | current |
-| jbod_sensor_temperature_threshold_celsius | gauge | the same plus threshold | the enclosure's temperature limit: high_critical, high_warning, low_warning, low_critical |
-| jbod_sensor_voltage_threshold_percent | gauge | the same plus threshold | voltage limit in percent of nominal: high_* above it, low_* below it |
-| jbod_sensor_current_threshold_percent | gauge | the same plus threshold | current limit in percent above nominal: high_critical and high_warning only |
-| jbod_slot_sas_address_info | gauge | enclosure, enclosure_id, slot, component_id, sas_address, device, block_device | the slot → SAS address → disk mapping, always 1 |
+| jbod_sensor_threshold_profile_info | gauge | enclosure_id, component, component_id, type, profile | the threshold profile a sensor uses, always 1 |
+| jbod_sensor_temperature_threshold_celsius | gauge | profile, threshold | temperature limit of a profile: high_critical, high_warning, low_warning, low_critical |
+| jbod_sensor_voltage_threshold_percent | gauge | profile, threshold | voltage limit of a profile in percent of nominal: high_* above it, low_* below it |
+| jbod_sensor_current_threshold_percent | gauge | profile, threshold | current limit of a profile in percent above nominal: high_critical and high_warning only |
+| jbod_slot_sas_address_info | gauge | enclosure_id, slot, component_id, sas_address, device, block_device | the slot → SAS address → disk mapping, always 1 |
+
+The element series — `jbod_component_info`, `jbod_component_flag`,
+`jbod_enclosure_component_flags`, `jbod_sensor_*` and
+`jbod_slot_sas_address_info` — are published once per shelf, addressed by
+`enclosure_id` and `component_id`, with no `enclosure`. A shelf with two I/O
+modules is two SCSI enclosures with one identifier, and each module reports
+every element of it: on an H4060-J that was 870 duplicates of 3327 series;
+the thresholds were identical and the readings differed by a degree or a
+third of an ampere, two reads a moment apart. The value comes from the module
+best placed to give it: the one with access to the element (each module of an
+H4060-J answers "No access allowed" for the thirty bays of the other), then
+the one whose collection was complete, then the first by SCSI address. So all
+60 bays come with their owner's status and their disk, and when a module
+fails the series carries on from the other one instead of ending. What each
+module did is in the series that stay per module: `jbod_collection_complete`,
+`jbod_ses_page_read`, `jbod_enclosure_health`, `jbod_enclosure_components`.
 
 Added in 1.3:
 
 | Metric | Type | Labels | Meaning |
 | --- | --- | --- | --- |
 | jbod_sas_phy_info | gauge | host, phy, port, sas_address, device_type, negotiated_link_rate | one phy, always 1 |
-| jbod_sas_phy_state | gauge | host, phy, port, sas_address, device_type, state | 1 on the phy's state, 0 on the others: up, disabled, failed, spin-up hold, unknown |
+| jbod_sas_phy_state | gauge | host, phy, port, sas_address, device_type, state | the phy's current state — up, disabled, failed, spin-up hold or unknown; one series per phy, always 1 |
+| jbod_sas_device_phys | gauge | host, sas_address, device_type, state | phys of one device — an expander or the HBA — in each state; 0 when none is |
 | jbod_sas_phy_negotiated_link_rate_gbps | gauge | host, phy, port, sas_address, device_type | the rate; no series when there is none |
 | jbod_sas_phy_invalid_dword_total | counter | the same | invalid dwords |
 | jbod_sas_phy_running_disparity_error_total | counter | the same | running disparity errors |
@@ -557,11 +621,17 @@ HBA. A counter the transport did not expose gets no series at all, because a
 zero here would mean a clean link. The exporter reads sysfs only: SMP costs
 one request per phy and stays out of the scrape.
 
-The state of a phy is a state set, one series per state with 1 on the current
-one. `disabled`, `failed` and `unknown` are three diagnoses, and "up or not"
-folded them into one zero. A label on the info series instead would end one
-series and start another exactly when a link changes. Vacant is not in the
-set: a vacant phy gets no series.
+The state of a phy is published in two shapes, the way element bits are.
+`jbod_sas_phy_state` is one series per phy carrying its current state, with
+the value 1: `disabled`, `failed` and `unknown` are three diagnoses, and "up
+or not" folded them into one zero. A full state set said the same with four
+zeros per phy — 796 of 995 series on an H4060-J host. `jbod_sas_device_phys`
+is per device, expander or HBA, and state: how many of its phys are in it,
+zeros included. When a link changes state its `jbod_sas_phy_state` series
+ends and another begins; the per-device count is always there, so it is what
+an alert is written on — `delta(jbod_sas_device_phys{state="up"}[10m]) < 0`,
+"fewer links up on this expander" — and `jbod_sas_phy_state{state!="up"}`
+then shows which phy. Vacant is in neither: a vacant phy gets no series.
 
 An expander phy with no rate whose four counters all exist and all fail to
 read gets no series of its own. The driver answers those attributes by asking
@@ -622,29 +692,25 @@ The response is written by `promhttp`, so content negotiation (text 0.0.4 and
 OpenMetrics), gzip and the headers Prometheus expects come with it, and none
 of that is hand-written in this repository.
 
-### Migrating off jbod_fan_rpm
+### jbod_fan_rpm is removed
 
-In `jbod_fan_rpm` the `device` label is the fan description and `slot` is the
-sg_ses index. Both are per-shelf, so "Fan A" at index `2,0` collides with
-every other shelf in the rack and the last value written wins. It cannot be
-fixed in place: changing the label set would change the meaning of a series
-dashboards already read.
-
-So the corrected metric is a new name:
+In `jbod_fan_rpm` the `device` label was the fan description and `slot` the
+sg_ses index. Both are per-shelf, so "Fan A" at index `2,0` collided with
+every other shelf in the rack and the last value written won. The corrected
+metric is a new name:
 
 ```
 jbod_fan_speed_rpm{enclosure="1:0:0:0",enclosure_id="naa.5000...01",component="Fan A",component_id="2,0"} 1200
 jbod_fan_speed_rpm{enclosure="10:0:0:0",enclosure_id="naa.5000...02",component="Fan A",component_id="2,0"} 4800
 ```
 
-The migration:
-
-1. upgrade the exporter: both series are served at once and nothing breaks;
-2. move dashboards and rules to `jbod_fan_speed_rpm`;
-3. run the exporter with `--deprecated-metrics=false` and check nothing went
-   missing;
-4. leave it there. Removing `jbod_fan_rpm` is planned for 2.0 at the
-   earliest.
+`jbod_fan_rpm` was removed ahead of the 2.0 it was promised for: eight
+series per host that carried nothing `jbod_fan_speed_rpm` does not, and wrong
+numbers on a rack of several shelves. A dashboard or rule that reads it
+moves over by renaming the metric and its labels: `device` → `component`,
+`slot` → `component_id`, plus `enclosure` and `enclosure_id`. The
+`--deprecated-metrics` flag is still accepted, so a unit file that passes it
+keeps starting the exporter, but it does nothing and warns that it does not.
 
 Every scrape collects fresh values. Hardware that disappeared drops out of
 the output. An unavailable temperature is skipped (the CLI shows ERR); an

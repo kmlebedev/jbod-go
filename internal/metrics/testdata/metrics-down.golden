@@ -2,14 +2,27 @@
 # TYPE jbod_collection_complete gauge
 jbod_collection_complete{enclosure="10:0:0:0",enclosure_id="10:0:0:0"} 0
 jbod_collection_complete{enclosure="1:0:0:0",enclosure_id="ENC1"} 1
-# HELP jbod_component_info Condition of one element; status is the enclosure's own spelling
+# HELP jbod_component_flag A status bit an element has set, under a stable name; the series exists only while the bit is set, so 1 is its only value
+# TYPE jbod_component_flag gauge
+jbod_component_flag{component="PSU A",component_id="1,0",enclosure_id="ENC1",flag="ac_fail",type="power supply"} 1
+jbod_component_flag{component="PSU A",component_id="1,0",enclosure_id="ENC1",flag="fail",type="power supply"} 1
+jbod_component_flag{component="SLOT 00",component_id="0,0",enclosure_id="ENC1",flag="predicted_failure",type="array device slot"} 1
+# HELP jbod_component_info Condition of one element of a shelf; status is the enclosure's own spelling
 # TYPE jbod_component_info gauge
-jbod_component_info{component="PSU A",component_id="1,0",enclosure="1:0:0:0",enclosure_id="ENC1",health="critical",status="Critical",type="power supply"} 1
-jbod_component_info{component="SLOT 00",component_id="0,0",enclosure="1:0:0:0",enclosure_id="ENC1",health="ok",status="OK",type="array device slot"} 1
-jbod_component_info{component="SLOT 01",component_id="0,1",enclosure="1:0:0:0",enclosure_id="ENC1",health="unknown",status="No access allowed",type="array device slot"} 1
-jbod_component_info{component="TEMP A",component_id="3,0",enclosure="1:0:0:0",enclosure_id="ENC1",health="ok",status="OK",type="temperature sensor"} 1
-jbod_component_info{component="TEMP B",component_id="3,1",enclosure="1:0:0:0",enclosure_id="ENC1",health="unknown",status="Unsupported",type="temperature sensor"} 1
-jbod_component_info{component="VOLT 12V",component_id="4,0",enclosure="1:0:0:0",enclosure_id="ENC1",health="ok",status="OK",type="voltage sensor"} 1
+jbod_component_info{component="PSU A",component_id="1,0",enclosure_id="ENC1",health="critical",status="Critical",type="power supply"} 1
+jbod_component_info{component="SLOT 00",component_id="0,0",enclosure_id="ENC1",health="ok",status="OK",type="array device slot"} 1
+jbod_component_info{component="SLOT 01",component_id="0,1",enclosure_id="ENC1",health="unknown",status="No access allowed",type="array device slot"} 1
+jbod_component_info{component="TEMP A",component_id="3,0",enclosure_id="ENC1",health="ok",status="OK",type="temperature sensor"} 1
+jbod_component_info{component="TEMP B",component_id="3,1",enclosure_id="ENC1",health="unknown",status="Unsupported",type="temperature sensor"} 1
+jbod_component_info{component="VOLT 12V",component_id="4,0",enclosure_id="ENC1",health="ok",status="OK",type="voltage sensor"} 1
+# HELP jbod_enclosure_component_flags Elements of a type with a status bit set, for every bit the shelf reports for that type; 0 when none has it
+# TYPE jbod_enclosure_component_flags gauge
+jbod_enclosure_component_flags{enclosure_id="ENC1",flag="ac_fail",type="power supply"} 1
+jbod_enclosure_component_flags{enclosure_id="ENC1",flag="dc_fail",type="power supply"} 0
+jbod_enclosure_component_flags{enclosure_id="ENC1",flag="fail",type="power supply"} 1
+jbod_enclosure_component_flags{enclosure_id="ENC1",flag="fault_sensed",type="array device slot"} 0
+jbod_enclosure_component_flags{enclosure_id="ENC1",flag="ident",type="array device slot"} 0
+jbod_enclosure_component_flags{enclosure_id="ENC1",flag="predicted_failure",type="array device slot"} 1
 # HELP jbod_enclosure_components Declared elements per enclosure, by type and condition
 # TYPE jbod_enclosure_components gauge
 jbod_enclosure_components{enclosure="1:0:0:0",enclosure_id="ENC1",health="critical",type="power supply"} 1
@@ -64,14 +77,27 @@ jbod_enclosure_slots{enclosure="10:0:0:0",enclosure_id="10:0:0:0",occupancy="una
 jbod_enclosure_slots{enclosure="1:0:0:0",enclosure_id="ENC1",occupancy="empty"} 0
 jbod_enclosure_slots{enclosure="1:0:0:0",enclosure_id="ENC1",occupancy="occupied"} 0
 jbod_enclosure_slots{enclosure="1:0:0:0",enclosure_id="ENC1",occupancy="unavailable"} 0
-# HELP jbod_fan_rpm DEPRECATED, replaced by jbod_fan_speed_rpm: the labels omit the enclosure, so identical fans of two shelves overwrite each other. Removal is planned for 2.0.
-# TYPE jbod_fan_rpm gauge
-jbod_fan_rpm{device="Fan A",slot="2,0"} 1200
-jbod_fan_rpm{device="Fan B",slot="2,1"} 3000
 # HELP jbod_fan_speed_rpm Speed of a cooling element, addressed by enclosure and component
 # TYPE jbod_fan_speed_rpm gauge
 jbod_fan_speed_rpm{component="Fan A",component_id="2,0",enclosure="1:0:0:0",enclosure_id="ENC1"} 1200
 jbod_fan_speed_rpm{component="Fan B",component_id="2,1",enclosure="1:0:0:0",enclosure_id="ENC1"} 3000
+# HELP jbod_sas_device_phys Phys of one SAS device, an expander or the HBA, in each state; 0 when none is in it
+# TYPE jbod_sas_device_phys gauge
+jbod_sas_device_phys{device_type="edge expander",host="1",sas_address="0x5000ccab05629d3f",state="disabled"} 1
+jbod_sas_device_phys{device_type="edge expander",host="1",sas_address="0x5000ccab05629d3f",state="failed"} 0
+jbod_sas_device_phys{device_type="edge expander",host="1",sas_address="0x5000ccab05629d3f",state="spin-up hold"} 0
+jbod_sas_device_phys{device_type="edge expander",host="1",sas_address="0x5000ccab05629d3f",state="unknown"} 1
+jbod_sas_device_phys{device_type="edge expander",host="1",sas_address="0x5000ccab05629d3f",state="up"} 0
+jbod_sas_device_phys{device_type="end device",host="1",sas_address="0x500605b00b1e2f40",state="disabled"} 0
+jbod_sas_device_phys{device_type="end device",host="1",sas_address="0x500605b00b1e2f40",state="failed"} 0
+jbod_sas_device_phys{device_type="end device",host="1",sas_address="0x500605b00b1e2f40",state="spin-up hold"} 0
+jbod_sas_device_phys{device_type="end device",host="1",sas_address="0x500605b00b1e2f40",state="unknown"} 0
+jbod_sas_device_phys{device_type="end device",host="1",sas_address="0x500605b00b1e2f40",state="up"} 1
+jbod_sas_device_phys{device_type="end device",host="1",sas_address="0x500605b00b1e2f41",state="disabled"} 0
+jbod_sas_device_phys{device_type="end device",host="1",sas_address="0x500605b00b1e2f41",state="failed"} 0
+jbod_sas_device_phys{device_type="end device",host="1",sas_address="0x500605b00b1e2f41",state="spin-up hold"} 0
+jbod_sas_device_phys{device_type="end device",host="1",sas_address="0x500605b00b1e2f41",state="unknown"} 0
+jbod_sas_device_phys{device_type="end device",host="1",sas_address="0x500605b00b1e2f41",state="up"} 1
 # HELP jbod_sas_expander_phys_unanswered Phys of an expander that have no rate and whose error log the expander refused, which is how a vacant phy reads in sysfs; they get no per-phy series
 # TYPE jbod_sas_expander_phys_unanswered gauge
 jbod_sas_expander_phys_unanswered{host="1",sas_address="0x5000ccab05629d3f"} 1
@@ -105,27 +131,11 @@ jbod_sas_phy_reset_problem_total{device_type="end device",host="1",phy="phy-1:1"
 jbod_sas_phy_running_disparity_error_total{device_type="edge expander",host="1",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f"} 0
 jbod_sas_phy_running_disparity_error_total{device_type="end device",host="1",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40"} 0
 jbod_sas_phy_running_disparity_error_total{device_type="end device",host="1",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41"} 7
-# HELP jbod_sas_phy_state Condition of one phy; 1 marks the state the transport reports, the others are 0
+# HELP jbod_sas_phy_state State the transport reports for one phy; one series per phy, always 1
 # TYPE jbod_sas_phy_state gauge
 jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:0",port="",sas_address="0x5000ccab05629d3f",state="disabled"} 1
-jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:0",port="",sas_address="0x5000ccab05629d3f",state="failed"} 0
-jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:0",port="",sas_address="0x5000ccab05629d3f",state="spin-up hold"} 0
-jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:0",port="",sas_address="0x5000ccab05629d3f",state="unknown"} 0
-jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:0",port="",sas_address="0x5000ccab05629d3f",state="up"} 0
-jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f",state="disabled"} 0
-jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f",state="failed"} 0
-jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f",state="spin-up hold"} 0
 jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f",state="unknown"} 1
-jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f",state="up"} 0
-jbod_sas_phy_state{device_type="end device",host="1",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40",state="disabled"} 0
-jbod_sas_phy_state{device_type="end device",host="1",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40",state="failed"} 0
-jbod_sas_phy_state{device_type="end device",host="1",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40",state="spin-up hold"} 0
-jbod_sas_phy_state{device_type="end device",host="1",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40",state="unknown"} 0
 jbod_sas_phy_state{device_type="end device",host="1",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40",state="up"} 1
-jbod_sas_phy_state{device_type="end device",host="1",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41",state="disabled"} 0
-jbod_sas_phy_state{device_type="end device",host="1",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41",state="failed"} 0
-jbod_sas_phy_state{device_type="end device",host="1",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41",state="spin-up hold"} 0
-jbod_sas_phy_state{device_type="end device",host="1",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41",state="unknown"} 0
 jbod_sas_phy_state{device_type="end device",host="1",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41",state="up"} 1
 # HELP jbod_scrape_duration_seconds Duration of the last collection
 # TYPE jbod_scrape_duration_seconds gauge
@@ -141,22 +151,26 @@ jbod_scrape_errors_total{collector="sas"} 0
 jbod_scrape_errors_total{collector="slots"} 0
 # HELP jbod_sensor_temperature_celsius Temperature reported by an enclosure element
 # TYPE jbod_sensor_temperature_celsius gauge
-jbod_sensor_temperature_celsius{component="TEMP A",component_id="3,0",enclosure="1:0:0:0",enclosure_id="ENC1",type="temperature sensor"} 35
-# HELP jbod_sensor_temperature_threshold_celsius Temperature limit the enclosure declares for an element
+jbod_sensor_temperature_celsius{component="TEMP A",component_id="3,0",enclosure_id="ENC1",type="temperature sensor"} 35
+# HELP jbod_sensor_temperature_threshold_celsius Temperature limit of a threshold profile; the profile name is its limits, high critical/high warning/low warning/low critical
 # TYPE jbod_sensor_temperature_threshold_celsius gauge
-jbod_sensor_temperature_threshold_celsius{component="TEMP A",component_id="3,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="high_critical",type="temperature sensor"} 65
-jbod_sensor_temperature_threshold_celsius{component="TEMP A",component_id="3,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="high_warning",type="temperature sensor"} 60
-jbod_sensor_temperature_threshold_celsius{component="TEMP A",component_id="3,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="low_critical",type="temperature sensor"} -19
-jbod_sensor_temperature_threshold_celsius{component="TEMP A",component_id="3,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="low_warning",type="temperature sensor"} 0
-# HELP jbod_sensor_voltage_threshold_percent Voltage limit the enclosure declares for an element, in percent of the nominal voltage: high limits above it, low limits below it
+jbod_sensor_temperature_threshold_celsius{profile="65/60/0/-19",threshold="high_critical"} 65
+jbod_sensor_temperature_threshold_celsius{profile="65/60/0/-19",threshold="high_warning"} 60
+jbod_sensor_temperature_threshold_celsius{profile="65/60/0/-19",threshold="low_critical"} -19
+jbod_sensor_temperature_threshold_celsius{profile="65/60/0/-19",threshold="low_warning"} 0
+# HELP jbod_sensor_threshold_profile_info The threshold profile a sensor uses; its limits are jbod_sensor_*_threshold_* with the same profile
+# TYPE jbod_sensor_threshold_profile_info gauge
+jbod_sensor_threshold_profile_info{component="TEMP A",component_id="3,0",enclosure_id="ENC1",profile="65/60/0/-19",type="temperature sensor"} 1
+jbod_sensor_threshold_profile_info{component="VOLT 12V",component_id="4,0",enclosure_id="ENC1",profile="5/3/3/5",type="voltage sensor"} 1
+# HELP jbod_sensor_voltage_threshold_percent Voltage limit of a threshold profile, in percent of the nominal voltage: high limits above it, low limits below it
 # TYPE jbod_sensor_voltage_threshold_percent gauge
-jbod_sensor_voltage_threshold_percent{component="VOLT 12V",component_id="4,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="high_critical",type="voltage sensor"} 5
-jbod_sensor_voltage_threshold_percent{component="VOLT 12V",component_id="4,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="high_warning",type="voltage sensor"} 3
-jbod_sensor_voltage_threshold_percent{component="VOLT 12V",component_id="4,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="low_critical",type="voltage sensor"} 5
-jbod_sensor_voltage_threshold_percent{component="VOLT 12V",component_id="4,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="low_warning",type="voltage sensor"} 3
+jbod_sensor_voltage_threshold_percent{profile="5/3/3/5",threshold="high_critical"} 5
+jbod_sensor_voltage_threshold_percent{profile="5/3/3/5",threshold="high_warning"} 3
+jbod_sensor_voltage_threshold_percent{profile="5/3/3/5",threshold="low_critical"} 5
+jbod_sensor_voltage_threshold_percent{profile="5/3/3/5",threshold="low_warning"} 3
 # HELP jbod_sensor_voltage_volts Voltage reported by an enclosure element
 # TYPE jbod_sensor_voltage_volts gauge
-jbod_sensor_voltage_volts{component="VOLT 12V",component_id="4,0",enclosure="1:0:0:0",enclosure_id="ENC1",type="voltage sensor"} 12.01
+jbod_sensor_voltage_volts{component="VOLT 12V",component_id="4,0",enclosure_id="ENC1",type="voltage sensor"} 12.01
 # HELP jbod_ses_page_read Whether one SES diagnostic page answered
 # TYPE jbod_ses_page_read gauge
 jbod_ses_page_read{enclosure="10:0:0:0",enclosure_id="10:0:0:0",page="configuration",required="true"} 0
@@ -169,7 +183,7 @@ jbod_ses_page_read{enclosure="1:0:0:0",enclosure_id="ENC1",page="join",required=
 jbod_ses_page_read{enclosure="1:0:0:0",enclosure_id="ENC1",page="threshold in",required="false"} 0
 # HELP jbod_slot_sas_address_info Bay, SAS address and the disk the kernel sees in it
 # TYPE jbod_slot_sas_address_info gauge
-jbod_slot_sas_address_info{block_device="/dev/sda",component_id="0,0",device="/dev/sg1",enclosure="1:0:0:0",enclosure_id="ENC1",sas_address="0x5000cca2a0d6e2f5",slot="0"} 1
+jbod_slot_sas_address_info{block_device="/dev/sda",component_id="0,0",device="/dev/sg1",enclosure_id="ENC1",sas_address="0x5000cca2a0d6e2f5",slot="0"} 1
 # HELP jbod_slot_temperature Enclosure number, slot position and temperature
 # TYPE jbod_slot_temperature gauge
 jbod_slot_temperature{enclosure="10:0:0:0",slot="Slot 03"} 41

@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -30,7 +31,7 @@ func snapshot() jbod.Snapshot {
 
 func TestEncode(t *testing.T) {
 	t.Parallel()
-	got := encode(t, snapshot(), map[string]int{jbod.CollectorFans: 3}, Options{Deprecated: true})
+	got := encode(t, snapshot(), map[string]int{jbod.CollectorFans: 3}, Options{})
 	for _, want := range []string{
 		"# TYPE number_of_enclosures gauge\nnumber_of_enclosures 1\n",
 		// A disk without a reading is skipped, not exported as zero.
@@ -55,8 +56,13 @@ func TestEncode(t *testing.T) {
 	if n := strings.Count(got, `jbod_slot_temperature{enclosure="1:0:0:0",slot="Slot 01"`); n != 1 {
 		t.Errorf("%d series for one label set:\n%s", n, got)
 	}
-	if !strings.Contains(got, `jbod_fan_rpm{device="Fan A",slot="2,0"} 1500`) || strings.Count(got, "jbod_fan_rpm{") != 1 {
+	if !strings.Contains(got, `jbod_fan_speed_rpm{component="Fan A",component_id="2,0",enclosure="1:0:0:0",`) ||
+		!strings.Contains(got, `} 1500`) || strings.Count(got, "jbod_fan_speed_rpm{") != 1 {
 		t.Errorf("fan series not collapsed:\n%s", got)
+	}
+	// jbod_fan_rpm is gone, with nothing that brings it back.
+	if strings.Contains(got, "jbod_fan_rpm") {
+		t.Errorf("the removed series is published:\n%s", got)
 	}
 }
 
@@ -64,7 +70,7 @@ func TestEncodeIncompleteCollection(t *testing.T) {
 	t.Parallel()
 	s := snapshot()
 	s.Up = false
-	got := encode(t, s, s.Errors, Options{Deprecated: true})
+	got := encode(t, s, s.Errors, Options{})
 	if !strings.Contains(got, "jbod_up 0") {
 		t.Errorf("an incomplete pass must report jbod_up 0:\n%s", got)
 	}
@@ -81,10 +87,10 @@ func TestEncodeEscapesLabels(t *testing.T) {
 		Fans:  []jbod.Fan{{Description: "Fan\\A", Index: `2,"0"`, Speed: jbod.Some(int64(900))}},
 		Up:    true,
 	}
-	got := encode(t, s, nil, Options{Deprecated: true})
+	got := encode(t, s, nil, Options{})
 	for _, want := range []string{
 		`jbod_slot_temperature{enclosure="enc\n1",slot="Slot \"1\"\\x"} 20`,
-		`jbod_fan_rpm{device="Fan\\A",slot="2,\"0\""} 900`,
+		`jbod_fan_speed_rpm{component="Fan\\A",component_id="2,\"0\"",enclosure="",enclosure_id=""} 900`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in\n%s", want, got)
@@ -96,7 +102,7 @@ func TestEncodeEscapesLabels(t *testing.T) {
 // of the output if someone adds one without touching this package.
 func TestEncodeUnknownCollector(t *testing.T) {
 	t.Parallel()
-	got := encode(t, jbod.Snapshot{Up: true}, map[string]int{"psu": 2, jbod.CollectorDisks: 1}, Options{Deprecated: true})
+	got := encode(t, jbod.Snapshot{Up: true}, map[string]int{"psu": 2, jbod.CollectorDisks: 1}, Options{})
 	if !strings.Contains(got, `jbod_scrape_errors_total{collector="psu"} 2`) {
 		t.Errorf("unknown collector missing:\n%s", got)
 	}
@@ -109,13 +115,10 @@ func TestEncodeUnknownCollector(t *testing.T) {
 }
 
 // TestFanSeriesDoNotCollideAcrossEnclosures is the readiness criterion of
-// ROADMAP 4: two shelves with identically named fans are two fans.
-//
-// jbod_fan_rpm labels a cooling element with its description and its SES
-// index only, and both are per-shelf, so "Fan A" at index 2,0 collides with
-// every other shelf in the rack and the last one written wins. The fix
-// cannot be made in place without changing what the existing series means,
-// so it is a new name that carries the enclosure.
+// ROADMAP 4: two shelves with identically named fans are two fans. The
+// description and the SES index are per shelf, so "Fan A" at index 2,0 is on
+// every shelf in the rack; jbod_fan_rpm, labelled with those two only, let
+// the last shelf overwrite the others and is removed.
 func TestFanSeriesDoNotCollideAcrossEnclosures(t *testing.T) {
 	t.Parallel()
 	s := jbod.Snapshot{
@@ -129,7 +132,7 @@ func TestFanSeriesDoNotCollideAcrossEnclosures(t *testing.T) {
 		},
 		Up: true,
 	}
-	got := encode(t, s, nil, Options{Deprecated: true})
+	got := encode(t, s, nil, Options{})
 
 	for _, want := range []string{
 		`jbod_fan_speed_rpm{component="Fan A",component_id="2,0",enclosure="1:0:0:0",enclosure_id="naa.5000000000000001"} 1200`,
@@ -140,25 +143,10 @@ func TestFanSeriesDoNotCollideAcrossEnclosures(t *testing.T) {
 		}
 	}
 	if n := strings.Count(got, "jbod_fan_speed_rpm{"); n != 2 {
-		t.Errorf("got %d corrected fan series, want 2:\n%s", n, got)
+		t.Errorf("got %d fan series, want 2:\n%s", n, got)
 	}
-	// The old series still collides, which is why it is deprecated rather
-	// than quietly relabelled: relabelling it would change the meaning of
-	// a series that dashboards already read.
-	if n := strings.Count(got, "jbod_fan_rpm{"); n != 1 {
-		t.Errorf("got %d deprecated fan series, want the single colliding one:\n%s", n, got)
-	}
-	if !strings.Contains(got, "# HELP jbod_fan_rpm DEPRECATED") {
-		t.Error("the deprecated series is not marked as such")
-	}
-
-	// And it can be switched off once nothing reads it.
-	without := encode(t, s, nil, Options{})
-	if strings.Contains(without, "jbod_fan_rpm{") {
-		t.Error("the deprecated series survived Options{Deprecated: false}")
-	}
-	if n := strings.Count(without, "jbod_fan_speed_rpm{"); n != 2 {
-		t.Errorf("the corrected series must stay: %s", without)
+	if strings.Contains(got, "jbod_fan_rpm") {
+		t.Errorf("the removed series is published:\n%s", got)
 	}
 }
 
@@ -230,7 +218,7 @@ func TestEncodeSkipsUnreportedReadings(t *testing.T) {
 		t.Errorf("a sensor without a value was published:\n%s", out)
 	}
 	// It is still visible as an element, with its condition.
-	if !strings.Contains(out, `jbod_component_info{component="TEMP B",component_id="3,1",enclosure="1:0:0:0",enclosure_id="ENC1",health="unknown",status="Unsupported",type="temperature sensor"} 1`) {
+	if !strings.Contains(out, `jbod_component_info{component="TEMP B",component_id="3,1",enclosure_id="ENC1",health="unknown",status="Unsupported",type="temperature sensor"} 1`) {
 		t.Errorf("the unreadable sensor lost its info series:\n%s", out)
 	}
 }
@@ -278,7 +266,7 @@ func TestEncodeCollection(t *testing.T) {
 func TestEncodeMappingNeedsAnAddress(t *testing.T) {
 	t.Parallel()
 	out := encode(t, fullSnapshot(), nil, Options{})
-	if !strings.Contains(out, `jbod_slot_sas_address_info{block_device="/dev/sda",component_id="0,0",device="/dev/sg1",enclosure="1:0:0:0",enclosure_id="ENC1",sas_address="0x5000cca2a0d6e2f5",slot="0"} 1`) {
+	if !strings.Contains(out, `jbod_slot_sas_address_info{block_device="/dev/sda",component_id="0,0",device="/dev/sg1",enclosure_id="ENC1",sas_address="0x5000cca2a0d6e2f5",slot="0"} 1`) {
 		t.Errorf("the mapping series is missing:\n%s", out)
 	}
 	// SLOT 01 declares no address, so it is the one bay without a series.
@@ -316,11 +304,13 @@ func TestPHYSeries(t *testing.T) {
 	for _, want := range []string{
 		`jbod_sas_phy_invalid_dword_total{device_type="end device",host="1",phy="phy-1:1",port="port-1:0",sas_address="0x500605b00b1e2f41"} 1274`,
 		`jbod_sas_phy_negotiated_link_rate_gbps{device_type="end device",host="1",phy="phy-1:0",port="port-1:0",sas_address="0x500605b00b1e2f40"} 12`,
-		// The state set names the diagnosis instead of folding it into
+		// The state names the diagnosis instead of folding it into
 		// "not up".
 		`jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:0",port="",sas_address="0x5000ccab05629d3f",state="disabled"} 1`,
-		`jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:0",port="",sas_address="0x5000ccab05629d3f",state="up"} 0`,
 		`jbod_sas_phy_state{device_type="edge expander",host="1",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f",state="unknown"} 1`,
+		// The count per device carries the zeros.
+		`jbod_sas_device_phys{device_type="edge expander",host="1",sas_address="0x5000ccab05629d3f",state="up"} 0`,
+		`jbod_sas_device_phys{device_type="edge expander",host="1",sas_address="0x5000ccab05629d3f",state="disabled"} 1`,
 		// A phy with no link that answered keeps its counters.
 		`jbod_sas_phy_invalid_dword_total{device_type="edge expander",host="1",phy="phy-1:0:1",port="",sas_address="0x5000ccab05629d3f"} 0`,
 		// The one the expander declined to describe is counted, not listed.
@@ -340,8 +330,10 @@ func TestPHYSeries(t *testing.T) {
 		`jbod_sas_phy_negotiated_link_rate_gbps{device_type="edge expander"`,
 		// The unanswered phy has no series of its own, of any family.
 		`phy="phy-1:0:2"`,
-		// The series the state set replaced.
+		// The series the state replaced, and the zeros a full state set
+		// would carry per phy.
 		"jbod_sas_phy_up",
+		`state="up"} 0` + "\n" + `jbod_sas_phy_state`,
 		// Vacant is never published: a vacant phy gets no series.
 		`state="vacant"`,
 	} {
@@ -349,8 +341,8 @@ func TestPHYSeries(t *testing.T) {
 			t.Errorf("a value was published for something nobody read:\n%s", unwanted)
 		}
 	}
-	// The state lives in the state set only. As a label on the info series
-	// it would end that series every time a link changed.
+	// The state lives in jbod_sas_phy_state only. As a label on the info
+	// series it would end that series every time a link changed too.
 	for _, line := range strings.Split(out, "\n") {
 		if strings.HasPrefix(line, "jbod_sas_phy_info{") && strings.Contains(line, "state=") {
 			t.Errorf("the info series still carries the state: %s", line)
@@ -364,35 +356,62 @@ func TestPHYSeries(t *testing.T) {
 	}
 }
 
-// TestPHYStateSet checks the invariant the state set exists for: every
-// published phy has one series per state, and exactly one of them is 1. A
-// phy with two 1s, or none, would make count by (state) disagree with the
-// number of phys.
-func TestPHYStateSet(t *testing.T) {
+// TestPHYStateAndDeviceCounts checks the two shapes the phy state is
+// published in. Every published phy has exactly one state series, and it is
+// 1: a full state set would add four zeros per phy, 796 of 995 series on a
+// real host. Every device has one count per state, zeros included, and the
+// counts of a device add up to its published phys — the unanswered phy is
+// in neither, it is jbod_sas_expander_phys_unanswered's.
+func TestPHYStateAndDeviceCounts(t *testing.T) {
 	t.Parallel()
 	out := encode(t, fullSnapshot(), nil, Options{})
-	ones, series := map[string]int{}, map[string]int{}
+	label := func(line, name string) string {
+		start := strings.Index(line, name+`="`) + len(name+`="`)
+		return line[start : start+strings.Index(line[start:], `"`)]
+	}
+	perPHY := map[string]int{}
+	perDevice := map[string]map[string]string{}
 	for _, line := range strings.Split(out, "\n") {
-		if !strings.HasPrefix(line, "jbod_sas_phy_state{") {
-			continue
-		}
-		start := strings.Index(line, `phy="`) + len(`phy="`)
-		phy := line[start : start+strings.Index(line[start:], `"`)]
-		series[phy]++
-		if strings.HasSuffix(line, " 1") {
-			ones[phy]++
+		switch {
+		case strings.HasPrefix(line, "jbod_sas_phy_state{"):
+			perPHY[label(line, "phy")]++
+			if !strings.HasSuffix(line, "} 1") {
+				t.Errorf("a phy state series is not 1: %s", line)
+			}
+		case strings.HasPrefix(line, "jbod_sas_device_phys{"):
+			address := label(line, "sas_address")
+			if perDevice[address] == nil {
+				perDevice[address] = map[string]string{}
+			}
+			perDevice[address][label(line, "state")] = line[strings.LastIndex(line, " ")+1:]
 		}
 	}
 	// Four phys are published; phy-1:0:2 is the unanswered one.
-	if len(series) != 4 {
-		t.Fatalf("state set covers %d phys, want 4: %v", len(series), series)
+	if len(perPHY) != 4 {
+		t.Fatalf("state series for %d phys, want 4: %v", len(perPHY), perPHY)
 	}
-	for phy, n := range series {
-		if n != 5 {
-			t.Errorf("%s has %d state series, want 5 (up, disabled, failed, spin-up hold, unknown)", phy, n)
+	for phy, n := range perPHY {
+		if n != 1 {
+			t.Errorf("%s has %d state series, want one", phy, n)
 		}
-		if ones[phy] != 1 {
-			t.Errorf("%s has %d states at 1, want exactly one", phy, ones[phy])
+	}
+	want := map[string]map[string]string{
+		"0x5000ccab05629d3f": {"up": "0", "disabled": "1", "failed": "0", "spin-up hold": "0", "unknown": "1"},
+		"0x500605b00b1e2f40": {"up": "1", "disabled": "0", "failed": "0", "spin-up hold": "0", "unknown": "0"},
+		"0x500605b00b1e2f41": {"up": "1", "disabled": "0", "failed": "0", "spin-up hold": "0", "unknown": "0"},
+	}
+	if len(perDevice) != len(want) {
+		t.Errorf("counts for %d devices, want %d: %v", len(perDevice), len(want), perDevice)
+	}
+	for address, states := range want {
+		got := perDevice[address]
+		if len(got) != len(states) {
+			t.Errorf("%s has %d state counts, want %d: %v", address, len(got), len(states), got)
+		}
+		for state, n := range states {
+			if got[state] != n {
+				t.Errorf("%s %s = %q, want %s", address, state, got[state], n)
+			}
 		}
 	}
 }
@@ -428,9 +447,11 @@ func TestSensorThresholdUnits(t *testing.T) {
 	t.Parallel()
 	out := encode(t, fullSnapshot(), nil, Options{})
 	for _, want := range []string{
-		`jbod_sensor_temperature_threshold_celsius{component="TEMP A",component_id="3,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="high_critical",type="temperature sensor"} 65`,
-		`jbod_sensor_voltage_threshold_percent{component="VOLT 12V",component_id="4,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="high_critical",type="voltage sensor"} 5`,
-		`jbod_sensor_voltage_threshold_percent{component="VOLT 12V",component_id="4,0",enclosure="1:0:0:0",enclosure_id="ENC1",threshold="low_warning",type="voltage sensor"} 3`,
+		`jbod_sensor_temperature_threshold_celsius{profile="65/60/0/-19",threshold="high_critical"} 65`,
+		`jbod_sensor_voltage_threshold_percent{profile="5/3/3/5",threshold="high_critical"} 5`,
+		`jbod_sensor_voltage_threshold_percent{profile="5/3/3/5",threshold="low_warning"} 3`,
+		`jbod_sensor_threshold_profile_info{component="TEMP A",component_id="3,0",enclosure_id="ENC1",profile="65/60/0/-19",type="temperature sensor"} 1`,
+		`jbod_sensor_threshold_profile_info{component="VOLT 12V",component_id="4,0",enclosure_id="ENC1",profile="5/3/3/5",type="voltage sensor"} 1`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing:\n%s", want)
@@ -456,5 +477,225 @@ func TestSensorThresholdUnits(t *testing.T) {
 	out = encode(t, snapshot, nil, Options{})
 	if strings.Contains(out, "_threshold_") {
 		t.Errorf("limits in a unit no series is named for were published:\n%s", out)
+	}
+}
+
+// TestThresholdProfiles checks that limits are published once per set of
+// limits: sensors with the same limits share one profile, on one shelf or
+// on two, a sensor with other limits gets its own, and every profile a
+// sensor points at has its limits published. A current sensor declares
+// high limits only, and its profile says so.
+func TestThresholdProfiles(t *testing.T) {
+	t.Parallel()
+	sensor := func(enclosure, index, name, kind, unit string, th jbod.Thresholds) jbod.Component {
+		typ := map[string]string{
+			jbod.ReadingTemperature: "temperature sensor", jbod.ReadingCurrent: "current sensor",
+		}[kind]
+		return jbod.Component{
+			Enclosure: enclosure, Index: index, Name: name, Type: typ,
+			Status: jbod.Some("OK"), Health: jbod.HealthOK,
+			Readings: []jbod.Reading{{Kind: kind, Unit: unit, Value: jbod.Some(30.0), Thresholds: &th}},
+		}
+	}
+	slot := jbod.Thresholds{
+		HighCritical: jbod.Some(59.0), HighWarning: jbod.Some(56.0),
+		LowWarning: jbod.Some(8.0), LowCritical: jbod.Some(6.0), Unit: jbod.UnitCelsius,
+	}
+	die := jbod.Thresholds{
+		HighCritical: jbod.Some(105.0), HighWarning: jbod.Some(95.0),
+		LowWarning: jbod.Some(5.0), LowCritical: jbod.Some(1.0), Unit: jbod.UnitCelsius,
+	}
+	amps := jbod.Thresholds{HighCritical: jbod.Some(20.5), HighWarning: jbod.Some(20.0), Unit: jbod.UnitPercentOfNominal}
+	s := jbod.Snapshot{Up: true, Status: []jbod.EnclosureStatus{
+		{Enclosure: "1:0:0:0", Address: "SHELF1", Collection: jbod.CollectionStatus{Complete: true}, Components: []jbod.Component{
+			sensor("1:0:0:0", "4,0", "TEMP SLOT 00", jbod.ReadingTemperature, jbod.UnitCelsius, slot),
+			sensor("1:0:0:0", "4,1", "TEMP SLOT 01", jbod.ReadingTemperature, jbod.UnitCelsius, slot),
+			sensor("1:0:0:0", "4,67", "TEMP SEC1 A DIE", jbod.ReadingTemperature, jbod.UnitCelsius, die),
+			sensor("1:0:0:0", "9,0", "CURR PSU A IN", jbod.ReadingCurrent, jbod.UnitAmps, amps),
+		}},
+		{Enclosure: "2:0:0:0", Address: "SHELF2", Collection: jbod.CollectionStatus{Complete: true}, Components: []jbod.Component{
+			sensor("2:0:0:0", "4,0", "TEMP SLOT 00", jbod.ReadingTemperature, jbod.UnitCelsius, slot),
+		}},
+	}}
+	out := encode(t, s, nil, Options{})
+	count := func(prefix string) int {
+		n := 0
+		for _, line := range strings.Split(out, "\n") {
+			if strings.HasPrefix(line, prefix) {
+				n++
+			}
+		}
+		return n
+	}
+	// Two temperature profiles of four limits, one current profile of two.
+	if n := count("jbod_sensor_temperature_threshold_celsius{"); n != 8 {
+		t.Errorf("%d temperature limit series, want 8 (two profiles):\n%s", n, out)
+	}
+	if n := count(`jbod_sensor_temperature_threshold_celsius{profile="59/56/8/6"`); n != 4 {
+		t.Errorf("the shared bay profile has %d series, want 4 for three bays on two shelves", n)
+	}
+	if n := count("jbod_sensor_current_threshold_percent{"); n != 2 {
+		t.Errorf("%d current limit series, want 2", n)
+	}
+	for _, want := range []string{
+		`jbod_sensor_current_threshold_percent{profile="20.5/20/-/-",threshold="high_warning"} 20`,
+		`jbod_sensor_threshold_profile_info{component="TEMP SLOT 00",component_id="4,0",enclosure_id="SHELF2",profile="59/56/8/6",type="temperature sensor"} 1`,
+		`jbod_sensor_threshold_profile_info{component="TEMP SEC1 A DIE",component_id="4,67",enclosure_id="SHELF1",profile="105/95/5/1",type="temperature sensor"} 1`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing:\n%s", want)
+		}
+	}
+	// One profile series per sensor with limits.
+	if n := count("jbod_sensor_threshold_profile_info{"); n != 5 {
+		t.Errorf("%d profile series, want one per sensor, 5", n)
+	}
+	// Every profile a sensor points at is published.
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.HasPrefix(line, "jbod_sensor_threshold_profile_info{") {
+			continue
+		}
+		start := strings.Index(line, `profile="`) + len(`profile="`)
+		profile := line[start : start+strings.Index(line[start:], `"`)]
+		if !strings.Contains(out, `_threshold_celsius{profile="`+profile+`"`) &&
+			!strings.Contains(out, `_threshold_percent{profile="`+profile+`"`) {
+			t.Errorf("a sensor points at profile %s, which has no limits", profile)
+		}
+	}
+}
+
+// TestComponentFlags checks the two shapes the element bits are published
+// in: per element only the bits that are set, always 1; per shelf, type and
+// bit the count of elements that have it, zeros included. Nothing is
+// published for a bay the module cannot reach or for a field that is not a
+// bit.
+func TestComponentFlags(t *testing.T) {
+	t.Parallel()
+	out := encode(t, fullSnapshot(), nil, Options{})
+	for _, want := range []string{
+		"# TYPE jbod_component_flag gauge",
+		`jbod_component_flag{component="SLOT 00",component_id="0,0",enclosure_id="ENC1",flag="predicted_failure",type="array device slot"} 1`,
+		`jbod_component_flag{component="PSU A",component_id="1,0",enclosure_id="ENC1",flag="ac_fail",type="power supply"} 1`,
+		`jbod_enclosure_component_flags{enclosure_id="ENC1",flag="predicted_failure",type="array device slot"} 1`,
+		`jbod_enclosure_component_flags{enclosure_id="ENC1",flag="fault_sensed",type="array device slot"} 0`,
+		`jbod_enclosure_component_flags{enclosure_id="ENC1",flag="dc_fail",type="power supply"} 0`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing:\n%s", want)
+		}
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "jbod_component_flag{") && !strings.HasSuffix(line, "} 1") {
+			t.Errorf("a clear bit has a series: %s", line)
+		}
+	}
+	for _, unwanted := range []string{
+		`component_id="0,1",enclosure_id="ENC1",flag=`,
+		`flag="actual_speed"`, `flag="Actual speed"`, `flag="hot_swap"`,
+	} {
+		if strings.Contains(out, unwanted) {
+			t.Errorf("published: %s", unwanted)
+		}
+	}
+
+	// A bay the module cannot reach contributes nothing, not even a zero
+	// to the count: its owner reports it (see TestShelfMerge).
+	if strings.Contains(out, `component="SLOT 01"`) && strings.Contains(out, `jbod_component_flag{component="SLOT 01"`) {
+		t.Error("the unreachable bay has flags")
+	}
+}
+
+// twoModules is fullSnapshot's shelf as a WD H4060-J presents it: two SCSI
+// enclosures with one identifier, each reporting every element. Module A
+// (1:0:0:0) owns bay 0,0 and answers "No access allowed" for bay 0,1;
+// module B (1:0:31:0) the other way round. Their temperature readings
+// differ by a degree, as two reads a moment apart do.
+func twoModules() jbod.Snapshot {
+	snapshot := fullSnapshot()
+	a := snapshot.Status[0]
+	b := a
+	b.Enclosure = "1:0:31:0"
+	b.Components = slices.Clone(a.Components)
+	for i := range b.Components {
+		c := &b.Components[i]
+		c.Enclosure = "1:0:31:0"
+		switch c.Index {
+		case "0,0":
+			c.Status, c.Health = jbod.Some("No access allowed"), jbod.HealthUnknown
+			c.Device, c.Map = jbod.None[string](), jbod.None[string]()
+		case "0,1":
+			c.Status, c.Health = jbod.Some("OK"), jbod.HealthOK
+			c.Flags = map[string]bool{"Predicted failure": false, "Ident": true}
+			c.SASAddresses, c.SlotNumber = []string{"0x5000cca2a0d6e2f6"}, jbod.Some(int64(1))
+			c.Device, c.Map = jbod.Some("/dev/sg2"), jbod.Some("/dev/sdb")
+		case "3,0":
+			c.Readings = slices.Clone(c.Readings)
+			c.Readings[0].Value = jbod.Some(36.0)
+		}
+	}
+	snapshot.Status = []jbod.EnclosureStatus{b, a, snapshot.Status[1]}
+	return snapshot
+}
+
+// TestShelfMerge checks that the element series of a two-module shelf are
+// published once, from the module best placed to answer, with no enclosure
+// label, while the series about each module keep theirs.
+func TestShelfMerge(t *testing.T) {
+	t.Parallel()
+	out := encode(t, twoModules(), nil, Options{})
+	for _, want := range []string{
+		// Each bay comes from the module that owns it.
+		`jbod_component_info{component="SLOT 00",component_id="0,0",enclosure_id="ENC1",health="ok",status="OK",type="array device slot"} 1`,
+		`jbod_component_info{component="SLOT 01",component_id="0,1",enclosure_id="ENC1",health="ok",status="OK",type="array device slot"} 1`,
+		`jbod_slot_sas_address_info{block_device="/dev/sda",component_id="0,0",device="/dev/sg1",enclosure_id="ENC1",sas_address="0x5000cca2a0d6e2f5",slot="0"} 1`,
+		`jbod_slot_sas_address_info{block_device="/dev/sdb",component_id="0,1",device="/dev/sg2",enclosure_id="ENC1",sas_address="0x5000cca2a0d6e2f6",slot="1"} 1`,
+		`jbod_component_flag{component="SLOT 01",component_id="0,1",enclosure_id="ENC1",flag="ident",type="array device slot"} 1`,
+		// Both modules answer for the sensor; the tie goes to the first
+		// module by address, whatever order the collection finished in.
+		`jbod_sensor_temperature_celsius{component="TEMP A",component_id="3,0",enclosure_id="ENC1",type="temperature sensor"} 35`,
+		// The rollup counts the shelf's elements, not both modules' copies.
+		`jbod_enclosure_component_flags{enclosure_id="ENC1",flag="ac_fail",type="power supply"} 1`,
+		`jbod_enclosure_component_flags{enclosure_id="ENC1",flag="ident",type="array device slot"} 1`,
+		// What each module said about itself stays per module.
+		`jbod_collection_complete{enclosure="1:0:0:0",enclosure_id="ENC1"} 1`,
+		`jbod_collection_complete{enclosure="1:0:31:0",enclosure_id="ENC1"} 1`,
+		`jbod_enclosure_components{enclosure="1:0:31:0",enclosure_id="ENC1",health="ok",type="array device slot"} 1`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing:\n%s", want)
+		}
+	}
+	for _, family := range []string{
+		"jbod_component_info{", "jbod_component_flag{", "jbod_enclosure_component_flags{",
+		"jbod_sensor_", "jbod_slot_sas_address_info{",
+	} {
+		for _, line := range strings.Split(out, "\n") {
+			if strings.HasPrefix(line, family) && strings.Contains(line, `enclosure="`) {
+				t.Errorf("an element series still names the module: %s", line)
+			}
+		}
+	}
+	// One series per element of the shelf: the fixture has six.
+	if n := strings.Count(out, `jbod_component_info{component=`); n != 6 {
+		t.Errorf("%d component series, want the shelf's 6", n)
+	}
+	if n := strings.Count(out, `jbod_sensor_temperature_celsius{`); n != 1 {
+		t.Errorf("%d temperature series, want 1", n)
+	}
+	if strings.Contains(out, `status="No access allowed"`) {
+		t.Error("a module without access won over the one that owns the bay")
+	}
+
+	// A module whose collection was incomplete loses the tie, so the
+	// shelf's readings come from the one that answered in full.
+	snapshot := twoModules()
+	for i := range snapshot.Status {
+		if snapshot.Status[i].Enclosure == "1:0:0:0" {
+			snapshot.Status[i].Collection.Complete = false
+		}
+	}
+	out = encode(t, snapshot, nil, Options{})
+	if !strings.Contains(out, `jbod_sensor_temperature_celsius{component="TEMP A",component_id="3,0",enclosure_id="ENC1",type="temperature sensor"} 36`) {
+		t.Errorf("the reading came from the module with an incomplete collection:\n%s", out)
 	}
 }

@@ -153,16 +153,25 @@ func shelfStatus() []jbod.EnclosureStatus {
 				Status: jbod.Some("OK"), Health: jbod.HealthOK, SlotNumber: jbod.Some(int64(0)),
 				SASAddresses: []string{"0x5000cca2a0d6e2f5"},
 				Device:       jbod.Some("/dev/sg1"), Map: jbod.Some("/dev/sda"),
+				// A disk that reported its own failure as coming, in a bay
+				// whose status is still OK.
+				Flags: map[string]bool{"Predicted failure": true, "Ident": false, "Fault sensed": false},
 			},
 			{
 				// A bay the near module cannot reach: no address, so no
-				// mapping series, and unknown is not ok.
+				// mapping series, and unknown is not ok. Its bits describe
+				// nothing and get no series.
 				Enclosure: "1:0:0:0", Index: "0,1", Type: "array device slot", Name: "SLOT 01",
 				Status: jbod.Some("No access allowed"), Health: jbod.HealthUnknown,
+				Flags: map[string]bool{"Predicted failure": false, "Ident": false},
 			},
 			{
+				// The bits say why the supply is critical. "Actual speed"
+				// is a stray number in the same shape and "Hot swap" a
+				// capability; neither is one of them.
 				Enclosure: "1:0:0:0", Index: "1,0", Type: "power supply", Name: "PSU A",
 				Status: jbod.Some("Critical"), Health: jbod.HealthCritical,
+				Flags: map[string]bool{"Fail": true, "AC fail": true, "DC fail": false, "Actual speed": false, "Hot swap": true},
 			},
 			{
 				Enclosure: "1:0:0:0", Index: "3,0", Type: "temperature sensor", Name: "TEMP A",
@@ -240,7 +249,7 @@ func TestEncodeGolden(t *testing.T) {
 	golden(t, "metrics.golden", encode(t, fullSnapshot(), map[string]int{
 		jbod.CollectorDisks: 7,
 		jbod.CollectorFans:  3,
-	}, Options{Deprecated: true}))
+	}, Options{}))
 }
 
 func TestEncodeGoldenIncomplete(t *testing.T) {
@@ -248,5 +257,5 @@ func TestEncodeGoldenIncomplete(t *testing.T) {
 	s := fullSnapshot()
 	s.Up = false
 	s.Duration = 120 * time.Second
-	golden(t, "metrics-down.golden", encode(t, s, s.Errors, Options{Deprecated: true}))
+	golden(t, "metrics-down.golden", encode(t, s, s.Errors, Options{}))
 }
