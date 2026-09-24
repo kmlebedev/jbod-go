@@ -102,7 +102,7 @@ func newSensor(kind, value, help, threshold, thresholdUnit, thresholdHelp string
 		kind:  kind,
 		value: prometheus.NewDesc(value, help, componentLabels, nil),
 		threshold: prometheus.NewDesc(threshold, thresholdHelp,
-			append(slices.Clone(componentLabels), "threshold"), nil),
+			[]string{"profile", "threshold"}, nil),
 		thresholdUnit: thresholdUnit,
 	}
 }
@@ -118,16 +118,44 @@ var sensorMetrics = []sensorSeries{
 	newSensor(jbod.ReadingTemperature,
 		"jbod_sensor_temperature_celsius", "Temperature reported by an enclosure element",
 		"jbod_sensor_temperature_threshold_celsius", jbod.UnitCelsius,
-		"Temperature limit the enclosure declares for an element"),
+		"Temperature limit of a threshold profile; the profile name is its limits, "+
+			"high critical/high warning/low warning/low critical"),
 	newSensor(jbod.ReadingVoltage,
 		"jbod_sensor_voltage_volts", "Voltage reported by an enclosure element",
 		"jbod_sensor_voltage_threshold_percent", jbod.UnitPercentOfNominal,
-		"Voltage limit the enclosure declares for an element, in percent of the nominal voltage: "+
+		"Voltage limit of a threshold profile, in percent of the nominal voltage: "+
 			"high limits above it, low limits below it"),
 	newSensor(jbod.ReadingCurrent,
 		"jbod_sensor_current_amps", "Current reported by an enclosure element",
 		"jbod_sensor_current_threshold_percent", jbod.UnitPercentOfNominal,
-		"Current limit the enclosure declares for an element, in percent above the nominal current"),
+		"Current limit of a threshold profile, in percent above the nominal current"),
+}
+
+// descThresholdProfile ties a sensor to the threshold profile it uses.
+var descThresholdProfile = prometheus.NewDesc(
+	"jbod_sensor_threshold_profile_info",
+	"The threshold profile a sensor uses; its limits are jbod_sensor_*_threshold_* with the same profile",
+	append(slices.Clone(componentLabels), "profile"), nil)
+
+// thresholdProfile names a set of limits by the limits themselves, in the
+// order high critical, high warning, low warning, low critical, with "-"
+// for a limit the enclosure does not declare: "59/56/8/6", "20/13/-/-".
+//
+// A name made of the values cannot collide with another set and does not
+// depend on which sensor was seen first, so it is the same on every scrape
+// and every shelf; a firmware that changes a limit moves the sensor to
+// another profile rather than changing what a profile means.
+func thresholdProfile(t jbod.Thresholds) string {
+	parts := make([]string, 0, len(thresholdSeries))
+	for _, limit := range thresholdSeries {
+		v, ok := limit.pick(t).Get()
+		if !ok {
+			parts = append(parts, "-")
+			continue
+		}
+		parts = append(parts, strconv.FormatFloat(v, 'f', -1, 64))
+	}
+	return strings.Join(parts, "/")
 }
 
 // thresholdSeries are the four limits, in the order they are published.
@@ -152,6 +180,7 @@ var healthDescriptors = func() []*prometheus.Desc {
 	for _, metric := range sensorMetrics {
 		descs = append(descs, metric.value, metric.threshold)
 	}
+	descs = append(descs, descThresholdProfile)
 	return descs
 }()
 
@@ -268,9 +297,25 @@ func collectComponents(s *sink, snapshot jbod.Snapshot) {
 // into an alerting rule, because they are the enclosure's numbers: a rule
 // that hard-codes 60 °C is wrong on the next shelf, and one that compares
 // against these is not.
+//
+// They are published once per threshold profile, not once per sensor. The
+// limits belong to a class of sensor, not to a sensor: on a WD H4060-J the
+// 102 sensors use 12 sets of limits — all sixty bays one, the fourteen
+// module and expander dies another — so 392 series per sensor carried 44
+// numbers. jbod_sensor_threshold_profile_info says which profile a sensor
+// uses. The profiles carry no enclosure_id: a profile is named by its
+// limits, so the same profile on two shelves is the same numbers.
+//
+// Comparing a reading with its limit is then a join through the profile,
+// which is for a dashboard; an alert does not need the numbers, because the
+// enclosure compares its readings with these limits itself and reports the
+// result as the element's bits (overtemp_warning, warn_over, crit_under and
+// the rest in jbod_enclosure_component_flags).
 func collectSensors(s *sink, snapshot jbod.Snapshot) {
 	merged := shelves(snapshot)
 	for _, metric := range sensorMetrics {
+		profiles := map[string]jbod.Thresholds{}
+		var order []string
 		for _, shelf := range merged {
 			for _, c := range shelf.components {
 				for _, r := range c.Readings {
@@ -284,13 +329,24 @@ func collectSensors(s *sink, snapshot jbod.Snapshot) {
 					if r.Thresholds == nil || r.Thresholds.Unit != metric.thresholdUnit {
 						continue
 					}
-					for _, limit := range thresholdSeries {
-						v, ok := limit.pick(*r.Thresholds).Get()
-						if !ok {
-							continue
-						}
-						s.gauge(metric.threshold, v, append(slices.Clone(labels), limit.name)...)
+					profile := thresholdProfile(*r.Thresholds)
+					if profile == strings.Repeat("-/", len(thresholdSeries)-1)+"-" {
+						// A reading whose limits are all undeclared has no
+						// profile to point at.
+						continue
 					}
+					if _, seen := profiles[profile]; !seen {
+						profiles[profile] = *r.Thresholds
+						order = append(order, profile)
+					}
+					s.gauge(descThresholdProfile, 1, append(slices.Clone(labels), profile)...)
+				}
+			}
+		}
+		for _, profile := range order {
+			for _, limit := range thresholdSeries {
+				if v, ok := limit.pick(profiles[profile]).Get(); ok {
+					s.gauge(metric.threshold, v, profile, limit.name)
 				}
 			}
 		}

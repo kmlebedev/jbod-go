@@ -447,9 +447,11 @@ func TestSensorThresholdUnits(t *testing.T) {
 	t.Parallel()
 	out := encode(t, fullSnapshot(), nil, Options{})
 	for _, want := range []string{
-		`jbod_sensor_temperature_threshold_celsius{component="TEMP A",component_id="3,0",enclosure_id="ENC1",threshold="high_critical",type="temperature sensor"} 65`,
-		`jbod_sensor_voltage_threshold_percent{component="VOLT 12V",component_id="4,0",enclosure_id="ENC1",threshold="high_critical",type="voltage sensor"} 5`,
-		`jbod_sensor_voltage_threshold_percent{component="VOLT 12V",component_id="4,0",enclosure_id="ENC1",threshold="low_warning",type="voltage sensor"} 3`,
+		`jbod_sensor_temperature_threshold_celsius{profile="65/60/0/-19",threshold="high_critical"} 65`,
+		`jbod_sensor_voltage_threshold_percent{profile="5/3/3/5",threshold="high_critical"} 5`,
+		`jbod_sensor_voltage_threshold_percent{profile="5/3/3/5",threshold="low_warning"} 3`,
+		`jbod_sensor_threshold_profile_info{component="TEMP A",component_id="3,0",enclosure_id="ENC1",profile="65/60/0/-19",type="temperature sensor"} 1`,
+		`jbod_sensor_threshold_profile_info{component="VOLT 12V",component_id="4,0",enclosure_id="ENC1",profile="5/3/3/5",type="voltage sensor"} 1`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing:\n%s", want)
@@ -475,6 +477,90 @@ func TestSensorThresholdUnits(t *testing.T) {
 	out = encode(t, snapshot, nil, Options{})
 	if strings.Contains(out, "_threshold_") {
 		t.Errorf("limits in a unit no series is named for were published:\n%s", out)
+	}
+}
+
+// TestThresholdProfiles checks that limits are published once per set of
+// limits: sensors with the same limits share one profile, on one shelf or
+// on two, a sensor with other limits gets its own, and every profile a
+// sensor points at has its limits published. A current sensor declares
+// high limits only, and its profile says so.
+func TestThresholdProfiles(t *testing.T) {
+	t.Parallel()
+	sensor := func(enclosure, index, name, kind, unit string, th jbod.Thresholds) jbod.Component {
+		typ := map[string]string{
+			jbod.ReadingTemperature: "temperature sensor", jbod.ReadingCurrent: "current sensor",
+		}[kind]
+		return jbod.Component{
+			Enclosure: enclosure, Index: index, Name: name, Type: typ,
+			Status: jbod.Some("OK"), Health: jbod.HealthOK,
+			Readings: []jbod.Reading{{Kind: kind, Unit: unit, Value: jbod.Some(30.0), Thresholds: &th}},
+		}
+	}
+	slot := jbod.Thresholds{
+		HighCritical: jbod.Some(59.0), HighWarning: jbod.Some(56.0),
+		LowWarning: jbod.Some(8.0), LowCritical: jbod.Some(6.0), Unit: jbod.UnitCelsius,
+	}
+	die := jbod.Thresholds{
+		HighCritical: jbod.Some(105.0), HighWarning: jbod.Some(95.0),
+		LowWarning: jbod.Some(5.0), LowCritical: jbod.Some(1.0), Unit: jbod.UnitCelsius,
+	}
+	amps := jbod.Thresholds{HighCritical: jbod.Some(20.5), HighWarning: jbod.Some(20.0), Unit: jbod.UnitPercentOfNominal}
+	s := jbod.Snapshot{Up: true, Status: []jbod.EnclosureStatus{
+		{Enclosure: "1:0:0:0", Address: "SHELF1", Collection: jbod.CollectionStatus{Complete: true}, Components: []jbod.Component{
+			sensor("1:0:0:0", "4,0", "TEMP SLOT 00", jbod.ReadingTemperature, jbod.UnitCelsius, slot),
+			sensor("1:0:0:0", "4,1", "TEMP SLOT 01", jbod.ReadingTemperature, jbod.UnitCelsius, slot),
+			sensor("1:0:0:0", "4,67", "TEMP SEC1 A DIE", jbod.ReadingTemperature, jbod.UnitCelsius, die),
+			sensor("1:0:0:0", "9,0", "CURR PSU A IN", jbod.ReadingCurrent, jbod.UnitAmps, amps),
+		}},
+		{Enclosure: "2:0:0:0", Address: "SHELF2", Collection: jbod.CollectionStatus{Complete: true}, Components: []jbod.Component{
+			sensor("2:0:0:0", "4,0", "TEMP SLOT 00", jbod.ReadingTemperature, jbod.UnitCelsius, slot),
+		}},
+	}}
+	out := encode(t, s, nil, Options{})
+	count := func(prefix string) int {
+		n := 0
+		for _, line := range strings.Split(out, "\n") {
+			if strings.HasPrefix(line, prefix) {
+				n++
+			}
+		}
+		return n
+	}
+	// Two temperature profiles of four limits, one current profile of two.
+	if n := count("jbod_sensor_temperature_threshold_celsius{"); n != 8 {
+		t.Errorf("%d temperature limit series, want 8 (two profiles):\n%s", n, out)
+	}
+	if n := count(`jbod_sensor_temperature_threshold_celsius{profile="59/56/8/6"`); n != 4 {
+		t.Errorf("the shared bay profile has %d series, want 4 for three bays on two shelves", n)
+	}
+	if n := count("jbod_sensor_current_threshold_percent{"); n != 2 {
+		t.Errorf("%d current limit series, want 2", n)
+	}
+	for _, want := range []string{
+		`jbod_sensor_current_threshold_percent{profile="20.5/20/-/-",threshold="high_warning"} 20`,
+		`jbod_sensor_threshold_profile_info{component="TEMP SLOT 00",component_id="4,0",enclosure_id="SHELF2",profile="59/56/8/6",type="temperature sensor"} 1`,
+		`jbod_sensor_threshold_profile_info{component="TEMP SEC1 A DIE",component_id="4,67",enclosure_id="SHELF1",profile="105/95/5/1",type="temperature sensor"} 1`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing:\n%s", want)
+		}
+	}
+	// One profile series per sensor with limits.
+	if n := count("jbod_sensor_threshold_profile_info{"); n != 5 {
+		t.Errorf("%d profile series, want one per sensor, 5", n)
+	}
+	// Every profile a sensor points at is published.
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.HasPrefix(line, "jbod_sensor_threshold_profile_info{") {
+			continue
+		}
+		start := strings.Index(line, `profile="`) + len(`profile="`)
+		profile := line[start : start+strings.Index(line[start:], `"`)]
+		if !strings.Contains(out, `_threshold_celsius{profile="`+profile+`"`) &&
+			!strings.Contains(out, `_threshold_percent{profile="`+profile+`"`) {
+			t.Errorf("a sensor points at profile %s, which has no limits", profile)
+		}
 	}
 }
 

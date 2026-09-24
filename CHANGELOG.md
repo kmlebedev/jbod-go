@@ -9,6 +9,17 @@ built from a checkout.
 
 ### Changed
 
+- Sensor thresholds are published once per threshold profile instead of once
+  per sensor. `jbod_sensor_{temperature,voltage,current}_threshold_*` are
+  labelled `profile` and `threshold` only, and the new
+  `jbod_sensor_threshold_profile_info{enclosure_id,component,component_id,type,profile}`
+  says which profile a sensor uses. A profile is named by its limits
+  ("59/56/8/6", "20.5/20/-/-"), so it is the same on every shelf and scrape.
+  On a WD H4060-J the 102 sensors use 12 profiles: 392 threshold series
+  become 44 plus 102, and the host goes from 2457 series to 2211. Comparing
+  a reading with its limit is a join through the profile; an alert can use
+  the enclosure's own verdict in `jbod_enclosure_component_flags` instead.
+
 - The element series of a shelf are published once per shelf instead of
   once per I/O module: `jbod_component_info`, `jbod_component_flag`,
   `jbod_enclosure_component_flags`, `jbod_sensor_*` and

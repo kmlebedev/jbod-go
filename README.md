@@ -280,7 +280,27 @@ ID   NAME        TYPE                READING      VALUE  UNIT     STATUS       H
 ```
 
 Пороги — это числа самого корпуса со страницы Threshold In, а не константа в
-правиле алертинга: на следующей полке она будет другой. Порог температуры —
+правиле алертинга: на следующей полке она будет другой.
+
+В метриках пороги публикуются по профилям, а не по датчикам. Порог — это
+свойство класса датчиков: на H4060-J у 102 датчиков 12 наборов порогов (все
+60 корзин — один, 14 кристаллов и памяти экспандеров и IOM — другой), и 392
+серии по датчикам несли 44 числа. Профиль назван самими порогами в порядке
+high critical/high warning/low warning/low critical, `-` — порог не объявлен:
+`59/56/8/6`, `20.5/20/-/-`. Поэтому имя одно и то же на всех полках и во всех
+scrape. `jbod_sensor_threshold_profile_info` говорит, какой профиль у датчика,
+и сравнение с порогом на дашборде — это джойн через профиль:
+
+```
+jbod_sensor_temperature_celsius
+  * on(enclosure_id, component_id) group_left(profile) jbod_sensor_threshold_profile_info
+  >= on(profile) group_left() jbod_sensor_temperature_threshold_celsius{threshold="high_warning"}
+```
+
+Для алерта числа не нужны: корпус сам сравнивает показания со своими
+порогами и выставляет биты, которые есть в `jbod_enclosure_component_flags`
+с нулями —
+`jbod_enclosure_component_flags{flag=~"overtemp_warning|overtemp_failure|warn_over|crit_over|warn_under|crit_under"} > 0`. Порог температуры —
 в градусах. Порог напряжения и тока страница задаёт в процентах от
 номинала датчика — верхние выше номинала, нижние ниже, — а сам номинал ни на
 одной странице не приходит, поэтому в таблице такой порог печатается с `%`.
@@ -539,9 +559,10 @@ stderr.
 | jbod_sensor_temperature_celsius | gauge | enclosure_id, component, component_id, type | температура элемента полки |
 | jbod_sensor_voltage_volts | gauge | те же | напряжение |
 | jbod_sensor_current_amps | gauge | те же | ток |
-| jbod_sensor_temperature_threshold_celsius | gauge | те же + threshold | порог температуры корпуса: high_critical, high_warning, low_warning, low_critical |
-| jbod_sensor_voltage_threshold_percent | gauge | те же + threshold | порог напряжения в процентах от номинала: high_* выше него, low_* ниже |
-| jbod_sensor_current_threshold_percent | gauge | те же + threshold | порог тока в процентах выше номинала: только high_critical и high_warning |
+| jbod_sensor_threshold_profile_info | gauge | enclosure_id, component, component_id, type, profile | какой профиль порогов у датчика, всегда 1 |
+| jbod_sensor_temperature_threshold_celsius | gauge | profile, threshold | порог температуры профиля: high_critical, high_warning, low_warning, low_critical |
+| jbod_sensor_voltage_threshold_percent | gauge | profile, threshold | порог напряжения профиля в процентах от номинала: high_* выше него, low_* ниже |
+| jbod_sensor_current_threshold_percent | gauge | profile, threshold | порог тока профиля в процентах выше номинала: только high_critical и high_warning |
 | jbod_slot_sas_address_info | gauge | enclosure_id, slot, component_id, sas_address, device, block_device | отображение slot → SAS address → disk, всегда 1 |
 
 Серии элементов — `jbod_component_info`, `jbod_component_flag`,

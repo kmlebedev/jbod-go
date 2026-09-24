@@ -398,6 +398,8 @@ Capabilities: `sas.phy`, `sas.phy_error_counters`, `smp.phy_error_counters`.
 `jbod_slot_sas_address_info`) публикуются один раз на полку по `enclosure_id`,
 а не по каждому IOM: значение берётся у модуля с доступом к элементу и полным
 сбором. Помодульными остаются здоровье, страницы SES и сводка компонентов.
+Пороги публикуются по профилям (набор порогов, названный самими значениями) и
+`jbod_sensor_threshold_profile_info` связывает с профилем каждый датчик.
 
 Метрики: `jbod_sas_phy_info`, `jbod_sas_phy_state` (текущее состояние, одна
 серия на phy), `jbod_sas_device_phys` (число phy устройства в каждом

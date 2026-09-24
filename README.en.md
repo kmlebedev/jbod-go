@@ -286,6 +286,27 @@ ID   NAME        TYPE                READING      VALUE  UNIT     STATUS       H
 
 The thresholds are the enclosure's own numbers from the Threshold In page,
 not a constant in an alerting rule: the next shelf declares different ones.
+
+In the metrics the thresholds are published per profile, not per sensor. A
+limit belongs to a class of sensor: on an H4060-J the 102 sensors use 12 sets
+of limits (all 60 bays one, the 14 expander and module dies and memories
+another), and 392 series per sensor carried 44 numbers. A profile is named by
+its limits, in the order high critical/high warning/low warning/low critical,
+with `-` for a limit not declared: `59/56/8/6`, `20.5/20/-/-`, so the name is
+the same on every shelf and every scrape. `jbod_sensor_threshold_profile_info`
+says which profile a sensor uses, and comparing a reading with its limit on a
+dashboard is a join through the profile:
+
+```
+jbod_sensor_temperature_celsius
+  * on(enclosure_id, component_id) group_left(profile) jbod_sensor_threshold_profile_info
+  >= on(profile) group_left() jbod_sensor_temperature_threshold_celsius{threshold="high_warning"}
+```
+
+An alert does not need the numbers: the enclosure compares its readings with
+its own limits and sets the element's bits, which are in
+`jbod_enclosure_component_flags` with their zeros —
+`jbod_enclosure_component_flags{flag=~"overtemp_warning|overtemp_failure|warn_over|crit_over|warn_under|crit_under"} > 0`.
 A temperature limit is in degrees. The page gives voltage and current limits
 as a percentage of the sensor's nominal value — high limits above it, low
 limits below it — and the nominal value is on no page, so the table prints
@@ -552,9 +573,10 @@ Added in 1.2:
 | jbod_sensor_temperature_celsius | gauge | enclosure_id, component, component_id, type | temperature of an element of the shelf |
 | jbod_sensor_voltage_volts | gauge | the same | voltage |
 | jbod_sensor_current_amps | gauge | the same | current |
-| jbod_sensor_temperature_threshold_celsius | gauge | the same plus threshold | the enclosure's temperature limit: high_critical, high_warning, low_warning, low_critical |
-| jbod_sensor_voltage_threshold_percent | gauge | the same plus threshold | voltage limit in percent of nominal: high_* above it, low_* below it |
-| jbod_sensor_current_threshold_percent | gauge | the same plus threshold | current limit in percent above nominal: high_critical and high_warning only |
+| jbod_sensor_threshold_profile_info | gauge | enclosure_id, component, component_id, type, profile | the threshold profile a sensor uses, always 1 |
+| jbod_sensor_temperature_threshold_celsius | gauge | profile, threshold | temperature limit of a profile: high_critical, high_warning, low_warning, low_critical |
+| jbod_sensor_voltage_threshold_percent | gauge | profile, threshold | voltage limit of a profile in percent of nominal: high_* above it, low_* below it |
+| jbod_sensor_current_threshold_percent | gauge | profile, threshold | current limit of a profile in percent above nominal: high_critical and high_warning only |
 | jbod_slot_sas_address_info | gauge | enclosure_id, slot, component_id, sas_address, device, block_device | the slot → SAS address → disk mapping, always 1 |
 
 The element series — `jbod_component_info`, `jbod_component_flag`,
