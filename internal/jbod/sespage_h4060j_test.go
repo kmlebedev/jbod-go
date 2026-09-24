@@ -12,6 +12,8 @@ import (
 //
 //	configuration.txt     sg_ses --page=cf /dev/sg2
 //	threshold-in-raw.txt  sg_ses --page=th --raw /dev/sg2
+//	join-sg2.txt          sg_ses --join /dev/sg2   (I/O module A)
+//	join-sg33.txt         sg_ses --join /dev/sg33  (I/O module B)
 //
 // They are the first Threshold In page read from real hardware, and the
 // tests below pin what the decoder makes of it (ROADMAP 5, 10).
@@ -173,4 +175,88 @@ func TestH4060JMisreadBySgSes148(t *testing.T) {
 // fixtureIndex is the "[type,element]" index the pages share.
 func fixtureIndex(typeIndex, element int) string {
 	return strconv.Itoa(typeIndex) + "," + strconv.Itoa(element)
+}
+
+// TestH4060JStatusFlags pins what the two modules of one shelf report in
+// their element status bits, as the metrics publish them.
+//
+// Every field either has a stable name or is one of the two numbers the
+// enclosure element prints in the same shape. Each module has no access to
+// the thirty bays the other owns, and the bits it prints for them are all
+// zero. Of the bits left, the only ones set are normal states: the fans and
+// supplies requested on, the connectors that are cabled, and "report" on
+// the module that is answering — which is how the metric tells the modules
+// apart. "Hot swap", set on every supply, fan and module, is a capability
+// and is not among them.
+func TestH4060JStatusFlags(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		file      string
+		reporting string
+		owned     [2]int64
+	}{
+		{"join-sg2.txt", "5,0", [2]int64{0, 29}},
+		{"join-sg33.txt", "5,1", [2]int64{30, 59}},
+	} {
+		elements := parseJoinElements(h4060j(t, tc.file))
+		unknown := map[string]bool{}
+		pairs := map[string]bool{}
+		set := map[string]int{}
+		noAccess := 0
+		for _, e := range elements {
+			if e.Element < 0 {
+				continue
+			}
+			c := Component{Index: e.Index, Type: e.Type, Status: e.Status, Flags: e.Flags}
+			for printed := range e.Flags {
+				if _, ok := FlagName(printed); !ok {
+					unknown[printed] = true
+				}
+			}
+			if c.NoAccess() {
+				noAccess++
+				if e.Type != "array device slot" || (e.Element >= tc.owned[0] && e.Element <= tc.owned[1]) {
+					t.Errorf("%s: %s %s reads as no access", tc.file, e.Type, e.Index)
+				}
+				for printed, v := range e.Flags {
+					if v {
+						t.Errorf("%s: %s has %s set without access", tc.file, e.Index, printed)
+					}
+				}
+				continue
+			}
+			for _, f := range c.StatusFlags() {
+				pairs[e.Type+"/"+f.Name] = true
+				if f.Set {
+					set[e.Type+"/"+f.Name]++
+					if f.Name == "report" && e.Index != tc.reporting {
+						t.Errorf("%s: %s reports, want %s", tc.file, e.Index, tc.reporting)
+					}
+				}
+			}
+		}
+		if len(unknown) != 2 || !unknown["Time until power cycle"] || !unknown["Requested power off duration"] {
+			t.Errorf("%s: fields without a name %v, want the enclosure's two numbers", tc.file, unknown)
+		}
+		if noAccess != 30 {
+			t.Errorf("%s: %d elements without access, want the other module's 30 bays", tc.file, noAccess)
+		}
+		want := map[string]int{
+			"cooling/requested_on": 8, "power supply/requested_on": 2,
+			"sas connector/mated": 2, "enclosure services controller electronics/report": 1,
+		}
+		if len(set) != len(want) {
+			t.Errorf("%s: set bits %v, want %v", tc.file, set, want)
+		}
+		for k, n := range want {
+			if set[k] != n {
+				t.Errorf("%s: %s set on %d elements, want %d", tc.file, k, set[k], n)
+			}
+		}
+		// The type and bit pairs are the per-enclosure counts the metrics
+		// publish, zeros included.
+		if len(pairs) != 109 {
+			t.Errorf("%s: %d type and bit pairs, want 109", tc.file, len(pairs))
+		}
+	}
 }

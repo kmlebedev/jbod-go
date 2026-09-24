@@ -1,0 +1,2374 @@
+  HGST  H4060-J  4013
+  Primary enclosure logical identifier (hex): 5000ccab05629d00
+[0,-1]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+SLOT 00,T5G93KUD             [0,0]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 0
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca44010930a
+      phy identifier: 0x1
+SLOT 01,T5G8WD4D             [0,1]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 1
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d7b
+      SAS address: 0x5000cca44010272e
+      phy identifier: 0x1
+SLOT 02,T5G955WD             [0,2]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 2
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca44010ab4a
+      phy identifier: 0x1
+SLOT 03,T5G8YRXD             [0,3]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 3
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d7b
+      SAS address: 0x5000cca440104a6e
+      phy identifier: 0x1
+SLOT 04,T5G9443D             [0,4]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 4
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d7b
+      SAS address: 0x5000cca440109b6a
+      phy identifier: 0x1
+SLOT 05,T5G8TVHD             [0,5]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 5
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d7b
+      SAS address: 0x5000cca440100116
+      phy identifier: 0x1
+SLOT 06,T5G60GPD             [0,6]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 6
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d7b
+      SAS address: 0x5000cca4400af006
+      phy identifier: 0x1
+SLOT 07,T5G7RMLD             [0,7]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 7
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d7b
+      SAS address: 0x5000cca4400e0e3a
+      phy identifier: 0x1
+SLOT 08,T5G7VWPD             [0,8]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 8
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d7b
+      SAS address: 0x5000cca4400e4e36
+      phy identifier: 0x1
+SLOT 09,T5G733KD             [0,9]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 9
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d7b
+      SAS address: 0x5000cca4400ce92a
+      phy identifier: 0x1
+SLOT 10,T5G8KUED             [0,10]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 10
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d7b
+      SAS address: 0x5000cca4400f9776
+      phy identifier: 0x1
+SLOT 11,T5G8TDUD             [0,11]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 11
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400ffa76
+      phy identifier: 0x1
+SLOT 12,T5G8YKUD             [0,12]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 12
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4401047f6
+      phy identifier: 0x1
+SLOT 13,T5G7HKHD             [0,13]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 13
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400da41a
+      phy identifier: 0x1
+SLOT 14,T5G8W4VD             [0,14]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 14
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4401023a6
+      phy identifier: 0x1
+SLOT 15,T5G7ZB2D             [0,15]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 15
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400e823a
+      phy identifier: 0x1
+SLOT 16,T5G6SXZD             [0,16]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 16
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400c504e
+      phy identifier: 0x1
+SLOT 17,T5G7JPPD             [0,17]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 17
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400db526
+      phy identifier: 0x1
+SLOT 18,T5G6DBSD             [0,18]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 18
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400ba2ca
+      phy identifier: 0x1
+SLOT 19,T5G7NATD             [0,19]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 19
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400debee
+      phy identifier: 0x1
+SLOT 20,T5G8U5UD             [0,20]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 20
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca440100616
+      phy identifier: 0x1
+SLOT 21,T5G7N45D             [0,21]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 21
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400de8ba
+      phy identifier: 0x1
+SLOT 22,T5G6N61D             [0,22]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 22
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400c1826
+      phy identifier: 0x1
+SLOT 23,T5G6VKED             [0,23]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 23
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400c77c2
+      phy identifier: 0x1
+SLOT 24,T5G9DJUD             [0,24]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 24
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4401119b2
+      phy identifier: 0x1
+SLOT 25,T5G8TH5D             [0,25]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 25
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400ffb9a
+      phy identifier: 0x1
+SLOT 26,T5G5R1VD             [0,26]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 26
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400a62aa
+      phy identifier: 0x1
+SLOT 27,T5G7XXPD             [0,27]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 27
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400e6cba
+      phy identifier: 0x1
+SLOT 28,T5G8U1VD             [0,28]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 28
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca44010042a
+      phy identifier: 0x1
+SLOT 29,T5G7Z08D             [0,29]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: No access allowed
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 29
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400e7cfe
+      phy identifier: 0x1
+SLOT 30,T5G7RN5D             [0,30]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 30
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400e0e82
+      phy identifier: 0x1
+SLOT 31,T5G7K6SD             [0,31]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 31
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400dbcee
+      phy identifier: 0x1
+SLOT 32,T5G6X7YD             [0,32]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 32
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400c9132
+      phy identifier: 0x1
+SLOT 33,T5G6Z0YD             [0,33]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 33
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400cabd6
+      phy identifier: 0x1
+SLOT 34,T5G75NXD             [0,34]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 34
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400d0f9a
+      phy identifier: 0x1
+SLOT 35,T5G7KT6D             [0,35]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 35
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400dc562
+      phy identifier: 0x1
+SLOT 36,T5G8PAYD             [0,36]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 36
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400fcc82
+      phy identifier: 0x1
+SLOT 37,T5G8ET9D             [0,37]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 37
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400f5ada
+      phy identifier: 0x1
+SLOT 38,T5G8E6UD             [0,38]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 38
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400f5262
+      phy identifier: 0x1
+SLOT 39,T5G6TXAD             [0,39]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 39
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400c5f02
+      phy identifier: 0x1
+SLOT 40,T5G8E7SD             [0,40]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 40
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400f52d6
+      phy identifier: 0x1
+SLOT 41,T5G8EWED             [0,41]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 41
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400f5c5e
+      phy identifier: 0x1
+SLOT 42,T5G98GBD             [0,42]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 42
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca44010dc72
+      phy identifier: 0x1
+SLOT 43,T5G8PVRD             [0,43]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 43
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400fd426
+      phy identifier: 0x1
+SLOT 44,T5G5K7GD             [0,44]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 44
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400a1a4e
+      phy identifier: 0x1
+SLOT 45,T5G7W84D             [0,45]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 45
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400e53c2
+      phy identifier: 0x1
+SLOT 46,T5G93M0D             [0,46]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 46
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca44010939e
+      phy identifier: 0x1
+SLOT 47,T5G55U3D             [0,47]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 47
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca440096eaa
+      phy identifier: 0x1
+SLOT 48,T5G8DP3D             [0,48]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 48
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400f4a4a
+      phy identifier: 0x1
+SLOT 49,T5G85JDD             [0,49]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 49
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400edee6
+      phy identifier: 0x1
+SLOT 50,T5G7VLHD             [0,50]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 50
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400e49c2
+      phy identifier: 0x1
+SLOT 51,T5G97J1D             [0,51]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 51
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca44010ce3e
+      phy identifier: 0x1
+SLOT 52,T5G8L6WD             [0,52]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 52
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400f9d7e
+      phy identifier: 0x1
+SLOT 53,T5G8K6GD             [0,53]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 53
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400f8e46
+      phy identifier: 0x1
+SLOT 54,T5G8YU0D             [0,54]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 54
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca440104b72
+      phy identifier: 0x1
+SLOT 55,T5G7SXYD             [0,55]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 55
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400e21c6
+      phy identifier: 0x1
+SLOT 56,T5G90H6D             [0,56]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 56
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4401064ba
+      phy identifier: 0x1
+SLOT 57,T5G6XYND             [0,57]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 57
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400c9bb6
+      phy identifier: 0x1
+SLOT 58,T5G5PAYD             [0,58]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 58
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400a580e
+      phy identifier: 0x1
+SLOT 59,T5G8SU3D             [0,59]  Element type: Array device slot
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    OK=0, Reserved device=0, Hot spare=0, Cons check=0
+    In crit array=0, In failed array=0, Rebuild/remap=0, R/R abort=0
+    App client bypass A=0, Do not remove=0, Enc bypass A=0, Enc bypass B=0
+    Ready to insert=0, RMV=0, Ident=0, Report=0
+    App client bypass B=0, Fault sensed=0, Fault reqstd=0, Device off=0
+    Bypassed A=0, Bypassed B=0, Dev bypassed A=0, Dev bypassed B=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1, not all phys: 1, device slot number: 59
+    phy index: 0
+      SAS device type: end device
+      initiator port for:
+      target port for: SSP
+      attached SAS address: 0x5000ccab05629d79
+      SAS address: 0x5000cca4400ff166
+      phy identifier: 0x1
+[1,-1]  Element type: Enclosure
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Time until power cycle=0, Failure indication=0
+    Warning indication=0, Requested power off duration=0
+    Failure requested=0, Warning requested=0
+ENCLOSURE,1ES2749-A1,THCCT00526EZ0002,1EB1173-A1,THCCT00226EJ0031                                                            [1,0]  Element type: Enclosure
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Time until power cycle=0, Failure indication=0
+    Warning indication=0, Requested power off duration=0
+    Failure requested=0, Warning requested=0
+[2,-1]  Element type: Power supply
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Do not remove=0, DC overvoltage=0, DC undervoltage=0
+    DC overcurrent=0, Hot swap=1, Fail=0, Requested on=1, Off=0
+    Overtmp fail=0, Temperature warn=0, AC fail=0, DC fail=0
+POWER SUPPLY A,G1358-1600WNEE,1358162N0L250901678,0.0.0,GOSPOWER,1600W                       [2,0]  Element type: Power supply
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Do not remove=0, DC overvoltage=0, DC undervoltage=0
+    DC overcurrent=0, Hot swap=1, Fail=0, Requested on=1, Off=0
+    Overtmp fail=0, Temperature warn=0, AC fail=0, DC fail=0
+POWER SUPPLY B,G1358-1600WNEE,1358162N0L250901946,0.0.0,GOSPOWER,1600W                       [2,1]  Element type: Power supply
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Do not remove=0, DC overvoltage=0, DC undervoltage=0
+    DC overcurrent=0, Hot swap=1, Fail=0, Requested on=1, Off=0
+    Overtmp fail=0, Temperature warn=0, AC fail=0, DC fail=0
+[3,-1]  Element type: Cooling
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Do not remove=0, Hot swap=1, Fail=0, Requested on=1
+    Off=0, Actual speed=0 rpm, Fan stopped
+FAN ENCL 1       [3,0]  Element type: Cooling
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Do not remove=0, Hot swap=1, Fail=0, Requested on=1
+    Off=0, Actual speed=7230 rpm, Fan at third lowest speed
+FAN ENCL 2       [3,1]  Element type: Cooling
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Do not remove=0, Hot swap=1, Fail=0, Requested on=1
+    Off=0, Actual speed=7260 rpm, Fan at third lowest speed
+FAN ENCL 3       [3,2]  Element type: Cooling
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Do not remove=0, Hot swap=1, Fail=0, Requested on=1
+    Off=0, Actual speed=7200 rpm, Fan at third lowest speed
+FAN ENCL 4       [3,3]  Element type: Cooling
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Do not remove=0, Hot swap=1, Fail=0, Requested on=1
+    Off=0, Actual speed=7180 rpm, Fan at third lowest speed
+FAN IOM 1        [3,4]  Element type: Cooling
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Do not remove=0, Hot swap=1, Fail=0, Requested on=1
+    Off=0, Actual speed=17780 rpm, Fan at second highest speed
+FAN IOM 2        [3,5]  Element type: Cooling
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Do not remove=0, Hot swap=1, Fail=0, Requested on=1
+    Off=0, Actual speed=15570 rpm, Fan at second highest speed
+FAN PSU A        [3,6]  Element type: Cooling
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Do not remove=0, Hot swap=1, Fail=0, Requested on=1
+    Off=0, Actual speed=19650 rpm, Fan at second highest speed
+FAN PSU B        [3,7]  Element type: Cooling
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Do not remove=0, Hot swap=1, Fail=0, Requested on=1
+    Off=0, Actual speed=19620 rpm, Fan at second highest speed
+[4,-1]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature: <reserved>
+TEMP SLOT 00     [4,0]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=31 C
+TEMP SLOT 01     [4,1]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=31 C
+TEMP SLOT 02     [4,2]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=32 C
+TEMP SLOT 03     [4,3]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=32 C
+TEMP SLOT 04     [4,4]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=32 C
+TEMP SLOT 05     [4,5]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=32 C
+TEMP SLOT 06     [4,6]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=31 C
+TEMP SLOT 07     [4,7]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=32 C
+TEMP SLOT 08     [4,8]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=32 C
+TEMP SLOT 09     [4,9]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=32 C
+TEMP SLOT 10     [4,10]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=31 C
+TEMP SLOT 11     [4,11]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=31 C
+TEMP SLOT 12     [4,12]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=36 C
+TEMP SLOT 13     [4,13]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=36 C
+TEMP SLOT 14     [4,14]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=36 C
+TEMP SLOT 15     [4,15]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=36 C
+TEMP SLOT 16     [4,16]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=36 C
+TEMP SLOT 17     [4,17]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=36 C
+TEMP SLOT 18     [4,18]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=35 C
+TEMP SLOT 19     [4,19]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=36 C
+TEMP SLOT 20     [4,20]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=36 C
+TEMP SLOT 21     [4,21]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=36 C
+TEMP SLOT 22     [4,22]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=36 C
+TEMP SLOT 23     [4,23]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=37 C
+TEMP SLOT 24     [4,24]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=40 C
+TEMP SLOT 25     [4,25]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=42 C
+TEMP SLOT 26     [4,26]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=42 C
+TEMP SLOT 27     [4,27]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=42 C
+TEMP SLOT 28     [4,28]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=41 C
+TEMP SLOT 29     [4,29]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=41 C
+TEMP SLOT 30     [4,30]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=40 C
+TEMP SLOT 31     [4,31]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=41 C
+TEMP SLOT 32     [4,32]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=41 C
+TEMP SLOT 33     [4,33]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=42 C
+TEMP SLOT 34     [4,34]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=41 C
+TEMP SLOT 35     [4,35]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=41 C
+TEMP SLOT 36     [4,36]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=42 C
+TEMP SLOT 37     [4,37]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=44 C
+TEMP SLOT 38     [4,38]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=45 C
+TEMP SLOT 39     [4,39]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=45 C
+TEMP SLOT 40     [4,40]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=45 C
+TEMP SLOT 41     [4,41]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=43 C
+TEMP SLOT 42     [4,42]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=43 C
+TEMP SLOT 43     [4,43]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=44 C
+TEMP SLOT 44     [4,44]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=45 C
+TEMP SLOT 45     [4,45]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=45 C
+TEMP SLOT 46     [4,46]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=44 C
+TEMP SLOT 47     [4,47]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=43 C
+TEMP SLOT 48     [4,48]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=42 C
+TEMP SLOT 49     [4,49]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=44 C
+TEMP SLOT 50     [4,50]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=45 C
+TEMP SLOT 51     [4,51]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=45 C
+TEMP SLOT 52     [4,52]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=45 C
+TEMP SLOT 53     [4,53]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=45 C
+TEMP SLOT 54     [4,54]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=43 C
+TEMP SLOT 55     [4,55]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=45 C
+TEMP SLOT 56     [4,56]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=45 C
+TEMP SLOT 57     [4,57]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=45 C
+TEMP SLOT 58     [4,58]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=45 C
+TEMP SLOT 59     [4,59]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=43 C
+TEMP IOM A       [4,60]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=51 C
+TEMP IOM B       [4,61]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=53 C
+TEMP BB 60 1     [4,62]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=35 C
+TEMP BB 60 2     [4,63]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=35 C
+TEMP BB 42 1     [4,64]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=27 C
+TEMP BB 42 2     [4,65]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=27 C
+TEMP PRI A DIE   [4,66]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=61 C
+TEMP SEC1 A DIE  [4,67]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=80 C
+TEMP SEC2 A DIE  [4,68]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=49 C
+TEMP PRI A MEM   [4,69]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=51 C
+TEMP SEC1 A MEM  [4,70]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=49 C
+TEMP SEC2 A MEM  [4,71]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=38 C
+TEMP PRI B DIE   [4,72]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=62 C
+TEMP SEC1 B DIE  [4,73]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=80 C
+TEMP SEC2 B DIE  [4,74]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=49 C
+TEMP PRI B MEM   [4,75]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=52 C
+TEMP SEC1 B MEM  [4,76]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=51 C
+TEMP SEC2 B MEM  [4,77]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=36 C
+TEMP IOM A 5V    [4,78]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=45 C
+TEMP IOM B 5V    [4,79]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=46 C
+TEMP PSU A AMB   [4,80]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=41 C
+TEMP PSU A HOT   [4,81]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=43 C
+TEMP PSU A PRI   [4,82]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=45 C
+TEMP PSU B AMB   [4,83]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=40 C
+TEMP PSU B HOT   [4,84]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=43 C
+TEMP PSU B PRI   [4,85]  Element type: Temperature sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, OT failure=0, OT warning=0, UT failure=0
+    UT warning=0
+    Temperature=44 C
+[5,-1]  Element type: Enclosure services controller electronics
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, Do not remove=0, Report=1, Hot swap=1
+ESCE IOMA,1EA0484-001-A1      ,THCCT00426EG00CB    ,5000CCAB05629D3C,10.50.49.68,00:0C:CA:08:8C:40,4.0.130                                                   [5,0]  Element type: Enclosure services controller electronics
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, Do not remove=0, Report=0, Hot swap=1
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1
+    phy index: 0
+      phy_id: 0x31
+      no connector
+      SAS address: 0x5000ccab05629d3d
+ESCE IOMB,1EA0484-001-A1      ,THCCT00426EG00CC    ,5000CCAB05629D7C,10.50.49.69,00:0C:CA:08:8F:86,4.0.130                                                   [5,1]  Element type: Enclosure services controller electronics
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, Do not remove=0, Report=1, Hot swap=1
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 1
+    phy index: 0
+      phy_id: 0x31
+      no connector
+      SAS address: 0x5000ccab05629d7d
+[6,-1]  Element type: SAS expander
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0
+EXP IOMA 0,4013-003,5000CCAB05629D3D [6,0]  Element type: SAS expander
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 49
+    SAS address: 0x5000ccab05629d3d
+    Attached connector; other_element pairs:
+      [0] no connector
+      [1] no connector
+      [2] no connector
+      [3] no connector
+      [4] no connector
+      [5] no connector
+      [6] no connector
+      [7] no connector
+      [8] no connector
+      [9] no connector
+      [10] no connector
+      [11] no connector
+      [12] no connector
+      [13] no connector
+      [14] no connector
+      [15] no connector
+      [16] no connector
+      [17] no connector
+      [18] no connector
+      [19] no connector
+      [20] no connector
+      [21] no connector
+      [22] no connector
+      [23] no connector
+      [24] no connector
+      [25] no connector
+      [26] no connector
+      [27] no connector
+      [28] no connector
+      [29] no connector
+      [30] no connector
+      [31] no connector
+      [32] no connector
+      [33] no connector
+      [34] no connector
+      [35] no connector
+      [36] no connector
+      [37] no connector
+      [38] no connector
+      [39] no connector
+      [40] no connector
+      [41] no connector
+      [42] no connector
+      [43] no connector
+      [44] no connector
+      [45] no connector
+      [46] no connector
+      [47] no connector
+      [48] no connector
+EXP IOMA 1,4013-003,5000CCAB05629D3F [6,1]  Element type: SAS expander
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 68
+    SAS address: 0x5000ccab05629d3f
+    Attached connector; other_element pairs:
+      [0] no connector
+      [1] no connector
+      [2] no connector
+      [3] no connector
+      [4] no connector
+      [5] no connector
+      [6] no connector
+      [7] no connector
+      [8] no connector
+      [9] no connector
+      [10] no connector
+      [11] no connector
+      [12] no connector
+      [13] no connector
+      [14] no connector
+      [15] no connector
+      [16] no connector
+      [17] no connector
+      [18] no connector
+      [19] no connector
+      [20] no connector
+      [21] no connector
+      [22] no connector
+      [23] no connector
+      [24] no connector
+      [25] no connector
+      [26] no connector
+      [27] no connector
+      [28] no connector
+      [29] no connector
+      [30] no connector
+      [31] no connector
+      [32] no connector
+      [33] no connector
+      [34] no connector
+      [35] no connector
+      [36] no connector
+      [37] no connector
+      [38] no connector
+      [39] no connector
+      [40] no connector
+      [41] no connector
+      [42] no connector
+      [43] no connector
+      [44] no connector
+      [45] no connector
+      [46] no connector
+      [47] no connector
+      [48] no connector
+      [49] no connector
+      [50] no connector
+      [51] no connector
+      [52] no connector
+      [53] no connector
+      [54] no connector
+      [55] no connector
+      [56] no connector
+      [57] no connector
+      [58] no connector
+      [59] no connector
+      [60] no connector
+      [61] no connector
+      [62] no connector
+      [63] no connector
+      [64] no connector
+      [65] no connector
+      [66] no connector
+      [67] no connector
+EXP IOMA 2,4013-003,5000CCAB05629D7F [6,2]  Element type: SAS expander
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 68
+    SAS address: 0x5000ccab05629d7f
+    Attached connector; other_element pairs:
+      [0] no connector
+      [1] no connector
+      [2] no connector
+      [3] no connector
+      [4] no connector
+      [5] no connector
+      [6] no connector
+      [7] no connector
+      [8] no connector
+      [9] no connector
+      [10] no connector
+      [11] no connector
+      [12] no connector
+      [13] no connector
+      [14] no connector
+      [15] no connector
+      [16] no connector
+      [17] no connector
+      [18] no connector
+      [19] no connector
+      [20] no connector
+      [21] no connector
+      [22] no connector
+      [23] no connector
+      [24] no connector
+      [25] no connector
+      [26] no connector
+      [27] no connector
+      [28] no connector
+      [29] no connector
+      [30] no connector
+      [31] no connector
+      [32] no connector
+      [33] no connector
+      [34] no connector
+      [35] no connector
+      [36] no connector
+      [37] no connector
+      [38] no connector
+      [39] no connector
+      [40] no connector
+      [41] no connector
+      [42] no connector
+      [43] no connector
+      [44] no connector
+      [45] no connector
+      [46] no connector
+      [47] no connector
+      [48] no connector
+      [49] no connector
+      [50] no connector
+      [51] no connector
+      [52] no connector
+      [53] no connector
+      [54] no connector
+      [55] no connector
+      [56] no connector
+      [57] no connector
+      [58] no connector
+      [59] no connector
+      [60] no connector
+      [61] no connector
+      [62] no connector
+      [63] no connector
+      [64] no connector
+      [65] no connector
+      [66] no connector
+      [67] no connector
+EXP IOMB 0,4013-003,5000CCAB05629D7D [6,3]  Element type: SAS expander
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 49
+    SAS address: 0x5000ccab05629d7d
+    Attached connector; other_element pairs:
+      [0] no connector
+      [1] no connector
+      [2] no connector
+      [3] no connector
+      [4] no connector
+      [5] no connector
+      [6] no connector
+      [7] no connector
+      [8] no connector
+      [9] no connector
+      [10] no connector
+      [11] no connector
+      [12] no connector
+      [13] no connector
+      [14] no connector
+      [15] no connector
+      [16] no connector
+      [17] no connector
+      [18] no connector
+      [19] no connector
+      [20] no connector
+      [21] no connector
+      [22] no connector
+      [23] no connector
+      [24] no connector
+      [25] no connector
+      [26] no connector
+      [27] no connector
+      [28] no connector
+      [29] no connector
+      [30] no connector
+      [31] no connector
+      [32] no connector
+      [33] no connector
+      [34] no connector
+      [35] no connector
+      [36] no connector
+      [37] no connector
+      [38] no connector
+      [39] no connector
+      [40] no connector
+      [41] no connector
+      [42] no connector
+      [43] no connector
+      [44] no connector
+      [45] no connector
+      [46] no connector
+      [47] no connector
+      [48] no connector
+EXP IOMB 1,4013-003,5000CCAB05629D79 [6,4]  Element type: SAS expander
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 68
+    SAS address: 0x5000ccab05629d79
+    Attached connector; other_element pairs:
+      [0] no connector
+      [1] no connector
+      [2] no connector
+      [3] no connector
+      [4] no connector
+      [5] no connector
+      [6] no connector
+      [7] no connector
+      [8] no connector
+      [9] no connector
+      [10] no connector
+      [11] no connector
+      [12] no connector
+      [13] no connector
+      [14] no connector
+      [15] no connector
+      [16] no connector
+      [17] no connector
+      [18] no connector
+      [19] no connector
+      [20] no connector
+      [21] no connector
+      [22] no connector
+      [23] no connector
+      [24] no connector
+      [25] no connector
+      [26] no connector
+      [27] no connector
+      [28] no connector
+      [29] no connector
+      [30] no connector
+      [31] no connector
+      [32] no connector
+      [33] no connector
+      [34] no connector
+      [35] no connector
+      [36] no connector
+      [37] no connector
+      [38] no connector
+      [39] no connector
+      [40] no connector
+      [41] no connector
+      [42] no connector
+      [43] no connector
+      [44] no connector
+      [45] no connector
+      [46] no connector
+      [47] no connector
+      [48] no connector
+      [49] no connector
+      [50] no connector
+      [51] no connector
+      [52] no connector
+      [53] no connector
+      [54] no connector
+      [55] no connector
+      [56] no connector
+      [57] no connector
+      [58] no connector
+      [59] no connector
+      [60] no connector
+      [61] no connector
+      [62] no connector
+      [63] no connector
+      [64] no connector
+      [65] no connector
+      [66] no connector
+      [67] no connector
+EXP IOMB 2,4013-003,5000CCAB05629D7B [6,5]  Element type: SAS expander
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0
+  Additional Element Status:
+    Transport protocol: SAS
+    number of phys: 68
+    SAS address: 0x5000ccab05629d7b
+    Attached connector; other_element pairs:
+      [0] no connector
+      [1] no connector
+      [2] no connector
+      [3] no connector
+      [4] no connector
+      [5] no connector
+      [6] no connector
+      [7] no connector
+      [8] no connector
+      [9] no connector
+      [10] no connector
+      [11] no connector
+      [12] no connector
+      [13] no connector
+      [14] no connector
+      [15] no connector
+      [16] no connector
+      [17] no connector
+      [18] no connector
+      [19] no connector
+      [20] no connector
+      [21] no connector
+      [22] no connector
+      [23] no connector
+      [24] no connector
+      [25] no connector
+      [26] no connector
+      [27] no connector
+      [28] no connector
+      [29] no connector
+      [30] no connector
+      [31] no connector
+      [32] no connector
+      [33] no connector
+      [34] no connector
+      [35] no connector
+      [36] no connector
+      [37] no connector
+      [38] no connector
+      [39] no connector
+      [40] no connector
+      [41] no connector
+      [42] no connector
+      [43] no connector
+      [44] no connector
+      [45] no connector
+      [46] no connector
+      [47] no connector
+      [48] no connector
+      [49] no connector
+      [50] no connector
+      [51] no connector
+      [52] no connector
+      [53] no connector
+      [54] no connector
+      [55] no connector
+      [56] no connector
+      [57] no connector
+      [58] no connector
+      [59] no connector
+      [60] no connector
+      [61] no connector
+      [62] no connector
+      [63] no connector
+      [64] no connector
+      [65] no connector
+      [66] no connector
+      [67] no connector
+[7,-1]  Element type: SAS connector
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: Not installed
+    Ident=0, No information
+    Connector physical link=0x0, Mated=0, Fail=0, OC=0
+CONN HOST 00     [7,0]  Element type: SAS connector
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Mini SAS HD 4x receptacle (SFF-8644) [max 4 phys]
+    Connector physical link=0xff, Mated=1, Fail=0, OC=0
+CONN HOST 01     [7,1]  Element type: SAS connector
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: Not installed
+    Ident=0, Mini SAS HD 4x receptacle (SFF-8644) [max 4 phys]
+    Connector physical link=0xff, Mated=0, Fail=0, OC=0
+CONN HOST 02     [7,2]  Element type: SAS connector
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: Not installed
+    Ident=0, Mini SAS HD 4x receptacle (SFF-8644) [max 4 phys]
+    Connector physical link=0xff, Mated=0, Fail=0, OC=0
+CONN HOST 03     [7,3]  Element type: SAS connector
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: Not installed
+    Ident=0, Mini SAS HD 4x receptacle (SFF-8644) [max 4 phys]
+    Connector physical link=0xff, Mated=0, Fail=0, OC=0
+CONN HOST 04     [7,4]  Element type: SAS connector
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: Not installed
+    Ident=0, Mini SAS HD 4x receptacle (SFF-8644) [max 4 phys]
+    Connector physical link=0xff, Mated=0, Fail=0, OC=0
+CONN HOST 05     [7,5]  Element type: SAS connector
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: Not installed
+    Ident=0, Mini SAS HD 4x receptacle (SFF-8644) [max 4 phys]
+    Connector physical link=0xff, Mated=0, Fail=0, OC=0
+CONN HOST 06     [7,6]  Element type: SAS connector
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: Not installed
+    Ident=0, Mini SAS HD 4x receptacle (SFF-8644) [max 4 phys]
+    Connector physical link=0xff, Mated=0, Fail=0, OC=0
+CONN HOST 07     [7,7]  Element type: SAS connector
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: Not installed
+    Ident=0, Mini SAS HD 4x receptacle (SFF-8644) [max 4 phys]
+    Connector physical link=0xff, Mated=0, Fail=0, OC=0
+CONN HOST 08     [7,8]  Element type: SAS connector
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: Not installed
+    Ident=0, Mini SAS HD 4x receptacle (SFF-8644) [max 4 phys]
+    Connector physical link=0xff, Mated=0, Fail=0, OC=0
+CONN HOST 09     [7,9]  Element type: SAS connector
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: Not installed
+    Ident=0, Mini SAS HD 4x receptacle (SFF-8644) [max 4 phys]
+    Connector physical link=0xff, Mated=0, Fail=0, OC=0
+CONN HOST 10     [7,10]  Element type: SAS connector
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: Not installed
+    Ident=0, Mini SAS HD 4x receptacle (SFF-8644) [max 4 phys]
+    Connector physical link=0xff, Mated=0, Fail=0, OC=0
+CONN HOST 11     [7,11]  Element type: SAS connector
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Mini SAS HD 4x receptacle (SFF-8644) [max 4 phys]
+    Connector physical link=0xff, Mated=1, Fail=0, OC=0
+[8,-1]  Element type: Voltage sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0,  Warn Over=0, Warn Under=0, Crit Over=0
+    Crit Under=0
+    Voltage: 0.00 Volts
+VOLT PSU A AC    [8,0]  Element type: Voltage sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0,  Warn Over=0, Warn Under=0, Crit Over=0
+    Crit Under=0
+    Voltage: 229.75 Volts
+VOLT PSU A 12V   [8,1]  Element type: Voltage sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0,  Warn Over=0, Warn Under=0, Crit Over=0
+    Crit Under=0
+    Voltage: 12.27 Volts
+VOLT PSU B AC    [8,2]  Element type: Voltage sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0,  Warn Over=0, Warn Under=0, Crit Over=0
+    Crit Under=0
+    Voltage: 229.25 Volts
+VOLT PSU B 12V   [8,3]  Element type: Voltage sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0,  Warn Over=0, Warn Under=0, Crit Over=0
+    Crit Under=0
+    Voltage: 12.27 Volts
+VOLT IOM A 5V    [8,4]  Element type: Voltage sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0,  Warn Over=0, Warn Under=0, Crit Over=0
+    Crit Under=0
+    Voltage: 5.07 Volts
+VOLT IOM A 12V   [8,5]  Element type: Voltage sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0,  Warn Over=0, Warn Under=0, Crit Over=0
+    Crit Under=0
+    Voltage: 12.25 Volts
+VOLT IOM B 5V    [8,6]  Element type: Voltage sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0,  Warn Over=0, Warn Under=0, Crit Over=0
+    Crit Under=0
+    Voltage: 5.07 Volts
+VOLT IOM B 12V   [8,7]  Element type: Voltage sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0,  Warn Over=0, Warn Under=0, Crit Over=0
+    Crit Under=0
+    Voltage: 12.25 Volts
+[9,-1]  Element type: Current sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, Warn Over=0, Crit Over=0
+    Current: 0.00 Amps
+CURR PSU A IN    [9,0]  Element type: Current sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, Warn Over=0, Crit Over=0
+    Current: 1.25 Amps
+CURR PSU A OUT   [9,1]  Element type: Current sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, Warn Over=0, Crit Over=0
+    Current: 21.88 Amps
+CURR PSU B IN    [9,2]  Element type: Current sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, Warn Over=0, Crit Over=0
+    Current: 1.19 Amps
+CURR PSU B OUT   [9,3]  Element type: Current sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, Warn Over=0, Crit Over=0
+    Current: 20.84 Amps
+CURR IOM A 12V   [9,4]  Element type: Current sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, Warn Over=0, Crit Over=0
+    Current: 9.73 Amps
+CURR IOM A 5V    [9,5]  Element type: Current sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, Warn Over=0, Crit Over=0
+    Current: 14.25 Amps
+CURR IOM B 12V   [9,6]  Element type: Current sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, Warn Over=0, Crit Over=0
+    Current: 9.07 Amps
+CURR IOM B 5V    [9,7]  Element type: Current sensor
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, Warn Over=0, Crit Over=0
+    Current: 13.50 Amps
+[10,-1]  Element type: Door
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, Open=0, Unlock=0
+ENCLOSURE COVER  [10,0]  Element type: Door
+  Enclosure Status:
+    Predicted failure=0, Disabled=0, Swap=0, status: OK
+    Ident=0, Fail=0, Open=0, Unlock=0

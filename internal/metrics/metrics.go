@@ -25,14 +25,10 @@ import (
 	"github.com/kmlebedev/jbod-go/internal/jbod"
 )
 
-// Options controls what the collector publishes.
-type Options struct {
-	// Deprecated keeps the pre-1.1 series in the output. It defaults to
-	// off in the zero value, and the exporter turns it on, because the
-	// migration period is the default and dropping a series under a
-	// running dashboard is not (ROADMAP 4).
-	Deprecated bool
-}
+// Options controls what the collector publishes. It has no fields: the one
+// it had, Deprecated, switched jbod_fan_rpm on and went with it. The
+// parameter stays so the next option is not a change of every signature.
+type Options struct{}
 
 // Descriptors of the core series. They are package-level because a
 // descriptor is immutable and shared by every scrape; building them once
@@ -64,10 +60,6 @@ var (
 		"jbod_fan_speed_rpm",
 		"Speed of a cooling element, addressed by enclosure and component",
 		[]string{"enclosure", "enclosure_id", "component", "component_id"}, nil)
-	descFanRPM = prometheus.NewDesc(
-		"jbod_fan_rpm",
-		"DEPRECATED, replaced by jbod_fan_speed_rpm: the labels omit the enclosure, so identical fans of two shelves overwrite each other. Removal is planned for 2.0.",
-		[]string{"device", "slot"}, nil)
 	descUp = prometheus.NewDesc(
 		"jbod_up",
 		"Whether the last collection completed",
@@ -89,7 +81,7 @@ var (
 // series and catch a label set that changed by accident.
 var descriptors = append([]*prometheus.Desc{
 	descEnclosureCount, descEnclosureInfo, descSlots, descSlotTemperature,
-	descFanSpeed, descFanRPM, descUp, descScrapeDuration, descScrapeErrors,
+	descFanSpeed, descUp, descScrapeDuration, descScrapeErrors,
 }, append(healthDescriptors, sasDescriptors...)...)
 
 // Collector publishes one snapshot.
@@ -130,7 +122,7 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 	collectSensors(s, c.snapshot)
 	collectMapping(s, c.snapshot)
 	collectTemperatures(s, c.snapshot)
-	collectFans(s, c.snapshot, c.opts)
+	collectFans(s, c.snapshot)
 	collectPHYs(s, c.snapshot)
 	collectCollection(s, c.snapshot)
 	collectHealth(s, c.snapshot, c.errorTotals)
@@ -247,15 +239,13 @@ func collectTemperatures(s *sink, snapshot jbod.Snapshot) {
 	}
 }
 
-// collectFans publishes the corrected fan series, and optionally the old one.
+// collectFans publishes the speed of every cooling element.
 //
-// jbod_fan_rpm labels a fan with its description and its SES index only, so
-// "Fan A" at index 2,0 means the same thing on every shelf in the rack and
-// the second enclosure overwrites the first. There is no way to fix that in
-// place without changing what the existing series means, so the corrected
-// metric is a new name carrying the enclosure as well, and the old one stays
-// until 2.0 (ROADMAP 4).
-func collectFans(s *sink, snapshot jbod.Snapshot, opts Options) {
+// The series carries the enclosure because the description and the SES index
+// are per shelf: "Fan A" at index 2,0 is on every shelf in the rack. Its
+// predecessor, jbod_fan_rpm, labelled a fan with those two only, so the last
+// shelf written overwrote the others (ROADMAP 4); it is removed.
+func collectFans(s *sink, snapshot jbod.Snapshot) {
 	ids := enclosureIDs(snapshot)
 	type fanKey struct {
 		enclosure, id, component, index string
@@ -282,26 +272,6 @@ func collectFans(s *sink, snapshot jbod.Snapshot, opts Options) {
 	}
 	for _, k := range order {
 		s.gauge(descFanSpeed, float64(speeds[k]), k.enclosure, k.id, k.component, k.index)
-	}
-	if !opts.Deprecated {
-		return
-	}
-	type oldKey struct{ device, slot string }
-	old := map[oldKey]int64{}
-	var oldOrder []oldKey
-	for _, f := range snapshot.Fans {
-		speed, ok := f.Speed.Get()
-		if !ok {
-			continue
-		}
-		k := oldKey{f.Description, f.Index}
-		if _, seen := old[k]; !seen {
-			oldOrder = append(oldOrder, k)
-		}
-		old[k] = speed
-	}
-	for _, k := range oldOrder {
-		s.gauge(descFanRPM, float64(old[k]), k.device, k.slot)
 	}
 }
 

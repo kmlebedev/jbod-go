@@ -315,7 +315,7 @@ func TestEndToEndWithAClient(t *testing.T) {
 	for _, want := range []string{
 		"number_of_enclosures 1",
 		`jbod_slot_temperature{enclosure="1:0:0:0",slot="Slot 01"} 37`,
-		`jbod_fan_rpm{device="Fan A",slot="2,0"} 1200`,
+		`jbod_fan_speed_rpm{component="Fan A",component_id="2,0",enclosure="1:0:0:0",`,
 		"jbod_up 1",
 	} {
 		if !strings.Contains(r.Body.String(), want) {

@@ -280,10 +280,54 @@ ID   NAME        TYPE                READING      VALUE  UNIT     STATUS       H
 ```
 
 Пороги — это числа самого корпуса со страницы Threshold In, а не константа в
-правиле алертинга: на следующей полке она будет другой. Порог температуры —
+правиле алертинга: на следующей полке она будет другой.
+
+В метриках пороги публикуются по профилям, а не по датчикам. Порог — это
+свойство класса датчиков: на H4060-J у 102 датчиков 12 наборов порогов (все
+60 корзин — один, 14 кристаллов и памяти экспандеров и IOM — другой), и 392
+серии по датчикам несли 44 числа. Профиль назван самими порогами в порядке
+high critical/high warning/low warning/low critical, `-` — порог не объявлен:
+`59/56/8/6`, `20.5/20/-/-`. Поэтому имя одно и то же на всех полках и во всех
+scrape. `jbod_sensor_threshold_profile_info` говорит, какой профиль у датчика,
+и сравнение с порогом на дашборде — это джойн через профиль:
+
+```
+jbod_sensor_temperature_celsius
+  * on(enclosure_id, component_id) group_left(profile) jbod_sensor_threshold_profile_info
+  >= on(profile) group_left() jbod_sensor_temperature_threshold_celsius{threshold="high_warning"}
+```
+
+Для алерта числа не нужны: корпус сам сравнивает показания со своими
+порогами и выставляет биты, которые есть в `jbod_enclosure_component_flags`
+с нулями —
+`jbod_enclosure_component_flags{flag=~"overtemp_warning|overtemp_failure|warn_over|crit_over|warn_under|crit_under"} > 0`. Порог температуры —
 в градусах. Порог напряжения и тока страница задаёт в процентах от
 номинала датчика — верхние выше номинала, нижние ниже, — а сам номинал ни на
 одной странице не приходит, поэтому в таблице такой порог печатается с `%`.
+
+Биты статуса элемента — `predicted_failure`, `fault_sensed`, `ident`,
+`do_not_remove`, `swap`, у блока питания `ac_fail`, `dc_fail`,
+`overtemp_warning`, `dc_overcurrent` и остальные — публикуются в двух
+видах. `jbod_component_flag` — по элементу, только установленные биты:
+почти все биты почти всегда нулевые (на H4060-J из 1961 бита модуля
+установлены 25, и все это нормальные состояния), а по нулю на каждый было
+3922 серии на хост, которые ничего не говорили. Сброшенный бит у элемента,
+который есть в `jbod_component_info`, — это ноль, а не «не прочитано».
+`jbod_enclosure_component_flags` — по корпусу, типу и биту: сколько
+элементов его держат, нули тоже. Эта серия есть всегда, поэтому на ней и
+пишется алерт: `jbod_enclosure_component_flags{flag="predicted_failure"} > 0`,
+или «кабелей стало меньше» —
+`delta(jbod_enclosure_component_flags{type="sas connector",flag="mated"}[10m]) < 0`;
+`jbod_component_flag` затем говорит, какой именно элемент. `hot_swap` не
+публикуется вовсе: это не состояние, а то, что элемент умеет, и он
+установлен у каждого блока питания, вентилятора и модуля. `report` —
+модуль, который сейчас отвечает на запросы. Имя бита берётся из полей SES-3,
+а не из написания sg_ses: оно различается между типами элементов и версиями
+(«Fault reqstd» и «Fault requested» — один бит). Поле, которого словарь не
+знает, в метрику не попадает: так же отсекаются числа в той же форме
+«Имя=N» — «Actual speed=0 rpm», «Time until power cycle=1». Элемент со
+статусом «No access allowed» битов не получает: это половина корзин полки с
+двумя IOM, и за неё отвечает другой модуль.
 
 Страница читается сырой (`--raw`) и декодируется по странице Configuration,
 а не по тексту sg_ses. Текст раскладывает пороги по строкам под заголовком
@@ -451,7 +495,6 @@ GET / возвращает пустой ответ; GET /metrics — Prometheus 
 | `--scrape-timeout` | 2m | таймаут полного сбора |
 | `--concurrency` | 12 | сколько внешних команд выполняется одновременно |
 | `--cache-ttl` | 0s | отдавать предыдущий снимок в течение этого времени |
-| `--deprecated-metrics` | true | отдавать также серии до 1.1 (`jbod_fan_rpm`) |
 | `--log-level` | info | debug, info, warn или error |
 | `--log-format` | json | json для systemd, text для терминала |
 
@@ -495,7 +538,6 @@ stderr.
 | --- | --- |
 | number_of_enclosures | нет |
 | jbod_slot_temperature | slot, enclosure |
-| jbod_fan_rpm | device, slot — **deprecated**, см. ниже |
 
 Добавлены в 1.1:
 
@@ -511,21 +553,41 @@ stderr.
 | --- | --- | --- | --- |
 | jbod_enclosure_health | gauge | enclosure, enclosure_id, source, level | 1 у текущего уровня; source — `hardware` или `components` |
 | jbod_enclosure_components | gauge | enclosure, enclosure_id, type, health | сколько элементов каждого типа в каждом состоянии |
-| jbod_component_info | gauge | enclosure, enclosure_id, component, component_id, type, status, health | один элемент, всегда 1 |
-| jbod_sensor_temperature_celsius | gauge | enclosure, enclosure_id, component, component_id, type | температура элемента корпуса |
+| jbod_component_info | gauge | enclosure_id, component, component_id, type, status, health | один элемент полки, всегда 1 |
+| jbod_component_flag | gauge | enclosure_id, component, component_id, type, flag | установленный бит статуса элемента; серия есть только пока бит установлен, значение всегда 1 |
+| jbod_enclosure_component_flags | gauge | enclosure_id, type, flag | сколько элементов типа держат бит, для каждого бита, который полка сообщает; 0, если ни один |
+| jbod_sensor_temperature_celsius | gauge | enclosure_id, component, component_id, type | температура элемента полки |
 | jbod_sensor_voltage_volts | gauge | те же | напряжение |
 | jbod_sensor_current_amps | gauge | те же | ток |
-| jbod_sensor_temperature_threshold_celsius | gauge | те же + threshold | порог температуры корпуса: high_critical, high_warning, low_warning, low_critical |
-| jbod_sensor_voltage_threshold_percent | gauge | те же + threshold | порог напряжения в процентах от номинала: high_* выше него, low_* ниже |
-| jbod_sensor_current_threshold_percent | gauge | те же + threshold | порог тока в процентах выше номинала: только high_critical и high_warning |
-| jbod_slot_sas_address_info | gauge | enclosure, enclosure_id, slot, component_id, sas_address, device, block_device | отображение slot → SAS address → disk, всегда 1 |
+| jbod_sensor_threshold_profile_info | gauge | enclosure_id, component, component_id, type, profile | какой профиль порогов у датчика, всегда 1 |
+| jbod_sensor_temperature_threshold_celsius | gauge | profile, threshold | порог температуры профиля: high_critical, high_warning, low_warning, low_critical |
+| jbod_sensor_voltage_threshold_percent | gauge | profile, threshold | порог напряжения профиля в процентах от номинала: high_* выше него, low_* ниже |
+| jbod_sensor_current_threshold_percent | gauge | profile, threshold | порог тока профиля в процентах выше номинала: только high_critical и high_warning |
+| jbod_slot_sas_address_info | gauge | enclosure_id, slot, component_id, sas_address, device, block_device | отображение slot → SAS address → disk, всегда 1 |
+
+Серии элементов — `jbod_component_info`, `jbod_component_flag`,
+`jbod_enclosure_component_flags`, `jbod_sensor_*` и `jbod_slot_sas_address_info`
+— публикуются один раз на полку и адресуются `enclosure_id` и
+`component_id`, без `enclosure`. Полка с двумя IOM — это два SCSI-корпуса с
+одним идентификатором, и каждый модуль сообщает все её элементы: на H4060-J
+это было 870 дублей из 3 327 серий, пороги совпадали все, а показания
+расходились на градус или треть ампера — два чтения с разницей в мгновение.
+Значение берётся у модуля, который лучше всего может ответить: у того, у
+кого есть доступ к элементу (каждый модуль H4060-J отвечает «No access
+allowed» на тридцать корзин другого), а среди равных — у того, чей сбор
+полный, затем у первого по SCSI-адресу. Поэтому все 60 корзин приходят со
+статусом своего владельца и с диском, а при отказе модуля серия не
+обрывается, а продолжается с другого. Что с каждым модулем, видно по
+сериям, которые остались помодульными: `jbod_collection_complete`,
+`jbod_ses_page_read`, `jbod_enclosure_health`, `jbod_enclosure_components`.
 
 Добавлено в 1.3:
 
 | Метрика | Тип | Labels | Значение |
 | --- | --- | --- | --- |
 | jbod_sas_phy_info | gauge | host, phy, port, sas_address, device_type, negotiated_link_rate | один phy, всегда 1 |
-| jbod_sas_phy_state | gauge | host, phy, port, sas_address, device_type, state | 1 у состояния phy, 0 у остальных: up, disabled, failed, spin-up hold, unknown |
+| jbod_sas_phy_state | gauge | host, phy, port, sas_address, device_type, state | текущее состояние phy — up, disabled, failed, spin-up hold или unknown; одна серия на phy, всегда 1 |
+| jbod_sas_device_phys | gauge | host, sas_address, device_type, state | сколько phy устройства — экспандера или HBA — в каждом состоянии; 0, если ни одного |
 | jbod_sas_phy_negotiated_link_rate_gbps | gauge | host, phy, port, sas_address, device_type | скорость линка; серии нет, если скорости нет |
 | jbod_sas_phy_invalid_dword_total | counter | те же | невалидные dword |
 | jbod_sas_phy_running_disparity_error_total | counter | те же | ошибки running disparity |
@@ -544,11 +606,19 @@ Labels — хост и phy, а не корпус: phy принадлежит HBA
 линк. Экспортёр читает только sysfs: SMP стоит по запросу на phy и в scrape
 не ходит.
 
-Состояние phy — набор серий, по одной на состояние, с единицей у текущего.
-`disabled`, `failed` и `unknown` — три разных диагноза, и «поднят или нет»
-складывал их в один ноль. Label на info-серии вместо этого обрывал бы одну
-серию и начинал другую ровно в момент, когда линк меняется. Вакантного
-состояния в наборе нет: такой phy серий не получает.
+Состояние phy публикуется в двух видах, как биты элементов.
+`jbod_sas_phy_state` — одна серия на phy с его текущим состоянием и
+значением 1: `disabled`, `failed` и `unknown` — три разных диагноза, и
+«поднят или нет» складывал их в один ноль. Полный набор состояний говорил
+то же самое четырьмя нулями на phy — 796 из 995 серий на хосте с H4060-J.
+`jbod_sas_device_phys` — по каждому устройству, экспандеру или HBA, и
+каждому состоянию: сколько его phy в нём, нули тоже. Когда линк меняет
+состояние, его серия в `jbod_sas_phy_state` заканчивается и начинается
+другая; счётчик по устройству есть всегда, поэтому алерт пишется на него —
+`delta(jbod_sas_device_phys{state="up"}[10m]) < 0` («на экспандере стало
+меньше поднятых линков»), а `jbod_sas_phy_state{state!="up"}` затем
+показывает, какой phy. Вакантного состояния нет ни там, ни там: такой phy
+серий не получает.
 
 Phy экспандера, у которого нет скорости и все четыре счётчика существуют, но
 не читаются, отдельных серий не получает. Драйвер отвечает на эти атрибуты,
@@ -610,28 +680,26 @@ SCSI-адрес: адрес назначается при сканировани
 (text 0.0.4 и OpenMetrics), gzip и заголовки, которые ждёт Prometheus:
 ничего из этого в репозитории не написано руками.
 
-### Миграция с jbod_fan_rpm
+### jbod_fan_rpm удалена
 
-В `jbod_fan_rpm` label `device` — это описание вентилятора, а `slot` — индекс
-sg_ses. Оба значения локальны для корпуса, поэтому «Fan A» с индексом `2,0`
-совпадает по labels у каждой полки в стойке, и значение последней затирает
-предыдущие. Исправить это на месте нельзя: смена набора labels изменила бы
-смысл серии, которую уже читают дашборды.
-
-Поэтому исправленная метрика — это новое имя:
+В `jbod_fan_rpm` label `device` был описанием вентилятора, а `slot` —
+индексом sg_ses. Оба значения локальны для корпуса, поэтому «Fan A» с
+индексом `2,0` совпадал по labels у каждой полки в стойке, и значение
+последней затирало предыдущие. Исправленная метрика — новое имя:
 
 ```
 jbod_fan_speed_rpm{enclosure="1:0:0:0",enclosure_id="naa.5000...01",component="Fan A",component_id="2,0"} 1200
 jbod_fan_speed_rpm{enclosure="10:0:0:0",enclosure_id="naa.5000...02",component="Fan A",component_id="2,0"} 4800
 ```
 
-Порядок миграции:
-
-1. обновить экспортёр: обе серии отдаются одновременно, ничего не ломается;
-2. перевести дашборды и правила на `jbod_fan_speed_rpm`;
-3. запустить экспортёр с `--deprecated-metrics=false` и убедиться, что ничего
-   не пропало;
-4. оставить так. Удаление `jbod_fan_rpm` запланировано не раньше 2.0.
+`jbod_fan_rpm` удалена раньше обещанного 2.0: это восемь серий на хост,
+которые не несли ничего сверх `jbod_fan_speed_rpm`, а на стойке из
+нескольких полок — неверные числа. Дашборд или правило, которые её читают,
+переводятся заменой имени и labels: `device` → `component`, `slot` →
+`component_id`, плюс `enclosure` и `enclosure_id`. Флаг
+`--deprecated-metrics` по-прежнему принимается, чтобы unit-файл, в котором
+он записан, не перестал запускать экспортёр, но ничего не делает и
+предупреждает об этом.
 
 Каждый scrape собирает свежие значения. Исчезнувшие устройства удаляются
 из выдачи. Недоступная температура пропускается (в CLI отображается ERR);

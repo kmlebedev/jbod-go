@@ -33,12 +33,16 @@ import (
 //
 // Two more shape the state:
 //
-//   - The state is a state set, one series per state with 1 on the state the
-//     transport reports. "Up or not" folded disabled, failed and unknown
-//     into one 0, and those are the three diagnoses the transport offers;
-//     a label on the info series instead would end one series and start
-//     another at the moment a link changes, which is the moment a dashboard
-//     is looked at.
+//   - The state is published in two shapes, the way the element bits are.
+//     Per phy, one series carrying the state the transport reports, always
+//     1: "up or not" folded disabled, failed and unknown into one 0, and
+//     those are the three diagnoses the transport offers. A full state set
+//     said the same with four zeros per phy — 796 of 995 series on a WD
+//     H4060-J host. Per SAS device — each expander and the HBA — and state,
+//     the count of its phys in that state, zeros included. When a link
+//     changes state its per-phy series ends and another begins; the count
+//     is the series that is always there, so "one phy fewer up on this
+//     expander" is a step with history, and the per-phy series says which.
 //
 //   - A phy the expander declined to describe (jbod.PHY.Unanswered, the
 //     sysfs face of a vacant phy) gets no per-phy series. On a real shelf
@@ -63,8 +67,12 @@ var (
 		phyLabels, nil)
 	descPHYState = prometheus.NewDesc(
 		"jbod_sas_phy_state",
-		"Condition of one phy; 1 marks the state the transport reports, the others are 0",
+		"State the transport reports for one phy; one series per phy, always 1",
 		append(append([]string{}, phyLabels...), "state"), nil)
+	descDevicePHYs = prometheus.NewDesc(
+		"jbod_sas_device_phys",
+		"Phys of one SAS device, an expander or the HBA, in each state; 0 when none is in it",
+		[]string{"host", "sas_address", "device_type", "state"}, nil)
 	descPHYsUnanswered = prometheus.NewDesc(
 		"jbod_sas_expander_phys_unanswered",
 		"Phys of an expander that have no rate and whose error log the expander refused, "+
@@ -72,9 +80,10 @@ var (
 		[]string{"host", "sas_address"}, nil)
 )
 
-// phyStates are the states the state set publishes: every state a phy that
-// gets series can be in. Vacant is not one of them — a vacant phy gets no
-// series (see collectPHYs) — so each published phy has exactly one 1.
+// phyStates are the states jbod_sas_device_phys counts: every state a phy
+// that gets series can be in. Vacant is not one of them — a vacant phy gets
+// no series (see collectPHYs) — so the counts of a device add up to its
+// published phys.
 var phyStates = func() []jbod.PHYState {
 	states := make([]jbod.PHYState, 0, len(jbod.PHYStates))
 	for _, state := range jbod.PHYStates {
@@ -115,7 +124,7 @@ var phyCounters = []struct {
 
 // sasDescriptors is what this file can publish, for Describe.
 var sasDescriptors = func() []*prometheus.Desc {
-	descs := []*prometheus.Desc{descPHYInfo, descPHYLinkRate, descPHYState, descPHYsUnanswered}
+	descs := []*prometheus.Desc{descPHYInfo, descPHYLinkRate, descPHYState, descDevicePHYs, descPHYsUnanswered}
 	for _, counter := range phyCounters {
 		descs = append(descs, counter.desc)
 	}
@@ -126,6 +135,9 @@ var sasDescriptors = func() []*prometheus.Desc {
 func collectPHYs(s *sink, snapshot jbod.Snapshot) {
 	unanswered := map[expanderKey]int{}
 	var expanders []expanderKey
+	type deviceKey struct{ host, address, kind string }
+	states := map[deviceKey]map[jbod.PHYState]int{}
+	var devices []deviceKey
 	for _, phy := range snapshot.PHYs {
 		if expander, ok := expanderOf(phy); ok {
 			if _, seen := unanswered[expander]; !seen {
@@ -147,10 +159,13 @@ func collectPHYs(s *sink, snapshot jbod.Snapshot) {
 		}
 		s.gauge(descPHYInfo, 1, append(append([]string{}, labels...),
 			phy.Negotiated.Text.Or(""))...)
-		for _, state := range phyStates {
-			s.gauge(descPHYState, boolean(phy.State == state),
-				append(append([]string{}, labels...), string(state))...)
+		s.gauge(descPHYState, 1, append(append([]string{}, labels...), string(phy.State))...)
+		device := deviceKey{optionalNumber(phy.Host), phy.SASAddress.Or(""), phy.DeviceType.Or("")}
+		if _, seen := states[device]; !seen {
+			states[device] = map[jbod.PHYState]int{}
+			devices = append(devices, device)
 		}
+		states[device][phy.State]++
 		if rate, ok := phy.Negotiated.Gbps.Get(); ok {
 			// A phy that reports "Phy disabled" has no rate, and 0 Gbit/s
 			// is a different claim: it gets no series at all.
@@ -168,6 +183,14 @@ func collectPHYs(s *sink, snapshot jbod.Snapshot) {
 	// have no history to compare with.
 	for _, expander := range expanders {
 		s.gauge(descPHYsUnanswered, float64(unanswered[expander]), expander.host, expander.address)
+	}
+	// Every state of every device, zeros included, so the day a phy leaves
+	// "up" is a step in a series that was already there.
+	for _, device := range devices {
+		for _, state := range phyStates {
+			s.gauge(descDevicePHYs, float64(states[device][state]),
+				device.host, device.address, device.kind, string(state))
+		}
 	}
 }
 

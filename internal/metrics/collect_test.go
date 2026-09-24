@@ -42,7 +42,7 @@ func encode(t *testing.T, s jbod.Snapshot, errorTotals map[string]int, opts Opti
 func TestCollectorDescribesWhatItPublishes(t *testing.T) {
 	t.Parallel()
 	described := make(chan *prometheus.Desc, len(descriptors)+1)
-	c := NewCollector(fullSnapshot(), nil, Options{Deprecated: true})
+	c := NewCollector(fullSnapshot(), nil, Options{})
 	c.Describe(described)
 	close(described)
 	known := map[*prometheus.Desc]struct{}{}
@@ -65,17 +65,17 @@ func TestCollectorDescribesWhatItPublishes(t *testing.T) {
 // TestExpositionIsLintClean runs the client library's own linter over the
 // output, which is where the Prometheus naming rules live.
 //
-// The two names below are known and deliberate: number_of_enclosures is the
+// The names below are known and deliberate: number_of_enclosures is the
 // Rust exporter's name and renaming it would break every dashboard, and
-// jbod_fan_rpm is the deprecated series that carries no unit suffix the
-// linter recognises. Anything else the linter finds is a new mistake.
+// jbod_slot_temperature predates the unit suffix. Anything else the linter
+// finds is a new mistake.
 func TestExpositionIsLintClean(t *testing.T) {
 	t.Parallel()
-	problems, err := testutil.CollectAndLint(NewCollector(fullSnapshot(), nil, Options{Deprecated: true}))
+	problems, err := testutil.CollectAndLint(NewCollector(fullSnapshot(), nil, Options{}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	allowed := map[string]bool{"number_of_enclosures": true, "jbod_fan_rpm": true, "jbod_slot_temperature": true}
+	allowed := map[string]bool{"number_of_enclosures": true, "jbod_slot_temperature": true}
 	for _, p := range problems {
 		if allowed[p.Metric] {
 			continue
