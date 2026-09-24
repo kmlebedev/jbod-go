@@ -9,6 +9,22 @@ built from a checkout.
 
 ### Changed
 
+- The element series of a shelf are published once per shelf instead of
+  once per I/O module: `jbod_component_info`, `jbod_component_flag`,
+  `jbod_enclosure_component_flags`, `jbod_sensor_*` and
+  `jbod_slot_sas_address_info` lose the `enclosure` label and are addressed
+  by `enclosure_id` and `component_id`. This breaks a query that selects or
+  joins them by `enclosure`. Both modules of a two-module shelf report every
+  element, so each was published twice — 870 of 3327 series on a WD H4060-J
+  host, down to 2457. The value is the answer of the module best placed to
+  give it: one with access to the element over one that answers "No access
+  allowed", then one whose collection was complete, then the first by SCSI
+  address. The thirty bays each module could not reach, which read as
+  unknown in the series of that module, now come with their owner's status
+  and disk, and a module that stops answering no longer ends the element
+  series; which module answered is in the per-module series, which keep the
+  label.
+
 - `jbod_sas_phy_state` carries only the phy's current state, one series per
   phy with the value 1, instead of a series per state with zeros on the
   other four. The zeros were 796 of the 995 series on a WD H4060-J host and

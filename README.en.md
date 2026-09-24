@@ -546,16 +546,32 @@ Added in 1.2:
 | --- | --- | --- | --- |
 | jbod_enclosure_health | gauge | enclosure, enclosure_id, source, level | 1 on the current level; source is `hardware` or `components` |
 | jbod_enclosure_components | gauge | enclosure, enclosure_id, type, health | elements per type in each condition |
-| jbod_component_info | gauge | enclosure, enclosure_id, component, component_id, type, status, health | one element, always 1 |
-| jbod_component_flag | gauge | enclosure, enclosure_id, component, component_id, type, flag | a status bit an element has set; the series exists only while it is set, its value is always 1 |
-| jbod_enclosure_component_flags | gauge | enclosure, enclosure_id, type, flag | elements of a type that have the bit set, for every bit the enclosure reports; 0 when none has it |
-| jbod_sensor_temperature_celsius | gauge | enclosure, enclosure_id, component, component_id, type | temperature of an enclosure element |
+| jbod_component_info | gauge | enclosure_id, component, component_id, type, status, health | one element of a shelf, always 1 |
+| jbod_component_flag | gauge | enclosure_id, component, component_id, type, flag | a status bit an element has set; the series exists only while it is set, its value is always 1 |
+| jbod_enclosure_component_flags | gauge | enclosure_id, type, flag | elements of a type that have the bit set, for every bit the shelf reports; 0 when none has it |
+| jbod_sensor_temperature_celsius | gauge | enclosure_id, component, component_id, type | temperature of an element of the shelf |
 | jbod_sensor_voltage_volts | gauge | the same | voltage |
 | jbod_sensor_current_amps | gauge | the same | current |
 | jbod_sensor_temperature_threshold_celsius | gauge | the same plus threshold | the enclosure's temperature limit: high_critical, high_warning, low_warning, low_critical |
 | jbod_sensor_voltage_threshold_percent | gauge | the same plus threshold | voltage limit in percent of nominal: high_* above it, low_* below it |
 | jbod_sensor_current_threshold_percent | gauge | the same plus threshold | current limit in percent above nominal: high_critical and high_warning only |
-| jbod_slot_sas_address_info | gauge | enclosure, enclosure_id, slot, component_id, sas_address, device, block_device | the slot → SAS address → disk mapping, always 1 |
+| jbod_slot_sas_address_info | gauge | enclosure_id, slot, component_id, sas_address, device, block_device | the slot → SAS address → disk mapping, always 1 |
+
+The element series — `jbod_component_info`, `jbod_component_flag`,
+`jbod_enclosure_component_flags`, `jbod_sensor_*` and
+`jbod_slot_sas_address_info` — are published once per shelf, addressed by
+`enclosure_id` and `component_id`, with no `enclosure`. A shelf with two I/O
+modules is two SCSI enclosures with one identifier, and each module reports
+every element of it: on an H4060-J that was 870 duplicates of 3327 series;
+the thresholds were identical and the readings differed by a degree or a
+third of an ampere, two reads a moment apart. The value comes from the module
+best placed to give it: the one with access to the element (each module of an
+H4060-J answers "No access allowed" for the thirty bays of the other), then
+the one whose collection was complete, then the first by SCSI address. So all
+60 bays come with their owner's status and their disk, and when a module
+fails the series carries on from the other one instead of ending. What each
+module did is in the series that stay per module: `jbod_collection_complete`,
+`jbod_ses_page_read`, `jbod_enclosure_health`, `jbod_enclosure_components`.
 
 Added in 1.3:
 

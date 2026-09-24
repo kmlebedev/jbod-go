@@ -29,8 +29,10 @@ import (
 //     somebody at three in the morning because a threshold page is not
 //     implemented.
 
-// componentLabels is the address of one element, repeated by several series.
-var componentLabels = []string{"enclosure", "enclosure_id", "component", "component_id", "type"}
+// componentLabels is the address of one element of a shelf, repeated by
+// several series. It has no enclosure: an element is published once per
+// shelf, whichever module's answer it is (see chassis.go).
+var componentLabels = []string{"enclosure_id", "component", "component_id", "type"}
 
 var (
 	descEnclosureHealth = prometheus.NewDesc(
@@ -43,8 +45,8 @@ var (
 		[]string{"enclosure", "enclosure_id", "type", "health"}, nil)
 	descComponentInfo = prometheus.NewDesc(
 		"jbod_component_info",
-		"Condition of one element; status is the enclosure's own spelling",
-		[]string{"enclosure", "enclosure_id", "component", "component_id", "type", "status", "health"}, nil)
+		"Condition of one element of a shelf; status is the enclosure's own spelling",
+		[]string{"enclosure_id", "component", "component_id", "type", "status", "health"}, nil)
 	descComponentFlag = prometheus.NewDesc(
 		"jbod_component_flag",
 		"A status bit an element has set, under a stable name; the series exists only while "+
@@ -52,13 +54,13 @@ var (
 		append(slices.Clone(componentLabels), "flag"), nil)
 	descComponentFlags = prometheus.NewDesc(
 		"jbod_enclosure_component_flags",
-		"Elements of a type with a status bit set, for every bit the enclosure reports for "+
+		"Elements of a type with a status bit set, for every bit the shelf reports for "+
 			"that type; 0 when none has it",
-		[]string{"enclosure", "enclosure_id", "type", "flag"}, nil)
+		[]string{"enclosure_id", "type", "flag"}, nil)
 	descMapping = prometheus.NewDesc(
 		"jbod_slot_sas_address_info",
 		"Bay, SAS address and the disk the kernel sees in it",
-		[]string{"enclosure", "enclosure_id", "slot", "component_id", "sas_address", "device", "block_device"}, nil)
+		[]string{"enclosure_id", "slot", "component_id", "sas_address", "device", "block_device"}, nil)
 	descSnapshotTimestamp = prometheus.NewDesc(
 		"jbod_snapshot_timestamp_seconds",
 		"When the collection behind this scrape started",
@@ -233,16 +235,15 @@ func collectComponents(s *sink, snapshot jbod.Snapshot) {
 	//     sets or clears is a step with history — "predicted failure went
 	//     from 0 to 1", "one connector fewer is mated" — which is what an
 	//     alert is written on. The per-element series then says which.
-	type flagKey struct{ enclosure, id, kind, flag string }
+	type flagKey struct{ id, kind, flag string }
 	flagCounts := map[flagKey]int{}
 	var flagOrder []flagKey
-	for _, status := range snapshot.Status {
-		for _, c := range status.Components {
+	for _, shelf := range shelves(snapshot) {
+		for _, c := range shelf.components {
 			s.gauge(descComponentInfo, 1,
-				status.Enclosure, status.Address, c.Name, c.Index,
-				c.Type, c.Status.Or(""), string(c.Health))
+				shelf.id, c.Name, c.Index, c.Type, c.Status.Or(""), string(c.Health))
 			for _, flag := range c.StatusFlags() {
-				k := flagKey{status.Enclosure, status.Address, c.Type, flag.Name}
+				k := flagKey{shelf.id, c.Type, flag.Name}
 				if _, seen := flagCounts[k]; !seen {
 					flagOrder = append(flagOrder, k)
 					flagCounts[k] = 0
@@ -251,13 +252,12 @@ func collectComponents(s *sink, snapshot jbod.Snapshot) {
 					continue
 				}
 				flagCounts[k]++
-				s.gauge(descComponentFlag, 1,
-					status.Enclosure, status.Address, c.Name, c.Index, c.Type, flag.Name)
+				s.gauge(descComponentFlag, 1, shelf.id, c.Name, c.Index, c.Type, flag.Name)
 			}
 		}
 	}
 	for _, k := range flagOrder {
-		s.gauge(descComponentFlags, float64(flagCounts[k]), k.enclosure, k.id, k.kind, k.flag)
+		s.gauge(descComponentFlags, float64(flagCounts[k]), k.id, k.kind, k.flag)
 	}
 }
 
@@ -269,14 +269,15 @@ func collectComponents(s *sink, snapshot jbod.Snapshot) {
 // that hard-codes 60 °C is wrong on the next shelf, and one that compares
 // against these is not.
 func collectSensors(s *sink, snapshot jbod.Snapshot) {
+	merged := shelves(snapshot)
 	for _, metric := range sensorMetrics {
-		for _, status := range snapshot.Status {
-			for _, c := range status.Components {
+		for _, shelf := range merged {
+			for _, c := range shelf.components {
 				for _, r := range c.Readings {
 					if r.Kind != metric.kind {
 						continue
 					}
-					labels := []string{status.Enclosure, status.Address, c.Name, c.Index, c.Type}
+					labels := []string{shelf.id, c.Name, c.Index, c.Type}
 					if v, ok := r.Value.Get(); ok {
 						s.gauge(metric.value, v, labels...)
 					}
@@ -303,8 +304,8 @@ func collectSensors(s *sink, snapshot jbod.Snapshot) {
 // Only bays with an address are published: an element with no address maps
 // to nothing, and an empty label would join to every other empty one.
 func collectMapping(s *sink, snapshot jbod.Snapshot) {
-	for _, status := range snapshot.Status {
-		for _, c := range status.Components {
+	for _, shelf := range shelves(snapshot) {
+		for _, c := range shelf.components {
 			if !c.IsBay() || len(c.SASAddresses) == 0 {
 				continue
 			}
@@ -314,8 +315,7 @@ func collectMapping(s *sink, snapshot jbod.Snapshot) {
 			}
 			for _, address := range c.SASAddresses {
 				s.gauge(descMapping, 1,
-					status.Enclosure, status.Address, slot, c.Index,
-					address, c.Device.Or(""), c.Map.Or(""))
+					shelf.id, slot, c.Index, address, c.Device.Or(""), c.Map.Or(""))
 			}
 		}
 	}

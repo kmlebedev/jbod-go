@@ -533,16 +533,32 @@ stderr.
 | --- | --- | --- | --- |
 | jbod_enclosure_health | gauge | enclosure, enclosure_id, source, level | 1 у текущего уровня; source — `hardware` или `components` |
 | jbod_enclosure_components | gauge | enclosure, enclosure_id, type, health | сколько элементов каждого типа в каждом состоянии |
-| jbod_component_info | gauge | enclosure, enclosure_id, component, component_id, type, status, health | один элемент, всегда 1 |
-| jbod_component_flag | gauge | enclosure, enclosure_id, component, component_id, type, flag | установленный бит статуса элемента; серия есть только пока бит установлен, значение всегда 1 |
-| jbod_enclosure_component_flags | gauge | enclosure, enclosure_id, type, flag | сколько элементов типа держат бит, для каждого бита, который корпус сообщает; 0, если ни один |
-| jbod_sensor_temperature_celsius | gauge | enclosure, enclosure_id, component, component_id, type | температура элемента корпуса |
+| jbod_component_info | gauge | enclosure_id, component, component_id, type, status, health | один элемент полки, всегда 1 |
+| jbod_component_flag | gauge | enclosure_id, component, component_id, type, flag | установленный бит статуса элемента; серия есть только пока бит установлен, значение всегда 1 |
+| jbod_enclosure_component_flags | gauge | enclosure_id, type, flag | сколько элементов типа держат бит, для каждого бита, который полка сообщает; 0, если ни один |
+| jbod_sensor_temperature_celsius | gauge | enclosure_id, component, component_id, type | температура элемента полки |
 | jbod_sensor_voltage_volts | gauge | те же | напряжение |
 | jbod_sensor_current_amps | gauge | те же | ток |
 | jbod_sensor_temperature_threshold_celsius | gauge | те же + threshold | порог температуры корпуса: high_critical, high_warning, low_warning, low_critical |
 | jbod_sensor_voltage_threshold_percent | gauge | те же + threshold | порог напряжения в процентах от номинала: high_* выше него, low_* ниже |
 | jbod_sensor_current_threshold_percent | gauge | те же + threshold | порог тока в процентах выше номинала: только high_critical и high_warning |
-| jbod_slot_sas_address_info | gauge | enclosure, enclosure_id, slot, component_id, sas_address, device, block_device | отображение slot → SAS address → disk, всегда 1 |
+| jbod_slot_sas_address_info | gauge | enclosure_id, slot, component_id, sas_address, device, block_device | отображение slot → SAS address → disk, всегда 1 |
+
+Серии элементов — `jbod_component_info`, `jbod_component_flag`,
+`jbod_enclosure_component_flags`, `jbod_sensor_*` и `jbod_slot_sas_address_info`
+— публикуются один раз на полку и адресуются `enclosure_id` и
+`component_id`, без `enclosure`. Полка с двумя IOM — это два SCSI-корпуса с
+одним идентификатором, и каждый модуль сообщает все её элементы: на H4060-J
+это было 870 дублей из 3 327 серий, пороги совпадали все, а показания
+расходились на градус или треть ампера — два чтения с разницей в мгновение.
+Значение берётся у модуля, который лучше всего может ответить: у того, у
+кого есть доступ к элементу (каждый модуль H4060-J отвечает «No access
+allowed» на тридцать корзин другого), а среди равных — у того, чей сбор
+полный, затем у первого по SCSI-адресу. Поэтому все 60 корзин приходят со
+статусом своего владельца и с диском, а при отказе модуля серия не
+обрывается, а продолжается с другого. Что с каждым модулем, видно по
+сериям, которые остались помодульными: `jbod_collection_complete`,
+`jbod_ses_page_read`, `jbod_enclosure_health`, `jbod_enclosure_components`.
 
 Добавлено в 1.3:
 
